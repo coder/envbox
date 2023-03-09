@@ -1,0 +1,222 @@
+package dockerutil
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"io"
+	"time"
+
+	"github.com/coder/envbox/xunix"
+	"github.com/coder/retry"
+	dockertypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	"golang.org/x/xerrors"
+)
+
+const diskFullStorageDriver = "vfs"
+
+type PullImageConfig struct {
+	Client     DockerClient
+	Image      string
+	Auth       DockerAuth
+	ProgressFn ImagePullProgressFn
+}
+
+type ImagePullEvent struct {
+	Status         string `json:"status"`
+	Error          string `json:"error"`
+	Progress       string `json:"progress"`
+	ProgressDetail struct {
+		Current int `json:"current"`
+		Total   int `json:"total"`
+	} `json:"progressDetail"`
+}
+
+type ImagePullProgressFn func(e ImagePullEvent) error
+
+type DockerAuth dockertypes.AuthConfig
+
+func (d DockerAuth) Base64() (string, error) {
+	if d == (DockerAuth{}) {
+		return "", nil
+	}
+
+	authStr, err := json.Marshal(d)
+	if err != nil {
+		return "", xerrors.Errorf("marshal auth: %w", err)
+	}
+
+	return base64.StdEncoding.EncodeToString(authStr), nil
+}
+
+func PullImage(ctx context.Context, config *PullImageConfig) error {
+	authStr, err := config.Auth.Base64()
+	if err != nil {
+		return xerrors.Errorf("base64 encode auth: %w", err)
+	}
+
+	pullImageFn := func() error {
+		var rd io.ReadCloser
+		rd, err = config.Client.ImagePull(ctx, config.Image, dockertypes.ImagePullOptions{
+			RegistryAuth: authStr,
+		})
+		if err != nil {
+			return xerrors.Errorf("pull image: %w", err)
+		}
+
+		err = processImagePullEvents(rd, config.ProgressFn)
+		if err != nil {
+			return xerrors.Errorf("process image pull events: %w", err)
+		}
+		return nil
+	}
+
+	err = pullImageFn()
+	if err == nil {
+		return nil
+	}
+
+	var pruned bool
+	for r, n := retry.New(time.Second, time.Second*3), 0; r.Wait(ctx) && n < 10; n++ {
+		err = pullImageFn()
+		if err != nil {
+			if xunix.IsNoSpaceErr(err) && !pruned {
+				pruned = true
+				_, _ = PruneImages(ctx, config.Client)
+			}
+			continue
+		}
+		return nil
+	}
+	if err != nil {
+		return xerrors.Errorf("pull image: %w", err)
+	}
+
+	return nil
+}
+
+func PruneImages(ctx context.Context, client DockerClient) (dockertypes.ImagesPruneReport, error) {
+	report, err := client.ImagesPrune(ctx,
+		filters.NewArgs(filters.Arg("dangling", "false")),
+	)
+	if err != nil {
+		return dockertypes.ImagesPruneReport{}, xerrors.Errorf("images prune: %w", err)
+	}
+
+	return report, nil
+}
+
+func processImagePullEvents(r io.Reader, fn ImagePullProgressFn) error {
+	if fn == nil {
+		// This effectively waits until the image is pulled before returning,
+		// reporting no progress.
+		_, _ = io.Copy(io.Discard, r)
+		return nil
+	}
+
+	decoder := json.NewDecoder(r)
+
+	var event ImagePullEvent
+	for {
+		if err := decoder.Decode(&event); err != nil {
+			if xerrors.Is(err, io.EOF) {
+				break
+			}
+
+			return xerrors.Errorf("decode image pull output: %w", err)
+		}
+
+		err := fn(event)
+		if err != nil {
+			return xerrors.Errorf("process image pull event: %w", err)
+		}
+	}
+
+	return nil
+}
+
+type ImageMetadata struct {
+	UID     string
+	GID     string
+	HasInit bool
+}
+
+func GetImageMetadata(ctx context.Context, client DockerClient, image, username string) (ImageMetadata, error) {
+	// Creating a dummy container to inspect the filesystem.
+	created, err := client.ContainerCreate(ctx,
+		&container.Config{
+			Image: image,
+			Entrypoint: []string{
+				"sleep",
+			},
+			Cmd: []string{
+				"infinity",
+			},
+		},
+		&container.HostConfig{
+			Runtime: "sysbox-runc",
+		}, nil, nil, "")
+	if err != nil {
+		return ImageMetadata{}, xerrors.Errorf("create container: %w", err)
+	}
+
+	defer func() {
+		// We wanna remove this, but it's not a huge deal if it fails.
+		_ = client.ContainerRemove(ctx, created.ID, dockertypes.ContainerRemoveOptions{
+			Force: true,
+		})
+	}()
+
+	err = client.ContainerStart(ctx, created.ID, dockertypes.ContainerStartOptions{})
+	if err != nil {
+		return ImageMetadata{}, xerrors.Errorf("start container: %w", err)
+	}
+
+	inspect, err := client.ContainerInspect(ctx, created.ID)
+	if err != nil {
+		return ImageMetadata{}, xerrors.Errorf("inspect: %w", err)
+	}
+
+	mergedDir := inspect.GraphDriver.Data["MergedDir"]
+	// The mergedDir might be empty if we're running dockerd in recovery
+	// mode.
+	if mergedDir == "" && inspect.GraphDriver.Name != diskFullStorageDriver {
+		// The MergedDir is empty when the underlying filesystem does not support
+		// OverlayFS as an extension. A customer ran into this when using NFS as
+		// a provider for a PVC.
+		return ImageMetadata{}, xerrors.Errorf("CVMs do not support NFS volumes")
+	}
+
+	_, err = execContainer(ctx, client, execConfig{
+		ContainerID: inspect.ID,
+		Cmd:         "stat",
+		Args:        []string{"/sbin/init"},
+	})
+	initExists := err == nil
+
+	out, err := execContainer(ctx, client, execConfig{
+		ContainerID: inspect.ID,
+		Cmd:         "getent",
+		Args:        []string{"passwd", username},
+	})
+	if err != nil {
+		return ImageMetadata{}, xerrors.Errorf("get /etc/passwd entry for %s: %w", username, err)
+	}
+
+	users, err := xunix.ParsePasswd(bytes.NewReader(out))
+	if err != nil {
+		return ImageMetadata{}, xerrors.Errorf("parse passwd entry for (%s): %w", out, err)
+	}
+	if len(users) == 0 {
+		return ImageMetadata{}, xerrors.Errorf("no users returned for username %s", username)
+	}
+
+	return ImageMetadata{
+		UID:     users[0].Uid,
+		GID:     users[0].Gid,
+		HasInit: initExists,
+	}, nil
+}
