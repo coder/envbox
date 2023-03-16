@@ -85,12 +85,12 @@ func TestDocker(t *testing.T) {
 		)
 
 		homeDir := filepath.Join(tmpdir, "home")
-		err = os.MkdirAll(homeDir, 0777)
+		err = os.MkdirAll(homeDir, 0o777)
 		require.NoError(t, err)
 
 		// Emulate someone wanting to mount a secret into envbox.
 		secretDir := filepath.Join(tmpdir, "secrets")
-		err = os.MkdirAll(secretDir, 0777)
+		err = os.MkdirAll(secretDir, 0o777)
 		require.NoError(t, err)
 
 		binds = append(binds,
@@ -117,8 +117,7 @@ func TestDocker(t *testing.T) {
 			}
 		)
 
-		bootstrapScript :=
-			`#!/usr/bin/env bash
+		bootstrapScript := `#!/usr/bin/env bash
 
 			echo "hello" > /home/coder/bootstrap
 			mkdir /home/coder/bar

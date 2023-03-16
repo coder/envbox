@@ -77,7 +77,6 @@ func (d *Process) Run() <-chan error {
 	}
 
 	return d.Wait()
-
 }
 
 // Restart kill the running process and reruns the command with the updated

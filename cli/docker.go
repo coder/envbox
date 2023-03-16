@@ -443,7 +443,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 			slog.F("mode", "02755"),
 		)
 
-		err := fs.Chmod(m.Source, 02755)
+		err := fs.Chmod(m.Source, 0o2755)
 		if err != nil {
 			return xerrors.Errorf("chmod mountpoint %q: %w", m.Source, err)
 		}

@@ -118,22 +118,22 @@ func DefaultBinds(t *testing.T, rootDir string) []string {
 
 	// Create a mount for the inner docker directory.
 	cntDockerDir := filepath.Join(rootDir, "coder", "docker")
-	err := os.MkdirAll(cntDockerDir, 0777)
+	err := os.MkdirAll(cntDockerDir, 0o777)
 	require.NoError(t, err)
 
 	// Create a mount for the inner docker directory.
 	cntDir := filepath.Join(rootDir, "coder", "containers")
-	err = os.MkdirAll(cntDir, 0777)
+	err = os.MkdirAll(cntDir, 0o777)
 	require.NoError(t, err)
 
 	// Create a mount for envbox's docker directory.
 	dockerDir := filepath.Join(rootDir, "docker")
-	err = os.MkdirAll(dockerDir, 0777)
+	err = os.MkdirAll(dockerDir, 0o777)
 	require.NoError(t, err)
 
 	// Create a mount for sysbox.
 	sysbox := filepath.Join(rootDir, "sysbox")
-	err = os.MkdirAll(sysbox, 0777)
+	err = os.MkdirAll(sysbox, 0o777)
 	require.NoError(t, err)
 
 	return []string{

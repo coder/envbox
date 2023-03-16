@@ -76,7 +76,6 @@ func CreateFuseDevice(ctx context.Context, path string) (Device, error) {
 		minor: minor,
 		ftype: charFileType,
 	})
-
 	if err != nil {
 		return Device{}, xerrors.Errorf("create device: %w", err)
 	}
@@ -105,7 +104,7 @@ func createDevice(ctx context.Context, conf deviceConfig) error {
 		dir = filepath.Dir(conf.path)
 	)
 
-	err := fs.MkdirAll(dir, 0700)
+	err := fs.MkdirAll(dir, 0o700)
 	if err != nil {
 		return xerrors.Errorf("ensure parent dir: %w", err)
 	}

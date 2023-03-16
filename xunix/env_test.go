@@ -30,7 +30,6 @@ func TestMustLookupEnv(t *testing.T) {
 		defer func() {
 			e := recover()
 			require.NotNil(t, e, "function should panic")
-
 		}()
 		_ = xunix.MustLookupEnv("ASDasdf")
 	})
