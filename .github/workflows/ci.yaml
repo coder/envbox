@@ -122,7 +122,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Install  dependencies
-        run: apt update && apt install -y gcc
+        run: sudo apt update && sudo apt install -y gcc
       - uses: actions/checkout@v3
 
       - uses: actions/setup-go@v3
