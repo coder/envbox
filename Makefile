@@ -17,3 +17,8 @@ build/image/envbox/.ctx: build/envbox $(IMAGE_FILES)
 	cp -r build/envbox deploy/. $(@D)
 	docker build -t envbox $(@D)
 	touch $@
+
+fmt:
+	# VS Code users should check out
+	# https://github.com/mvdan/gofumpt#visual-studio-code
+	go run mvdan.cc/gofumpt@v0.4.0 -w -l .

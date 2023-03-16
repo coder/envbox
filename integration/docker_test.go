@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package integration_test
 
 import (
@@ -8,10 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coder/envbox/cli"
-	"github.com/coder/envbox/integration/integrationtest"
 	dockertest "github.com/ory/dockertest/v3"
 	"github.com/stretchr/testify/require"
+
+	"github.com/coder/envbox/cli"
+	"github.com/coder/envbox/integration/integrationtest"
 )
 
 func TestDocker(t *testing.T) {
