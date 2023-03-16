@@ -1,4 +1,4 @@
-package slogkubeterminate
+package slogkubeterminate_test
 
 import (
 	"context"
@@ -8,11 +8,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/coder/envbox/slogkubeterminate"
+
 	"cdr.dev/slog"
 	"cdr.dev/slog/sloggers/sloghuman"
 )
 
 func TestSlogKubeTerminate(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	terminationLog, err := os.CreateTemp("", "slogkubeterminate-test")
@@ -30,7 +34,7 @@ func TestSlogKubeTerminate(t *testing.T) {
 	})
 	assertContent(t, terminationLog, "")
 
-	logger = logger.AppendSinks(MakeCustom(terminationLog.Name()))
+	logger = logger.AppendSinks(slogkubeterminate.MakeCustom(terminationLog.Name()))
 	const terminationReason = "whooops"
 
 	logger.Error(ctx, "message")

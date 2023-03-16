@@ -17,22 +17,27 @@ import (
 )
 
 func Execer(ctx context.Context) *xunixfake.FakeExec {
+	//nolint we should panic if this isn't the case.
 	return xunix.GetExecer(ctx).(*xunixfake.FakeExec)
 }
 
 func FS(ctx context.Context) *xunixfake.MemFS {
+	//nolint we should panic if this isn't the case.
 	return xunix.GetFS(ctx).(*xunixfake.MemFS)
 }
 
 func Mounter(ctx context.Context) *mount.FakeMounter {
+	//nolint we should panic if this isn't the case.
 	return xunix.Mounter(ctx).(*mount.FakeMounter)
 }
 
+// nolint
 func DockerClient(t *testing.T, ctx context.Context) *dockerfake.MockClient {
 	t.Helper()
 
 	client, err := dockerutil.Client(ctx)
 	require.NoError(t, err)
+	//nolint we should panic if this isn't the case.
 	return client.(*dockerfake.MockClient)
 }
 

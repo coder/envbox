@@ -46,4 +46,4 @@ func (s simpleJSON) LogEntry(_ context.Context, ent slog.SinkEntry) {
 	_, _ = s.w.Write(buf)
 }
 
-func (s simpleJSON) Sync() {}
+func (simpleJSON) Sync() {}

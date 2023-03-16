@@ -1,11 +1,11 @@
 package xunix_test
 
 import (
-	"os"
 	"testing"
 
-	"github.com/coder/envbox/xunix"
 	"github.com/stretchr/testify/require"
+
+	"github.com/coder/envbox/xunix"
 )
 
 func TestMustLookupEnv(t *testing.T) {
@@ -18,7 +18,7 @@ func TestMustLookupEnv(t *testing.T) {
 			key   = "MY_ENV"
 			value = "value"
 		)
-		os.Setenv(key, value)
+		t.Setenv(key, value)
 
 		val := xunix.MustLookupEnv(key)
 		require.Equal(t, value, val)

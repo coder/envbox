@@ -26,7 +26,7 @@ type slogger struct {
 func (s slogger) LogEntry(_ context.Context, e slog.SinkEntry) {
 	// write to the termination file so that the Pod failure "reason" is populated properly
 	if e.Level == slog.LevelFatal {
-		_ = os.WriteFile(s.log, []byte(e.Message), 0o644)
+		_ = os.WriteFile(s.log, []byte(e.Message), 0o600)
 	}
 }
 

@@ -32,6 +32,7 @@ func NewFakeExecer() *xunixfake.FakeExec {
 			// The main use of exec commands in this repo
 			// are to spawn daemon processes so ideally the
 			// default behavior is that they do not exist.
+			// nolint
 			WaitFn: func() error { select {} },
 		},
 	}

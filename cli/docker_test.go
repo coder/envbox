@@ -9,10 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/coder/envbox/cli"
-	"github.com/coder/envbox/cli/clitest"
-	"github.com/coder/envbox/xunix"
-	"github.com/coder/envbox/xunix/xunixfake"
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -21,6 +17,11 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 	testingexec "k8s.io/utils/exec/testing"
+
+	"github.com/coder/envbox/cli"
+	"github.com/coder/envbox/cli/clitest"
+	"github.com/coder/envbox/xunix"
+	"github.com/coder/envbox/xunix/xunixfake"
 )
 
 func TestDocker(t *testing.T) {

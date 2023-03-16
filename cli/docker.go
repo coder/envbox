@@ -80,9 +80,10 @@ var (
 	EnvAddTun             = "CODER_ADD_TUN"
 	EnvAddFuse            = "CODER_ADD_FUSE"
 	EnvBridgeCIDR         = "CODER_ENVBOX_BRIDGE_CIDR"
-	EnvAgentToken         = "CODER_AGENT_TOKEN"
-	EnvBootstrap          = "CODER_BOOTSTRAP_SCRIPT"
-	EnvMounts             = "CODER_MOUNTS"
+	//nolint
+	EnvAgentToken = "CODER_AGENT_TOKEN"
+	EnvBootstrap  = "CODER_BOOTSTRAP_SCRIPT"
+	EnvMounts     = "CODER_MOUNTS"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -133,9 +134,11 @@ func dockerCmd() *cobra.Command {
 				// sysbox containers.
 				case err := <-background.New(ctx, log, "sysbox-mgr").Run():
 					_ = envboxlog.YieldAndFailBuild(sysboxErrMsg)
+					//nolint
 					log.Fatal(ctx, "sysbox-mgr exited", slog.Error(err))
 				case err := <-background.New(ctx, log, "sysbox-fs").Run():
 					_ = envboxlog.YieldAndFailBuild(sysboxErrMsg)
+					//nolint
 					log.Fatal(ctx, "sysbox-fs exited", slog.Error(err))
 				}
 			}()
@@ -182,12 +185,14 @@ func dockerCmd() *cobra.Command {
 					args, err = dockerdArgs(ctx, log, ethlink, cidr, true)
 					if err != nil {
 						_ = envboxlog.YieldAndFailBuild("Failed to create Container-based Virtual Machine: " + err.Error())
+						//nolint
 						log.Fatal(ctx, "dockerd exited, failed getting args for restart", slog.Error(err))
 					}
 
 					err = dockerd.Restart(ctx, "dockerd", args...)
 					if err != nil {
 						_ = envboxlog.YieldAndFailBuild("Failed to create Container-based Virtual Machine: " + err.Error())
+						//nolint
 						log.Fatal(ctx, "restart dockerd", slog.Error(err))
 					}
 
@@ -199,6 +204,7 @@ func dockerCmd() *cobra.Command {
 				// container.
 				if err != nil && !xerrors.Is(err, background.ErrUserKilled) {
 					_ = envboxlog.YieldAndFailBuild("Failed to create Container-based Virtual Machine: " + err.Error())
+					//nolint
 					log.Fatal(ctx, "dockerd exited", slog.Error(err))
 				}
 			}()
@@ -254,6 +260,7 @@ func dockerCmd() *cobra.Command {
 					}
 					go func() {
 						err = <-dockerd.Wait()
+						//nolint
 						log.Fatal(ctx, "restarted dockerd exited", slog.Error(err))
 					}()
 
@@ -327,7 +334,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	mounts := defaultMounts()
 	// Add any user-specified mounts to our mounts list.
-	extraMounts, err := parseMounts(ctx, flags.containerMounts)
+	extraMounts, err := parseMounts(flags.containerMounts)
 	if err != nil {
 		return xerrors.Errorf("read mounts: %w", err)
 	}
@@ -550,6 +557,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	return nil
 }
 
+// nolint
 func dockerdArgs(ctx context.Context, log slog.Logger, link, cidr string, isNoSpace bool) ([]string, error) {
 	// We need to adjust the MTU for the host otherwise packets will fail delivery.
 	// 1500 is the standard, but certain deployments (like GKE) use custom MTU values.
@@ -607,7 +615,7 @@ func filterElements(ss []string, filters ...string) []string {
 
 // parseMounts parses a list of mounts from containerMounts. The format should
 // be "src:dst[:ro],src:dst[:ro]".
-func parseMounts(ctx context.Context, containerMounts string) ([]xunix.Mount, error) {
+func parseMounts(containerMounts string) ([]xunix.Mount, error) {
 	if containerMounts == "" {
 		return nil, nil
 	}

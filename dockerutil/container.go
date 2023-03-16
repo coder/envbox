@@ -8,13 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"cdr.dev/slog"
-	"github.com/coder/envbox/xunix"
-	"github.com/coder/retry"
 	"github.com/docker/docker/api/types/container"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/spf13/afero"
 	"golang.org/x/xerrors"
+
+	"cdr.dev/slog"
+	"github.com/coder/envbox/xunix"
+	"github.com/coder/retry"
 )
 
 const (

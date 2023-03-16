@@ -53,7 +53,7 @@ func (d *Process) Start() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	return d.start()
+	return d.startProcess()
 }
 
 // Wait waits for the process to exit, returning the error on the provided
@@ -98,10 +98,10 @@ func (d *Process) Restart(ctx context.Context, cmd string, args ...string) error
 	d.userKilled = i64ptr(0)
 	d.binName = cmd
 
-	return d.start()
+	return d.startProcess()
 }
 
-func (d *Process) start() error {
+func (d *Process) startProcess() error {
 	var (
 		buf bytes.Buffer
 

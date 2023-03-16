@@ -3,10 +3,11 @@ package clitest
 import (
 	"testing"
 
-	"github.com/coder/envbox/sysboxutil"
-	"github.com/coder/envbox/xunix"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
+
+	"github.com/coder/envbox/sysboxutil"
+	"github.com/coder/envbox/xunix"
 )
 
 func MockSysboxManagerReady(t *testing.T, fs afero.Fs) {

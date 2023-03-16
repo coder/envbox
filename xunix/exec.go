@@ -26,6 +26,7 @@ func GetExecer(ctx context.Context) Execer {
 		return &executor{}
 	}
 
+	//nolint we should panic if this isn't the case.
 	return execer.(Execer)
 }
 
@@ -50,7 +51,7 @@ type Cmd interface {
 type executor struct{}
 
 // CommandContext is part of the Interface interface.
-func (executor *executor) CommandContext(ctx context.Context, cmd string, args ...string) Cmd {
+func (*executor) CommandContext(ctx context.Context, cmd string, args ...string) Cmd {
 	return (*cmdWrapper)(maskErrDotCmd(osexec.CommandContext(ctx, cmd, args...)))
 }
 
@@ -128,11 +129,11 @@ func (cmd *cmdWrapper) Stop() {
 		return
 	}
 
-	c.Process.Signal(syscall.SIGTERM)
+	_ = c.Process.Signal(syscall.SIGTERM)
 
 	time.AfterFunc(10*time.Second, func() {
 		if !c.ProcessState.Exited() {
-			c.Process.Signal(syscall.SIGKILL)
+			_ = c.Process.Signal(syscall.SIGKILL)
 		}
 	})
 }
@@ -142,11 +143,13 @@ func handleError(err error) error {
 		return nil
 	}
 
+	//nolint copied code from k8s.
 	switch e := err.(type) {
 	case *osexec.ExitError:
-		return &utilexec.ExitErrorWrapper{e}
+		return &utilexec.ExitErrorWrapper{ExitError: e}
 	case *fs.PathError:
 		return utilexec.ErrExecutableNotFound
+		// nolint copied code from k8s
 	case *osexec.Error:
 		if e.Err == osexec.ErrNotFound {
 			return utilexec.ErrExecutableNotFound
