@@ -78,6 +78,9 @@ jobs:
           export PATH=${PATH}:$(go env GOPATH)/bin
           make --output-sync -j -B fmt
 
+      - name: Check for unstaged files
+        run: ./scripts/check_unstaged.sh
+
   unit-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -118,6 +121,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Install  dependencies
+        run: apt update && apt install -y gcc
       - uses: actions/checkout@v3
 
       - uses: actions/setup-go@v3
