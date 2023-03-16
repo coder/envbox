@@ -28,5 +28,6 @@ func Client(ctx context.Context) (DockerClient, error) {
 		return client, nil
 	}
 
+	//nolint we should panic if this isn't the case.
 	return client.(DockerClient), nil
 }

@@ -8,12 +8,13 @@ import (
 	"io"
 	"time"
 
-	"github.com/coder/envbox/xunix"
-	"github.com/coder/retry"
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"golang.org/x/xerrors"
+
+	"github.com/coder/envbox/xunix"
+	"github.com/coder/retry"
 )
 
 const diskFullStorageDriver = "vfs"

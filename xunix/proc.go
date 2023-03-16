@@ -14,7 +14,7 @@ func SetOOMScore(ctx context.Context, pid, score string) error {
 		file = fmt.Sprintf("/proc/%v/oom_score_adj", pid)
 	)
 
-	err := afero.WriteFile(fs, file, []byte(score), 0644)
+	err := afero.WriteFile(fs, file, []byte(score), 0o644)
 	if err != nil {
 		return xerrors.Errorf("write file: %w", err)
 	}

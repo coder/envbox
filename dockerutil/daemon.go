@@ -32,10 +32,13 @@ func WaitForDaemon(ctx context.Context, client DockerClient) error {
 		case <-ticker.C:
 		}
 
-		pingCtx, cancel := context.WithTimeout(ctx, time.Second)
-		defer cancel()
+		err := func() error {
+			pingCtx, cancel := context.WithTimeout(ctx, time.Second)
+			defer cancel()
 
-		_, err := client.Ping(pingCtx)
+			_, err := client.Ping(pingCtx)
+			return err
+		}()
 		if err == nil {
 			// We pinged successfully!
 			return nil

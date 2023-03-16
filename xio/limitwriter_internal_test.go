@@ -10,6 +10,8 @@ import (
 )
 
 func TestPrefixSuffixWriter(t *testing.T) {
+	t.Parallel()
+
 	type testcase struct {
 		Name           string
 		Input          string
@@ -33,7 +35,9 @@ func TestPrefixSuffixWriter(t *testing.T) {
 	}
 
 	for _, test := range testcases {
+		test := test
 		t.Run(test.Name, func(t *testing.T) {
+			t.Parallel()
 			var (
 				w   = bytes.Buffer{}
 				psw = &PrefixSuffixWriter{

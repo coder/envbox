@@ -20,6 +20,7 @@ func Environ(ctx context.Context) []string {
 		return os.Environ()
 	}
 
+	//nolint we should panic if this isn't the case.
 	return fn.(EnvironFn)()
 }
 

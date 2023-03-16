@@ -6,9 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/coder/envbox/xunix"
 	"github.com/stretchr/testify/require"
 	testexec "k8s.io/utils/exec/testing"
+
+	"github.com/coder/envbox/xunix"
 )
 
 var _ xunix.Execer = &FakeExec{}

@@ -5,16 +5,19 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/coder/envbox/xunix"
-	"github.com/coder/envbox/xunix/xunixfake"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
+
+	"github.com/coder/envbox/xunix"
+	"github.com/coder/envbox/xunix/xunixfake"
 )
 
 func TestReadCPUQuota(t *testing.T) {
 	t.Parallel()
 
 	t.Run("OK", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			fs  = &xunixfake.MemFS{MemMapFs: &afero.MemMapFs{}}
 			ctx = xunix.WithFS(context.Background(), fs)

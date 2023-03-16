@@ -18,6 +18,7 @@ func Mounter(ctx context.Context) mount.Interface {
 		return mount.New("/bin/mount")
 	}
 
+	//nolint we should panic if this isn't the case.
 	return m.(mount.Interface)
 }
 

@@ -9,10 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/coder/envbox/cli"
-	"github.com/coder/envbox/cli/clitest"
-	"github.com/coder/envbox/xunix"
-	"github.com/coder/envbox/xunix/xunixfake"
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -21,6 +17,11 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 	testingexec "k8s.io/utils/exec/testing"
+
+	"github.com/coder/envbox/cli"
+	"github.com/coder/envbox/cli/clitest"
+	"github.com/coder/envbox/xunix"
+	"github.com/coder/envbox/xunix/xunixfake"
 )
 
 func TestDocker(t *testing.T) {
@@ -134,7 +135,8 @@ func TestDocker(t *testing.T) {
 				// Don't include the wildcards.
 			}, cntEnvs[:3]...)
 
-			expectedEnvs = []string{"CODER_AGENT_TOKEN=hi",
+			expectedEnvs = []string{
+				"CODER_AGENT_TOKEN=hi",
 				"FOO=bar",
 				"CODER_VAR=baz",
 				"bar=123",
@@ -197,7 +199,7 @@ func TestDocker(t *testing.T) {
 		for _, mount := range userMounts {
 			src := strings.Split(mount, ":")[0]
 
-			err := afero.WriteFile(fs, src, []byte("hi"), 0777)
+			err := afero.WriteFile(fs, src, []byte("hi"), 0o777)
 			require.NoError(t, err)
 		}
 
@@ -226,7 +228,7 @@ func TestDocker(t *testing.T) {
 
 		fi, err := fs.Stat("/home/coder")
 		require.NoError(t, err)
-		require.Equal(t, os.FileMode(0755), fi.Mode().Perm())
+		require.Equal(t, os.FileMode(0o755), fi.Mode().Perm())
 		// Check that we're calling chown and shifting the ID.
 		owner, ok := fs.GetFileOwner("/home/coder")
 		require.True(t, ok)
@@ -266,9 +268,7 @@ func TestDocker(t *testing.T) {
 	t.Run("Devices", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			name = namesgenerator.GetRandomName(1)
-		)
+		name := namesgenerator.GetRandomName(1)
 		ctx, cmd := clitest.New(t, "docker",
 			"docker",
 			"--image=ubuntu",
@@ -328,9 +328,7 @@ func TestDocker(t *testing.T) {
 	t.Run("NoInit", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			name = namesgenerator.GetRandomName(1)
-		)
+		name := namesgenerator.GetRandomName(1)
 		ctx, cmd := clitest.New(t, "docker",
 			"docker",
 			"--image=ubuntu",

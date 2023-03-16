@@ -19,6 +19,7 @@ func GetFS(ctx context.Context) FS {
 		return &osFS{&afero.OsFs{}}
 	}
 
+	//nolint we should panic if this isn't the case.
 	return fs.(FS)
 }
 

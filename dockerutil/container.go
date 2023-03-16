@@ -8,13 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"cdr.dev/slog"
-	"github.com/coder/envbox/xunix"
-	"github.com/coder/retry"
 	"github.com/docker/docker/api/types/container"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/spf13/afero"
 	"golang.org/x/xerrors"
+
+	"cdr.dev/slog"
+	"github.com/coder/envbox/xunix"
+	"github.com/coder/retry"
 )
 
 const (
@@ -144,12 +145,12 @@ func SetContainerCPUQuota(ctx context.Context, containerID string, quota, period
 		cgroupBase = fmt.Sprintf("/sys/fs/cgroup/cpu,cpuacct/docker/%s/syscont-cgroup-root/", containerID)
 	)
 
-	err := afero.WriteFile(fs, filepath.Join(cgroupBase, "cpu.cfs_period_us"), []byte(strconv.Itoa(period)), 0644)
+	err := afero.WriteFile(fs, filepath.Join(cgroupBase, "cpu.cfs_period_us"), []byte(strconv.Itoa(period)), 0o644)
 	if err != nil {
 		return xerrors.Errorf("write cpu.cfs_period_us to inner container cgroup: %w", err)
 	}
 
-	err = afero.WriteFile(fs, filepath.Join(cgroupBase, "cpu.cfs_quota_us"), []byte(strconv.Itoa(quota)), 0644)
+	err = afero.WriteFile(fs, filepath.Join(cgroupBase, "cpu.cfs_quota_us"), []byte(strconv.Itoa(quota)), 0o644)
 	if err != nil {
 		return xerrors.Errorf("write cpu.cfs_quota_us to inner container cgroup: %w", err)
 	}

@@ -4,8 +4,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/coder/envbox/xunix"
 	"github.com/stretchr/testify/require"
+
+	"github.com/coder/envbox/xunix"
 )
 
 func TestMustLookupEnv(t *testing.T) {
@@ -18,6 +19,8 @@ func TestMustLookupEnv(t *testing.T) {
 			key   = "MY_ENV"
 			value = "value"
 		)
+
+		//nolint can't use t.SetEnv in parallel tests.
 		os.Setenv(key, value)
 
 		val := xunix.MustLookupEnv(key)
@@ -30,7 +33,6 @@ func TestMustLookupEnv(t *testing.T) {
 		defer func() {
 			e := recover()
 			require.NotNil(t, e, "function should panic")
-
 		}()
 		_ = xunix.MustLookupEnv("ASDasdf")
 	})

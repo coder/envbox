@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/coder/envbox/xunix"
-	"github.com/coder/envbox/xunix/xunixfake"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
+
+	"github.com/coder/envbox/xunix"
+	"github.com/coder/envbox/xunix/xunixfake"
 )
 
 func TestSetOOMScore(t *testing.T) {
