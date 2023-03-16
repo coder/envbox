@@ -7,12 +7,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/coder/envbox/dockerutil"
-	"github.com/coder/envbox/dockerutil/fake"
-	"github.com/coder/envbox/xunix/xunixfake"
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/spf13/afero"
 	testingexec "k8s.io/utils/exec/testing"
+
+	"github.com/coder/envbox/dockerutil"
+	"github.com/coder/envbox/dockerutil/dockerfake"
+	"github.com/coder/envbox/xunix/xunixfake"
 )
 
 func NewMemFS() *xunixfake.MemFS {
@@ -37,7 +38,7 @@ func NewFakeExecer() *xunixfake.FakeExec {
 }
 
 func NewFakeDockerClient() dockerutil.DockerClient {
-	client := &fake.MockClient{}
+	client := &dockerfake.MockClient{}
 
 	client.ContainerInspectFn = func(_ context.Context, container string) (dockertypes.ContainerJSON, error) {
 		return dockertypes.ContainerJSON{

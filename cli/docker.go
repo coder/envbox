@@ -14,8 +14,8 @@ import (
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog"
+	"github.com/coder/envbox/background"
 	"github.com/coder/envbox/cli/cliflag"
-	"github.com/coder/envbox/daemon"
 	"github.com/coder/envbox/dockerutil"
 	"github.com/coder/envbox/envboxlog"
 	"github.com/coder/envbox/slogkubeterminate"
@@ -131,10 +131,10 @@ func dockerCmd() *cobra.Command {
 				select {
 				// Start sysbox-mgr and sysbox-fs in order to run
 				// sysbox containers.
-				case err := <-daemon.New(ctx, log, "sysbox-mgr").Run():
+				case err := <-background.New(ctx, log, "sysbox-mgr").Run():
 					_ = envboxlog.YieldAndFailBuild(sysboxErrMsg)
 					log.Fatal(ctx, "sysbox-mgr exited", slog.Error(err))
-				case err := <-daemon.New(ctx, log, "sysbox-fs").Run():
+				case err := <-background.New(ctx, log, "sysbox-fs").Run():
 					_ = envboxlog.YieldAndFailBuild(sysboxErrMsg)
 					log.Fatal(ctx, "sysbox-fs exited", slog.Error(err))
 				}
@@ -153,7 +153,7 @@ func dockerCmd() *cobra.Command {
 
 			log.Debug(ctx, "starting dockerd", slog.F("args", args))
 
-			dockerd := daemon.New(ctx, log, "dockerd", dargs...)
+			dockerd := background.New(ctx, log, "dockerd", dargs...)
 			err = dockerd.Start()
 			if err != nil {
 				return xerrors.Errorf("start dockerd: %w", err)
@@ -197,7 +197,7 @@ func dockerCmd() *cobra.Command {
 				// It's possible lower down in the call stack to restart
 				// the docker daemon if we run out of disk while starting the
 				// container.
-				if err != nil && !xerrors.Is(err, daemon.ErrUserKilled) {
+				if err != nil && !xerrors.Is(err, background.ErrUserKilled) {
 					_ = envboxlog.YieldAndFailBuild("Failed to create Container-based Virtual Machine: " + err.Error())
 					log.Fatal(ctx, "dockerd exited", slog.Error(err))
 				}

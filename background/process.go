@@ -1,4 +1,4 @@
-package daemon
+package background
 
 import (
 	"bufio"
@@ -13,15 +13,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/afero"
+	"golang.org/x/xerrors"
+
 	"cdr.dev/slog"
 	"github.com/coder/envbox/xio"
 	"github.com/coder/envbox/xunix"
-	"github.com/spf13/afero"
-	"golang.org/x/xerrors"
 )
 
-// Daemon is an abstraction for running a command as a background process.
-type Daemon struct {
+// Process is an abstraction for running a command as a background process.
+type Process struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	log     slog.Logger
@@ -34,9 +35,9 @@ type Daemon struct {
 }
 
 // New returns an instantiated daemon.
-func New(ctx context.Context, log slog.Logger, cmd string, args ...string) *Daemon {
+func New(ctx context.Context, log slog.Logger, cmd string, args ...string) *Process {
 	ctx, cancel := context.WithCancel(ctx)
-	return &Daemon{
+	return &Process{
 		ctx:        ctx,
 		cancel:     cancel,
 		waitCh:     make(chan error, 1),
@@ -48,7 +49,7 @@ func New(ctx context.Context, log slog.Logger, cmd string, args ...string) *Daem
 }
 
 // Start starts the daemon. It functions akin to ox/exec.Command.Start().
-func (d *Daemon) Start() error {
+func (d *Process) Start() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -57,7 +58,7 @@ func (d *Daemon) Start() error {
 
 // Wait waits for the process to exit, returning the error on the provided
 // channel.
-func (d *Daemon) Wait() <-chan error {
+func (d *Process) Wait() <-chan error {
 	d.mu.Lock()
 	waitCh := d.waitCh
 	d.mu.Unlock()
@@ -67,7 +68,7 @@ func (d *Daemon) Wait() <-chan error {
 
 // Run runs the command and waits for it to exit. It is a convenience
 // function that combines both Start() and Wait().
-func (d *Daemon) Run() <-chan error {
+func (d *Process) Run() <-chan error {
 	err := d.Start()
 	if err != nil {
 		ch := make(chan error, 1)
@@ -81,7 +82,7 @@ func (d *Daemon) Run() <-chan error {
 
 // Restart kill the running process and reruns the command with the updated
 // cmd and args.
-func (d *Daemon) Restart(ctx context.Context, cmd string, args ...string) error {
+func (d *Process) Restart(ctx context.Context, cmd string, args ...string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -101,7 +102,7 @@ func (d *Daemon) Restart(ctx context.Context, cmd string, args ...string) error 
 	return d.start()
 }
 
-func (d *Daemon) start() error {
+func (d *Process) start() error {
 	var (
 		buf bytes.Buffer
 
@@ -155,7 +156,7 @@ func (d *Daemon) start() error {
 	return nil
 }
 
-func (d *Daemon) kill(sig syscall.Signal) error {
+func (d *Process) kill(sig syscall.Signal) error {
 	if d.cmd.OSProcess() == nil {
 		return xerrors.Errorf("cmd has not been started")
 	}
