@@ -2,13 +2,16 @@
 
 set -euo pipefail
 
-# We have to define realpath before these otherwise it fails on Mac's bash.
-SCRIPT_DIR="$(realpath "$(dirname "${BASH_SOURCE[1]}")")"
 # cdroot changes directory to the root of the repository.
-PROJECT_ROOT="$(cd "$SCRIPT_DIR" && realpath "$(git rev-parse --show-toplevel)")"
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 
 cdroot() {
 	cd "$PROJECT_ROOT" || error "Could not change directory to '$PROJECT_ROOT'"
+}
+
+# log prints a message to stderr.
+log() {
+  echo "$*" 1>&2
 }
 
 cdroot
