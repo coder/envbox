@@ -8,6 +8,7 @@ require (
 	github.com/docker/docker v23.0.1+incompatible
 	github.com/opencontainers/image-spec v1.1.0-rc2
 	github.com/ory/dockertest/v3 v3.9.1
+	github.com/quasilyte/go-ruleguard/dsl v0.3.22
 	github.com/spf13/afero v1.9.4
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
