@@ -1,6 +1,7 @@
 package xunix_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,7 +19,9 @@ func TestMustLookupEnv(t *testing.T) {
 			key   = "MY_ENV"
 			value = "value"
 		)
-		t.Setenv(key, value)
+
+		//nolint can't use t.SetEnv in parallel tests.
+		os.Setenv(key, value)
 
 		val := xunix.MustLookupEnv(key)
 		require.Equal(t, value, val)

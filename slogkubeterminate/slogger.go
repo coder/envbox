@@ -30,4 +30,4 @@ func (s slogger) LogEntry(_ context.Context, e slog.SinkEntry) {
 	}
 }
 
-func (s slogger) Sync() {}
+func (slogger) Sync() {}
