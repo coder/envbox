@@ -1,4 +1,4 @@
-package fake
+package dockerfake
 
 import (
 	"context"

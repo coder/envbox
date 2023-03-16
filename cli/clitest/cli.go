@@ -5,14 +5,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coder/envbox/cli"
-	"github.com/coder/envbox/dockerutil"
-	"github.com/coder/envbox/dockerutil/fake"
-	"github.com/coder/envbox/xunix"
-	"github.com/coder/envbox/xunix/xunixfake"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"k8s.io/mount-utils"
+
+	"github.com/coder/envbox/cli"
+	"github.com/coder/envbox/dockerutil"
+	"github.com/coder/envbox/dockerutil/dockerfake"
+	"github.com/coder/envbox/xunix"
+	"github.com/coder/envbox/xunix/xunixfake"
 )
 
 func Execer(ctx context.Context) *xunixfake.FakeExec {
@@ -27,12 +28,12 @@ func Mounter(ctx context.Context) *mount.FakeMounter {
 	return xunix.Mounter(ctx).(*mount.FakeMounter)
 }
 
-func DockerClient(t *testing.T, ctx context.Context) *fake.MockClient {
+func DockerClient(t *testing.T, ctx context.Context) *dockerfake.MockClient {
 	t.Helper()
 
 	client, err := dockerutil.Client(ctx)
 	require.NoError(t, err)
-	return client.(*fake.MockClient)
+	return client.(*dockerfake.MockClient)
 }
 
 // New returns an instantiated Command as well as a context populated with mocked
