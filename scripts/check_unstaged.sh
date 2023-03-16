@@ -1,8 +1,16 @@
 #!/bin/bash
 
 set -euo pipefail
-# shellcheck source=scripts/lib.sh
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+# We have to define realpath before these otherwise it fails on Mac's bash.
+SCRIPT_DIR="$(realpath "$(dirname "${BASH_SOURCE[1]}")")"
+# cdroot changes directory to the root of the repository.
+PROJECT_ROOT="$(cd "$SCRIPT_DIR" && realpath "$(git rev-parse --show-toplevel)")"
+
+cdroot() {
+	cd "$PROJECT_ROOT" || error "Could not change directory to '$PROJECT_ROOT'"
+}
+
 cdroot
 
 FILES="$(git ls-files --other --modified --exclude-standard)"
