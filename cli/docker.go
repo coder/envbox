@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -499,13 +500,31 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		}
 	}
 
-	log.Debug(ctx, "bootstrapping container", slog.F("script", flags.boostrapScript))
+	log.Debug(ctx, "creating bootstrap directory", slog.F("directory", imgMeta.HomeDir))
 
+	// Create the directory to which we will download the agent.
+	bootDir := filepath.Join(imgMeta.HomeDir, ".coder")
+	_, err = dockerutil.ExecContainer(ctx, client, dockerutil.ExecConfig{
+		ContainerID: containerID,
+		User:        imgMeta.UID,
+		Cmd:         "mkdir",
+		Args:        []string{"-p", bootDir},
+	})
+	if err != nil {
+		return xerrors.Errorf("make bootstrap dir: %w", err)
+	}
+
+	log.Debug(ctx, "bootstrapping container", slog.F("script", flags.boostrapScript))
 	// Bootstrap the container if a script has been provided.
 	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
 		ContainerID: containerID,
 		User:        imgMeta.UID,
 		Script:      flags.boostrapScript,
+		// We set this because the default behavior is to download the agent
+		// to /tmp/coder.XXXX. This causes a race to happen where we finish
+		// downloading the binary but before we can execute systemd remounts
+		// /tmp.
+		Env: []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
 	})
 	if err != nil {
 		return xerrors.Errorf("boostrap container: %w", err)
@@ -643,12 +662,12 @@ func isPrivateMount(m xunix.Mount) bool {
 	return ok
 }
 
-func isHomeDir(filepath string) bool {
-	if filepath == "/root" {
+func isHomeDir(fpath string) bool {
+	if fpath == "/root" {
 		return true
 	}
 
-	dir, _ := path.Split(filepath)
+	dir, _ := path.Split(fpath)
 	return dir == "/home/"
 }
 

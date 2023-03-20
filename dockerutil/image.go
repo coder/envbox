@@ -138,6 +138,7 @@ func processImagePullEvents(r io.Reader, fn ImagePullProgressFn) error {
 type ImageMetadata struct {
 	UID     string
 	GID     string
+	HomeDir string
 	HasInit bool
 }
 
@@ -189,14 +190,14 @@ func GetImageMetadata(ctx context.Context, client DockerClient, image, username 
 		return ImageMetadata{}, xerrors.Errorf("CVMs do not support NFS volumes")
 	}
 
-	_, err = execContainer(ctx, client, execConfig{
+	_, err = ExecContainer(ctx, client, ExecConfig{
 		ContainerID: inspect.ID,
 		Cmd:         "stat",
 		Args:        []string{"/sbin/init"},
 	})
 	initExists := err == nil
 
-	out, err := execContainer(ctx, client, execConfig{
+	out, err := ExecContainer(ctx, client, ExecConfig{
 		ContainerID: inspect.ID,
 		Cmd:         "getent",
 		Args:        []string{"passwd", username},
@@ -216,6 +217,7 @@ func GetImageMetadata(ctx context.Context, client DockerClient, image, username 
 	return ImageMetadata{
 		UID:     users[0].Uid,
 		GID:     users[0].Gid,
+		HomeDir: users[0].HomeDir,
 		HasInit: initExists,
 	}, nil
 }

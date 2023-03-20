@@ -98,6 +98,7 @@ type BootstrapConfig struct {
 	ContainerID string
 	User        string
 	Script      string
+	Env         []string
 }
 
 // BoostrapContainer runs a script inside the container as the provided user.
@@ -110,12 +111,13 @@ func BootstrapContainer(ctx context.Context, client DockerClient, conf Bootstrap
 	var err error
 	for r, n := retry.New(time.Second, time.Second*2), 0; r.Wait(ctx) && n < 10; n++ {
 		var out []byte
-		out, err = execContainer(ctx, client, execConfig{
+		out, err = ExecContainer(ctx, client, ExecConfig{
 			ContainerID: conf.ContainerID,
 			User:        conf.User,
 			Cmd:         "/bin/sh",
 			Args:        []string{"-s"},
 			Stdin:       strings.NewReader(conf.Script),
+			Env:         conf.Env,
 		})
 		if err != nil {
 			err = xerrors.Errorf("boostrap container (%s): %w", out, err)

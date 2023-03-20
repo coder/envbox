@@ -117,10 +117,16 @@ func TestDocker(t *testing.T) {
 			}
 		)
 
+		// We touch /home/coder/.coder/foo because it asserts that we're
+		// making the directory that ultimately will host the agent for Coder.
+		// We set this as the BINARY_DIR that we pass to the startup script
+		// so that we can avoid the race that occurs where systemd is remounting
+		// /tmp while we are downloading the agent binary /tmp/coder.XXX.
 		bootstrapScript := `#!/usr/bin/env bash
 
 			echo "hello" > /home/coder/bootstrap
 			mkdir /home/coder/bar
+			touch /home/coder/.coder/foo
 `
 
 		// Run the envbox container.
