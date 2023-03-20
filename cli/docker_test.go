@@ -1,9 +1,15 @@
+//go:build !integration
+// +build !integration
+
 package cli_test
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -377,4 +383,34 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, called, "container create fn not called")
 	})
+
+	t.Run("DockerAuth", func(t *testing.T) {
+		t.Parallel()
+
+		name := namesgenerator.GetRandomName(1)
+		ctx, cmd := clitest.New(t, "docker",
+			"--image=ubuntu",
+			"--username=root",
+			fmt.Sprintf("--container-name=%s", name),
+			"--agent-token=hi",
+			fmt.Sprintf("--image-secret=%s", rawDockerAuth),
+		)
+
+		raw := []byte(`{"username":"_json_key","password":"{\"type\": \"service_account\", \"project_id\": \"some-test\", \"private_key_id\": \"blahblah\", \"private_key\": \"-----BEGIN PRIVATE KEY-----mykey-----END PRIVATE KEY-----\", \"client_email\": \"test@test.iam.gserviceaccount.com\", \"client_id\": \"123\", \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\", \"token_uri\": \"https://oauth2.googleapis.com/token\", \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\", \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/test.iam.gserviceaccount.com\" }","auth":"X2pzb25fa2V5OnsKCgkidHlwZSI6ICJzZXJ2aWNlX2FjY291bnQiLAoJInByb2plY3RfaWQiOiAic29tZS10ZXN0IiwKCSJwcml2YXRlX2tleV9pZCI6ICJibGFoYmxhaCIsCgkicHJpdmF0ZV9rZXkiOiAiLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCm15a2V5LS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQoiLAoJImNsaWVudF9lbWFpbCI6ICJ0ZXN0QHRlc3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLAoJImNsaWVudF9pZCI6ICIxMjMiLAoJImF1dGhfdXJpIjogImh0dHBzOi8vYWNjb3VudHMuZ29vZ2xlLmNvbS9vL29hdXRoMi9hdXRoIiwKCSJ0b2tlbl91cmkiOiAiaHR0cHM6Ly9vYXV0aDIuZ29vZ2xlYXBpcy5jb20vdG9rZW4iLAoJImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6ICJodHRwczovL3d3dy5nb29nbGVhcGlzLmNvbS9vYXV0aDIvdjEvY2VydHMiLAoJImNsaWVudF94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL3JvYm90L3YxL21ldGFkYXRhL3g1MDkvdGVzdC5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIKfQo=","email":"test@test.iam.gserviceaccount.com"}`)
+		authB64 := base64.StdEncoding.EncodeToString(raw)
+
+		client := clitest.DockerClient(t, ctx)
+		client.ImagePullFn = func(_ context.Context, ref string, options dockertypes.ImagePullOptions) (io.ReadCloser, error) {
+			// Assert that we call the image pull function with the credentials.
+			require.Equal(t, authB64, options.RegistryAuth)
+			return io.NopCloser(bytes.NewReader(nil)), nil
+		}
+
+		err := cmd.ExecuteContext(ctx)
+		require.NoError(t, err)
+	})
 }
+
+// rawDockerAuth is sample input for a kubernetes secret to a gcr.io private
+// registry.
+const rawDockerAuth = `{"auths":{"us.gcr.io":{"username":"_json_key","password":"{\"type\": \"service_account\", \"project_id\": \"some-test\", \"private_key_id\": \"blahblah\", \"private_key\": \"-----BEGIN PRIVATE KEY-----mykey-----END PRIVATE KEY-----\", \"client_email\": \"test@test.iam.gserviceaccount.com\", \"client_id\": \"123\", \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\", \"token_uri\": \"https://oauth2.googleapis.com/token\", \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\", \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/test.iam.gserviceaccount.com\" }","email":"test@test.iam.gserviceaccount.com","auth":"X2pzb25fa2V5OnsKCgkidHlwZSI6ICJzZXJ2aWNlX2FjY291bnQiLAoJInByb2plY3RfaWQiOiAic29tZS10ZXN0IiwKCSJwcml2YXRlX2tleV9pZCI6ICJibGFoYmxhaCIsCgkicHJpdmF0ZV9rZXkiOiAiLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCm15a2V5LS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQoiLAoJImNsaWVudF9lbWFpbCI6ICJ0ZXN0QHRlc3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLAoJImNsaWVudF9pZCI6ICIxMjMiLAoJImF1dGhfdXJpIjogImh0dHBzOi8vYWNjb3VudHMuZ29vZ2xlLmNvbS9vL29hdXRoMi9hdXRoIiwKCSJ0b2tlbl91cmkiOiAiaHR0cHM6Ly9vYXV0aDIuZ29vZ2xlYXBpcy5jb20vdG9rZW4iLAoJImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6ICJodHRwczovL3d3dy5nb29nbGVhcGlzLmNvbS9vYXV0aDIvdjEvY2VydHMiLAoJImNsaWVudF94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL3JvYm90L3YxL21ldGFkYXRhL3g1MDkvdGVzdC5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIKfQo="}}}`
