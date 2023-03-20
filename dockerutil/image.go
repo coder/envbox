@@ -3,7 +3,6 @@ package dockerutil
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"time"
@@ -22,7 +21,7 @@ const diskFullStorageDriver = "vfs"
 type PullImageConfig struct {
 	Client     DockerClient
 	Image      string
-	Auth       DockerAuth
+	Auth       AuthConfig
 	ProgressFn ImagePullProgressFn
 }
 
@@ -39,21 +38,6 @@ type ImagePullEvent struct {
 // ImagePullProgressFn provides a way for a consumer to process
 // image pull progress.
 type ImagePullProgressFn func(e ImagePullEvent) error
-
-type DockerAuth dockertypes.AuthConfig
-
-func (d DockerAuth) Base64() (string, error) {
-	if d == (DockerAuth{}) {
-		return "", nil
-	}
-
-	authStr, err := json.Marshal(d)
-	if err != nil {
-		return "", xerrors.Errorf("marshal auth: %w", err)
-	}
-
-	return base64.StdEncoding.EncodeToString(authStr), nil
-}
 
 // PullImage pulls the provided image.
 func PullImage(ctx context.Context, config *PullImageConfig) error {

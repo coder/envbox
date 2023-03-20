@@ -100,24 +100,7 @@ var envboxPrivateMounts = map[string]struct{}{
 }
 
 func dockerCmd() *cobra.Command {
-	var (
-		// Required flags.
-		innerImage         string
-		innerUsername      string
-		innerContainerName string
-		agentToken         string
-
-		// Optional flags.
-		innerEnvs         string
-		innerWorkDir      string
-		innerHostname     string
-		addTUN            bool
-		addFUSE           bool
-		dockerdBridgeCIDR string
-		boostrapScript    string
-		ethlink           string
-		containerMounts   string
-	)
+	var flag flags
 
 	cmd := &cobra.Command{
 		Use:   "docker",
@@ -144,12 +127,12 @@ func dockerCmd() *cobra.Command {
 			}()
 
 			cidr := dockerutil.DefaultBridgeCIDR
-			if dockerdBridgeCIDR != "" {
-				cidr = dockerdBridgeCIDR
+			if flag.dockerdBridgeCIDR != "" {
+				cidr = flag.dockerdBridgeCIDR
 				log.Debug(ctx, "using custom docker bridge CIDR", slog.F("cidr", cidr))
 			}
 
-			dargs, err := dockerdArgs(ctx, log, ethlink, cidr, false)
+			dargs, err := dockerdArgs(ctx, log, flag.ethlink, cidr, false)
 			if err != nil {
 				return xerrors.Errorf("dockerd args: %w", err)
 			}
@@ -182,7 +165,7 @@ func dockerCmd() *cobra.Command {
 				// directory is going to be on top of an overlayfs filesystem
 				// we have to use the vfs storage driver.
 				if xunix.IsNoSpaceErr(err) {
-					args, err = dockerdArgs(ctx, log, ethlink, cidr, true)
+					args, err = dockerdArgs(ctx, log, flag.ethlink, cidr, true)
 					if err != nil {
 						_ = envboxlog.YieldAndFailBuild("Failed to create Container-based Virtual Machine: " + err.Error())
 						//nolint
@@ -219,26 +202,7 @@ func dockerCmd() *cobra.Command {
 				return xerrors.Errorf("wait for dockerd: %w", err)
 			}
 
-			flags := flags{
-				// Required flags.
-				innerImage:         innerImage,
-				innerUsername:      innerUsername,
-				innerContainerName: innerContainerName,
-				agentToken:         agentToken,
-
-				// Optional flags.
-				innerEnvs:         innerEnvs,
-				innerWorkDir:      innerWorkDir,
-				innerHostname:     innerHostname,
-				addTUN:            addTUN,
-				addFUSE:           addFUSE,
-				dockerdBridgeCIDR: dockerdBridgeCIDR,
-				boostrapScript:    boostrapScript,
-				ethlink:           ethlink,
-				containerMounts:   containerMounts,
-			}
-
-			err = runDockerCVM(ctx, log, client, flags)
+			err = runDockerCVM(ctx, log, client, flag)
 			if err != nil {
 				// It's possible we failed because we ran out of disk while
 				// pulling the image. We should restart the daemon and use
@@ -247,7 +211,7 @@ func dockerCmd() *cobra.Command {
 				// is causing their disk to fill up.
 				if xunix.IsNoSpaceErr(err) {
 					log.Debug(ctx, "encountered 'no space left on device' error while starting workspace", slog.Error(err))
-					args, err := dockerdArgs(ctx, log, ethlink, cidr, true)
+					args, err := dockerdArgs(ctx, log, flag.ethlink, cidr, true)
 					if err != nil {
 						return xerrors.Errorf("dockerd args for restart: %w", err)
 					}
@@ -265,7 +229,7 @@ func dockerCmd() *cobra.Command {
 					}()
 
 					log.Debug(ctx, "reattempting container creation")
-					err = runDockerCVM(ctx, log, client, flags)
+					err = runDockerCVM(ctx, log, client, flag)
 				}
 				if err != nil {
 					return xerrors.Errorf("run: %w", err)
@@ -280,21 +244,22 @@ func dockerCmd() *cobra.Command {
 	}
 
 	// Required flags.
-	cliflag.StringVarP(cmd.Flags(), &innerImage, "image", "", EnvInnerImage, "", "The image for the inner container. Required.")
-	cliflag.StringVarP(cmd.Flags(), &innerUsername, "username", "", EnvInnerUsername, "", "The username to use for the inner container. Required.")
-	cliflag.StringVarP(cmd.Flags(), &innerContainerName, "container-name", "", EnvInnerContainerName, "", "The name of the inner container. Required.")
-	cliflag.StringVarP(cmd.Flags(), &agentToken, "agent-token", "", EnvAgentToken, "", "The token to be used by the workspace agent to estabish a connection with the control plane. Required.")
+	cliflag.StringVarP(cmd.Flags(), &flag.innerImage, "image", "", EnvInnerImage, "", "The image for the inner container. Required.")
+	cliflag.StringVarP(cmd.Flags(), &flag.innerUsername, "username", "", EnvInnerUsername, "", "The username to use for the inner container. Required.")
+	cliflag.StringVarP(cmd.Flags(), &flag.innerContainerName, "container-name", "", EnvInnerContainerName, "", "The name of the inner container. Required.")
+	cliflag.StringVarP(cmd.Flags(), &flag.agentToken, "agent-token", "", EnvAgentToken, "", "The token to be used by the workspace agent to estabish a connection with the control plane. Required.")
 
 	// Optional flags.
-	cliflag.StringVarP(cmd.Flags(), &innerEnvs, "envs", "", EnvInnerEnvs, "", "Comma separated list of envs to add to the inner container.")
-	cliflag.StringVarP(cmd.Flags(), &innerWorkDir, "work-dir", "", EnvInnerWorkDir, "", "The working directory of the inner container.")
-	cliflag.StringVarP(cmd.Flags(), &innerHostname, "hostname", "", EnvInnerHostname, "", "The hostname to use for the inner container.")
-	cliflag.StringVarP(cmd.Flags(), &dockerdBridgeCIDR, "bridge-cidr", "", EnvBridgeCIDR, "", "The CIDR to use for the docker bridge.")
-	cliflag.StringVarP(cmd.Flags(), &boostrapScript, "boostrap-script", "", EnvBootstrap, "", "The script to use to bootstrap the container. This should typically install and start the agent.")
-	cliflag.StringVarP(cmd.Flags(), &containerMounts, "mounts", "", EnvMounts, "", "Comma separated list of mounts in the form of '<source>:<target>[:options]' (e.g. /var/lib/docker:/var/lib/docker:ro,/usr/src:/usr/src).")
-	cliflag.StringVarP(cmd.Flags(), &ethlink, "ethlink", "", "", defaultNetLink, "The ethernet link to query for the MTU that is passed to docerd. Used for tests.")
-	cliflag.BoolVarP(cmd.Flags(), &addTUN, "add-tun", "", EnvAddTun, false, "Add a TUN device to the inner container.")
-	cliflag.BoolVarP(cmd.Flags(), &addFUSE, "add-fuse", "", EnvAddFuse, false, "Add a FUSE device to the inner container.")
+	cliflag.StringVarP(cmd.Flags(), &flag.innerEnvs, "envs", "", EnvInnerEnvs, "", "Comma separated list of envs to add to the inner container.")
+	cliflag.StringVarP(cmd.Flags(), &flag.innerWorkDir, "work-dir", "", EnvInnerWorkDir, "", "The working directory of the inner container.")
+	cliflag.StringVarP(cmd.Flags(), &flag.innerHostname, "hostname", "", EnvInnerHostname, "", "The hostname to use for the inner container.")
+	cliflag.StringVarP(cmd.Flags(), &flag.imagePullSecret, "image-secret", "", EnvBoxPullImageSecretEnvVar, "", fmt.Sprintf("The secret to use to pull the image. It is highly encouraged to provide this via the %s environment variable.", EnvBoxPullImageSecretEnvVar))
+	cliflag.StringVarP(cmd.Flags(), &flag.dockerdBridgeCIDR, "bridge-cidr", "", EnvBridgeCIDR, "", "The CIDR to use for the docker bridge.")
+	cliflag.StringVarP(cmd.Flags(), &flag.boostrapScript, "boostrap-script", "", EnvBootstrap, "", "The script to use to bootstrap the container. This should typically install and start the agent.")
+	cliflag.StringVarP(cmd.Flags(), &flag.containerMounts, "mounts", "", EnvMounts, "", "Comma separated list of mounts in the form of '<source>:<target>[:options]' (e.g. /var/lib/docker:/var/lib/docker:ro,/usr/src:/usr/src).")
+	cliflag.StringVarP(cmd.Flags(), &flag.ethlink, "ethlink", "", "", defaultNetLink, "The ethernet link to query for the MTU that is passed to docerd. Used for tests.")
+	cliflag.BoolVarP(cmd.Flags(), &flag.addTUN, "add-tun", "", EnvAddTun, false, "Add a TUN device to the inner container.")
+	cliflag.BoolVarP(cmd.Flags(), &flag.addFUSE, "add-fuse", "", EnvAddFuse, false, "Add a FUSE device to the inner container.")
 
 	return cmd
 }
@@ -309,6 +274,7 @@ type flags struct {
 	innerEnvs         string
 	innerWorkDir      string
 	innerHostname     string
+	imagePullSecret   string
 	addTUN            bool
 	addFUSE           bool
 	dockerdBridgeCIDR string
@@ -325,6 +291,14 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	err := xunix.SetOOMScore(ctx, "self", "-1000")
 	if err != nil {
 		return xerrors.Errorf("set oom score: %w", err)
+	}
+
+	var dockerAuth dockerutil.AuthConfig
+	if flags.imagePullSecret != "" {
+		dockerAuth, err = dockerutil.ParseAuthConfig(flags.imagePullSecret)
+		if err != nil {
+			return xerrors.Errorf("parse auth config: %w", err)
+		}
 	}
 
 	envs := defaultContainerEnvs(flags.agentToken)
@@ -392,8 +366,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	err = dockerutil.PullImage(ctx, &dockerutil.PullImageConfig{
 		Client:     client,
 		Image:      flags.innerImage,
-		Auth:       dockerutil.DockerAuth{},                                // TODO
-		ProgressFn: func(e dockerutil.ImagePullEvent) error { return nil }, // TODO
+		Auth:       dockerAuth,
+		ProgressFn: func(e dockerutil.ImagePullEvent) error { return nil },
 	})
 	if err != nil {
 		return xerrors.Errorf("pull image: %w", err)
