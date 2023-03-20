@@ -504,10 +504,11 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	// Create the directory to which we will download the agent.
 	bootDir := filepath.Join(imgMeta.HomeDir, ".coder")
-	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
+	_, err = dockerutil.ExecContainer(ctx, client, dockerutil.ExecConfig{
 		ContainerID: containerID,
 		User:        imgMeta.UID,
-		Script:      fmt.Sprintf("mkdir -p %s", bootDir),
+		Cmd:         "mkdir",
+		Args:        []string{"-p", bootDir},
 	})
 	if err != nil {
 		return xerrors.Errorf("make bootstrap dir: %w", err)

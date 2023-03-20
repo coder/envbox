@@ -10,7 +10,7 @@ import (
 	"golang.org/x/xerrors"
 )
 
-type execConfig struct {
+type ExecConfig struct {
 	ContainerID string
 	User        string
 	Cmd         string
@@ -19,9 +19,9 @@ type execConfig struct {
 	Env         []string
 }
 
-// execContainer runs a command in a container. It returns the output and any error.
+// ExecContainer runs a command in a container. It returns the output and any error.
 // If an error occurs during the execution of the command, the output is appended to the error.
-func execContainer(ctx context.Context, client DockerClient, config execConfig) ([]byte, error) {
+func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) ([]byte, error) {
 	exec, err := client.ContainerExecCreate(ctx, config.ContainerID, dockertypes.ExecConfig{
 		Detach:       true,
 		Cmd:          append([]string{config.Cmd}, config.Args...),
