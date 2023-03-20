@@ -21,7 +21,7 @@ import (
 const (
 	runtime = "sysbox-runc"
 	// Default CPU period for containers.
-	defaultCPUPeriod uint64 = 1e5
+	DefaultCPUPeriod uint64 = 1e5
 )
 
 type DockerClient interface {
@@ -42,7 +42,7 @@ type ContainerConfig struct {
 	// HasInit dictates whether the entrypoint of the container is /sbin/init
 	// or 'sleep infinity'.
 	HasInit     bool
-	CPUQuota    int64
+	CPUs        int64
 	MemoryLimit int64
 }
 
@@ -59,8 +59,8 @@ func CreateContainer(ctx context.Context, client DockerClient, conf *ContainerCo
 			// TODO: Sysbox does not copy cpu.cfs_{period,quota}_us into syscont-cgroup-root cgroup.
 			// These will not be visible inside the child container.
 			// See: https://github.com/nestybox/sysbox/issues/582
-			CPUPeriod: int64(defaultCPUPeriod),
-			CPUQuota:  conf.CPUQuota,
+			CPUPeriod: int64(DefaultCPUPeriod),
+			CPUQuota:  conf.CPUs * int64(DefaultCPUPeriod),
 			Memory:    conf.MemoryLimit,
 		},
 		ExtraHosts: []string{"host.docker.internal:host-gateway"},

@@ -58,6 +58,8 @@ const (
 	OuterTUNPath = "/tmp/coder-tun"
 	InnerTUNPath = "/dev/net/tun"
 
+	InnerContainerName = "workspace_cvm"
+
 	// Required for userns mapping.
 	// This is the ID of the user we apply in `envbox/Dockerfile`.
 	//
@@ -85,6 +87,8 @@ var (
 	EnvAgentToken = "CODER_AGENT_TOKEN"
 	EnvBootstrap  = "CODER_BOOTSTRAP_SCRIPT"
 	EnvMounts     = "CODER_MOUNTS"
+	EnvCPUs       = "CODER_CPUS"
+	EnvMemory     = "CODER_MEMORY"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -261,6 +265,8 @@ func dockerCmd() *cobra.Command {
 	cliflag.StringVarP(cmd.Flags(), &flag.ethlink, "ethlink", "", "", defaultNetLink, "The ethernet link to query for the MTU that is passed to docerd. Used for tests.")
 	cliflag.BoolVarP(cmd.Flags(), &flag.addTUN, "add-tun", "", EnvAddTun, false, "Add a TUN device to the inner container.")
 	cliflag.BoolVarP(cmd.Flags(), &flag.addFUSE, "add-fuse", "", EnvAddFuse, false, "Add a FUSE device to the inner container.")
+	cliflag.IntVarP(cmd.Flags(), &flag.cpus, "cpus", "", EnvCPUs, 0, "Number of CPUs to allocate inner container. e.g. 2")
+	cliflag.IntVarP(cmd.Flags(), &flag.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
 
 	return cmd
 }
@@ -282,6 +288,8 @@ type flags struct {
 	boostrapScript    string
 	ethlink           string
 	containerMounts   string
+	cpus              int
+	memory            int
 }
 
 func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, flags flags) error {
@@ -471,15 +479,16 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	// Create the inner container.
 	containerID, err := dockerutil.CreateContainer(ctx, client, &dockerutil.ContainerConfig{
-		Log:        log,
-		Mounts:     mounts,
-		Devices:    devices,
-		Envs:       envs,
-		Name:       "workspace_cvm",
-		WorkingDir: flags.innerWorkDir,
-		HasInit:    imgMeta.HasInit,
-		Image:      flags.innerImage,
-		// TODO set CPUQuota,MemoryLimit
+		Log:         log,
+		Mounts:      mounts,
+		Devices:     devices,
+		Envs:        envs,
+		Name:        InnerContainerName,
+		WorkingDir:  flags.innerWorkDir,
+		HasInit:     imgMeta.HasInit,
+		Image:       flags.innerImage,
+		CPUs:        int64(flags.cpus),
+		MemoryLimit: int64(flags.memory),
 	})
 	if err != nil {
 		return xerrors.Errorf("create container: %w", err)

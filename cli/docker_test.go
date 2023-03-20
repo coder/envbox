@@ -23,6 +23,7 @@ import (
 
 	"github.com/coder/envbox/cli"
 	"github.com/coder/envbox/cli/clitest"
+	"github.com/coder/envbox/dockerutil"
 	"github.com/coder/envbox/xunix"
 	"github.com/coder/envbox/xunix/xunixfake"
 )
@@ -164,7 +165,7 @@ func TestDocker(t *testing.T) {
 		client := clitest.DockerClient(t, ctx)
 		var called bool
 		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
-			if containerName == "workspace_cvm" {
+			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, expectedEnvs, config.Env)
 			}
@@ -217,7 +218,7 @@ func TestDocker(t *testing.T) {
 
 		var called bool
 		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
-			if containerName == "workspace_cvm" {
+			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, expectedMounts, hostConfig.Binds)
 			}
@@ -301,7 +302,7 @@ func TestDocker(t *testing.T) {
 
 		var called bool
 		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
-			if containerName == "workspace_cvm" {
+			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, expectedDevices, hostConfig.Devices)
 			}
@@ -368,7 +369,7 @@ func TestDocker(t *testing.T) {
 
 		var called bool
 		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
-			if containerName == "workspace_cvm" {
+			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, []string{"sleep", "infinity"}, []string(config.Entrypoint))
 			}
@@ -405,6 +406,42 @@ func TestDocker(t *testing.T) {
 
 		err := cmd.ExecuteContext(ctx)
 		require.NoError(t, err)
+	})
+
+	t.Run("SetsResources", func(t *testing.T) {
+		t.Parallel()
+
+		const (
+			// 4GB.
+			memory = 4 << 30
+			cpus   = 6
+		)
+		name := namesgenerator.GetRandomName(1)
+		ctx, cmd := clitest.New(t, "docker",
+			"--image=ubuntu",
+			"--username=root",
+			fmt.Sprintf("--container-name=%s", name),
+			"--agent-token=hi",
+			fmt.Sprintf("--cpus=%d", cpus),
+			fmt.Sprintf("--memory=%d", memory),
+		)
+
+		var called bool
+		client := clitest.DockerClient(t, ctx)
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+			if containerName == cli.InnerContainerName {
+				called = true
+				require.Equal(t, int64(memory), hostConfig.Memory)
+				require.Equal(t, int64(cpus*dockerutil.DefaultCPUPeriod), hostConfig.CPUQuota)
+				require.Equal(t, int64(dockerutil.DefaultCPUPeriod), hostConfig.CPUPeriod)
+			}
+
+			return container.ContainerCreateCreatedBody{}, nil
+		}
+
+		err := cmd.ExecuteContext(ctx)
+		require.NoError(t, err)
+		require.True(t, called, "create function was not called for inner container")
 	})
 }
 
