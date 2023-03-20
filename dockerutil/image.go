@@ -138,6 +138,7 @@ func processImagePullEvents(r io.Reader, fn ImagePullProgressFn) error {
 type ImageMetadata struct {
 	UID     string
 	GID     string
+	HomeDir string
 	HasInit bool
 }
 
@@ -216,6 +217,7 @@ func GetImageMetadata(ctx context.Context, client DockerClient, image, username 
 	return ImageMetadata{
 		UID:     users[0].Uid,
 		GID:     users[0].Gid,
+		HomeDir: users[0].HomeDir,
 		HasInit: initExists,
 	}, nil
 }

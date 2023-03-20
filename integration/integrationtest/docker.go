@@ -13,13 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coder/envbox/cli"
-	"github.com/coder/envbox/envboxlog"
-	"github.com/coder/retry"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
+
+	"github.com/coder/envbox/cli"
+	"github.com/coder/envbox/envboxlog"
+	"github.com/coder/retry"
 )
 
 const (

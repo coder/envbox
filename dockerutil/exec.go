@@ -16,6 +16,7 @@ type execConfig struct {
 	Cmd         string
 	Args        []string
 	Stdin       io.Reader
+	Env         []string
 }
 
 // execContainer runs a command in a container. It returns the output and any error.
@@ -28,6 +29,7 @@ func execContainer(ctx context.Context, client DockerClient, config execConfig) 
 		AttachStderr: true,
 		AttachStdout: true,
 		AttachStdin:  config.Stdin != nil,
+		Env:          config.Env,
 	})
 	if err != nil {
 		return nil, xerrors.Errorf("exec create: %w", err)
