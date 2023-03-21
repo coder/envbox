@@ -14,6 +14,7 @@ import (
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog"
+	"github.com/coder/envbox/startuplog"
 	"github.com/coder/envbox/xunix"
 	"github.com/coder/retry"
 )
@@ -98,6 +99,7 @@ type BootstrapConfig struct {
 	ContainerID string
 	User        string
 	Script      string
+	BuildLog    startuplog.Logger
 	Env         []string
 }
 
@@ -118,6 +120,7 @@ func BootstrapContainer(ctx context.Context, client DockerClient, conf Bootstrap
 			Args:        []string{"-s"},
 			Stdin:       strings.NewReader(conf.Script),
 			Env:         conf.Env,
+			StdOutErr:   conf.BuildLog,
 		})
 		if err != nil {
 			err = xerrors.Errorf("boostrap container (%s): %w", out, err)

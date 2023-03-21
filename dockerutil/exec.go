@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"os"
 
 	dockertypes "github.com/docker/docker/api/types"
 	"golang.org/x/xerrors"
@@ -16,6 +15,7 @@ type ExecConfig struct {
 	Cmd         string
 	Args        []string
 	Stdin       io.Reader
+	StdOutErr   io.Writer
 	Env         []string
 }
 
@@ -26,8 +26,8 @@ func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) 
 		Detach:       true,
 		Cmd:          append([]string{config.Cmd}, config.Args...),
 		User:         config.User,
-		AttachStderr: true,
-		AttachStdout: true,
+		AttachStderr: config.StdOutErr != nil,
+		AttachStdout: config.StdOutErr != nil,
 		AttachStdin:  config.Stdin != nil,
 		Env:          config.Env,
 	})
@@ -52,9 +52,16 @@ func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) 
 		}
 	}
 
-	var buf bytes.Buffer
-	mwr := io.MultiWriter(os.Stderr, os.Stdout, &buf)
-	_, err = io.Copy(mwr, resp.Reader)
+	var (
+		buf bytes.Buffer
+		wr  io.Writer = &buf
+	)
+
+	if config.StdOutErr != nil {
+		wr = io.MultiWriter(&buf, config.StdOutErr)
+	}
+
+	_, err = io.Copy(wr, resp.Reader)
 	if err != nil {
 		return nil, xerrors.Errorf("copy cmd output: %w", err)
 	}

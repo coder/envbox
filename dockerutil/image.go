@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"golang.org/x/xerrors"
 
+	"github.com/coder/envbox/startuplog"
 	"github.com/coder/envbox/xunix"
 	"github.com/coder/retry"
 )
@@ -220,4 +222,33 @@ func GetImageMetadata(ctx context.Context, client DockerClient, image, username 
 		HomeDir: users[0].HomeDir,
 		HasInit: initExists,
 	}, nil
+}
+
+func LogImagePullFn(log startuplog.Logger) func(ImagePullEvent) error {
+	// Avoid spamming too frequently, the messages can come quickly
+	var (
+		delayDur = time.Second * 2
+		// We subtract the delay duration so that we log the first message.
+		lastLog = time.Now().Add(-delayDur * 2)
+	)
+	return func(e ImagePullEvent) error {
+		if e.Error != "" {
+			log.Logf("ERROR: %s", e.Error)
+			return xerrors.Errorf("pull image: %s", e.Error)
+		}
+
+		// Not enough time has transpired, return without logging.
+		if time.Since(lastLog) < delayDur {
+			return nil
+		}
+
+		msg := e.Status
+		if e.Progress != "" {
+			msg = fmt.Sprintf("%s: %s", e.Status, e.Progress)
+		}
+		log.Log(msg)
+		lastLog = time.Now()
+
+		return nil
+	}
 }
