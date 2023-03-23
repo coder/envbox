@@ -1,4 +1,4 @@
-package startuplog
+package buildlog
 
 import (
 	"encoding/json"

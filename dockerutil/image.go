@@ -13,7 +13,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"golang.org/x/xerrors"
 
-	"github.com/coder/envbox/startuplog"
+	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/xunix"
 	"github.com/coder/retry"
 )
@@ -224,7 +224,7 @@ func GetImageMetadata(ctx context.Context, client DockerClient, image, username 
 	}, nil
 }
 
-func LogImagePullFn(log startuplog.Logger) func(ImagePullEvent) error {
+func LogImagePullFn(log buildlog.Logger) func(ImagePullEvent) error {
 	// Avoid spamming too frequently, the messages can come quickly
 	var (
 		delayDur = time.Second * 2

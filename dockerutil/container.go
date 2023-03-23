@@ -14,7 +14,7 @@ import (
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog"
-	"github.com/coder/envbox/startuplog"
+	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/xunix"
 	"github.com/coder/retry"
 )
@@ -99,7 +99,7 @@ type BootstrapConfig struct {
 	ContainerID string
 	User        string
 	Script      string
-	BuildLog    startuplog.Logger
+	BuildLog    buildlog.Logger
 	Env         []string
 }
 

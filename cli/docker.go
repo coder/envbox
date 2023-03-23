@@ -17,11 +17,11 @@ import (
 
 	"cdr.dev/slog"
 	"github.com/coder/envbox/background"
+	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/cli/cliflag"
 	"github.com/coder/envbox/dockerutil"
 	"github.com/coder/envbox/envboxlog"
 	"github.com/coder/envbox/slogkubeterminate"
-	"github.com/coder/envbox/startuplog"
 	"github.com/coder/envbox/sysboxutil"
 	"github.com/coder/envbox/xunix"
 )
@@ -125,16 +125,16 @@ func dockerCmd() *cobra.Command {
 					return xerrors.Errorf("parse coder URL %q: %w", flags.coderURL, err)
 				}
 
-				logger := startuplog.MultiLogger(
-					startuplog.OpenCoderLogger(ctx, coderURL, flags.agentToken),
-					startuplog.JSONLogger{W: os.Stderr},
+				logger := buildlog.MultiLogger(
+					buildlog.OpenCoderLogger(ctx, coderURL, flags.agentToken),
+					buildlog.JSONLogger{W: os.Stderr},
 				)
 				defer logger.Close()
 
-				ctx = startuplog.WithLogger(ctx, logger)
+				ctx = buildlog.WithLogger(ctx, logger)
 			}
 
-			blog := startuplog.GetLogger(ctx)
+			blog := buildlog.GetLogger(ctx)
 
 			defer func(err *error) {
 				if *err != nil {
@@ -333,7 +333,7 @@ type flags struct {
 func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, flags flags) error {
 	var (
 		fs   = xunix.GetFS(ctx)
-		blog = startuplog.GetLogger(ctx)
+		blog = buildlog.GetLogger(ctx)
 	)
 
 	// Set our OOM score to something really unfavorable to avoid getting killed
