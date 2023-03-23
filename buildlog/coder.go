@@ -5,9 +5,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
 	"time"
+
+	"cdr.dev/slog"
 )
+
+const MaxCoderLogSize = 1 << 10
 
 type StartupLog struct {
 	CreatedAt time.Time `json:"created_at"`
@@ -22,25 +25,51 @@ type CoderClient interface {
 	PatchStartupLogs(ctx context.Context, req PatchStartupLogs) error
 }
 
-type coder struct {
+type CoderLogger struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	client CoderClient
 	pr     io.ReadCloser
 	pw     io.WriteCloser
+	logger slog.Logger
 	err    error
+	*CoderOptions
 }
 
-func OpenCoderLogger(ctx context.Context, accessURL *url.URL, agentToken string) Logger {
+const (
+	// To avoid excessive DB calls we batch our output.
+	// We'll keep at most 20KB of output in memory at a given time.
+	defaultMaxLogs = 20
+	// delayDur is the maximum amount of time we'll wait before sending
+	// off some logs.
+	defaultDelayDur = time.Second * 3
+)
+
+type CoderOptions struct {
+	MaxLogs  int
+	DelayDur time.Duration
+}
+
+func OpenCoderLogger(ctx context.Context, client CoderClient, log slog.Logger, options *CoderOptions) Logger {
 	ctx, cancel := context.WithCancel(ctx)
 
+	if options.DelayDur == 0 {
+		options.DelayDur = defaultDelayDur
+	}
+
+	if options.MaxLogs == 0 {
+		options.MaxLogs = defaultMaxLogs
+	}
+
 	pr, pw := io.Pipe()
-	coder := &coder{
-		ctx:    ctx,
-		cancel: cancel,
-		client: nil,
-		pr:     pr,
-		pw:     pw,
+	coder := &CoderLogger{
+		ctx:          ctx,
+		cancel:       cancel,
+		client:       client,
+		pr:           pr,
+		pw:           pw,
+		logger:       log,
+		CoderOptions: options,
 	}
 
 	go coder.processLogs()
@@ -48,57 +77,67 @@ func OpenCoderLogger(ctx context.Context, accessURL *url.URL, agentToken string)
 	return coder
 }
 
-func (c *coder) Logf(format string, a ...any) {
-	c.Log(fmt.Sprintf(format, a...))
+func (c *CoderLogger) Infof(format string, a ...any) {
+	c.Info(fmt.Sprintf(format, a...))
 }
 
-func (c *coder) Log(output string) {
+func (c *CoderLogger) Info(output string) {
+	c.log(output)
+}
+
+func (c *CoderLogger) Errorf(format string, a ...any) {
+	c.Error(fmt.Sprintf(format, a...))
+}
+
+func (c *CoderLogger) Error(output string) {
+	c.log("ERROR: " + output)
+}
+
+func (c *CoderLogger) log(output string) {
 	if c.err != nil {
 		_ = c.pw.Close()
 		_ = c.pr.Close()
 		return
 	}
+	output += "\n"
 	_, c.err = c.pw.Write([]byte(output))
+	if c.err != nil {
+		c.logger.Error(c.ctx, "log output", slog.Error(c.err), slog.F("output", output))
+	}
 }
 
-func (c *coder) Write(p []byte) (int, error) {
-	c.Log(string(p))
+func (c *CoderLogger) Write(p []byte) (int, error) {
+	c.Info(string(p))
 	return len(p), nil
 }
 
-func (c *coder) Close() {
+func (c *CoderLogger) Close() {
 	c.cancel()
 }
 
-func (c *coder) processLogs() {
-	// To avoid excessive DB calls we batch our output.
-	// We'll keep at most 20KB of output in memory at a given time.
-	const maxLogs = 20
-
+func (c *CoderLogger) processLogs() {
 	var (
-		scan     = bufio.NewScanner(c.pr)
-		buf      = make([]byte, 1<<10)
-		logs     = make([]StartupLog, 0, maxLogs)
-		delayDur = time.Second * 3
+		scan = bufio.NewScanner(c.pr)
+		logs = make([]StartupLog, 0, c.MaxLogs)
 		// maxDelay is the maximum amount of time we'll wait before sending
 		// off some logs.
-		maxDelay = time.NewTimer(delayDur)
+		maxDelay = time.NewTimer(c.DelayDur)
 		closed   bool
 	)
-
-	// Coder only stores the first KB of a startup and silently discards the
-	// rest. To avoid unintentionally dropping log output let's only read 1KB at
-	// a time.
-	scan.Buffer(buf, 1<<10)
 
 	for scan.Scan() && !closed {
 		var sendLogs bool
 
 		line := scan.Text()
-		logs = append(logs, StartupLog{
-			CreatedAt: time.Now(),
-			Output:    line,
-		})
+
+		lines := cutString(line, MaxCoderLogSize)
+
+		for _, output := range lines {
+			logs = append(logs, StartupLog{
+				CreatedAt: time.Now(),
+				Output:    output,
+			})
+		}
 
 		select {
 		case <-c.ctx.Done():
@@ -109,20 +148,26 @@ func (c *coder) processLogs() {
 		case <-maxDelay.C:
 			sendLogs = true
 		default:
-			sendLogs = len(logs) == maxLogs
+			// We may go over our max log size if some line was super long.
+			sendLogs = len(logs) >= c.MaxLogs
 		}
 
 		if !sendLogs {
 			continue
 		}
 
-		// Drain the channel if we didn't wait the max amount of time.
-		if !maxDelay.Stop() {
-			<-maxDelay.C
+		// Indiscriminately stop and attempt to drain the Timer here.
+		// Since we're going to send logs we need to reset it and we can't
+		// be certain if we drained the channel or if it expired _just_
+		// after we selected on it.
+		maxDelay.Stop()
+		select {
+		case <-maxDelay.C:
+		default:
 		}
 
 		// Reset the delay timer since we're about to send some logs.
-		maxDelay.Reset(delayDur)
+		maxDelay.Reset(c.DelayDur)
 
 		// Send the logs in a goroutine so that we can avoid blocking
 		// too long on the pipe.
@@ -132,10 +177,8 @@ func (c *coder) processLogs() {
 				Logs: startupLogs,
 			})
 			if err != nil {
-				// What should we do? I guess just log.
-				panic(err)
+				c.logger.Error(c.ctx, "send startup logs", slog.Error(err))
 			}
-
 		}(cpLogs)
 
 		// Reset the slice. We _technically_ leak memory in the form of the
@@ -143,9 +186,30 @@ func (c *coder) processLogs() {
 		// temporary and should max out at around 20KB.
 		logs = logs[:0]
 	}
+	if scan.Err() != nil {
+		c.logger.Error(c.ctx, "scan error", slog.Error(scan.Err()))
+	}
 
 	// Cleanup resources.
 	logs = nil
-	c.pr.Close()
-	c.pw.Close()
+	_ = c.pr.Close()
+	_ = c.pw.Close()
+}
+
+// cutString cuts a string up into smaller strings that have a len no greater
+// than the provided max size.
+// If the string is less than the max size the return slice has one
+// element with a value of the provided string.
+func cutString(s string, maxSize int) []string {
+	if len(s) <= maxSize {
+		return []string{s}
+	}
+
+	toks := []string{}
+	for len(s) > maxSize {
+		toks = append(toks, s[:maxSize])
+		s = s[maxSize:]
+	}
+
+	return append(toks, s)
 }

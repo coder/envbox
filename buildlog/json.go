@@ -3,43 +3,65 @@ package buildlog
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"time"
+)
+
+const (
+	JSONLogTypeDone  = "done"
+	JSONLogTypeInfo  = "info"
+	JSONLogTypeError = "error"
 )
 
 type JSONLog struct {
 	Output string    `json:"output"`
 	Time   time.Time `json:"time"`
+	Type   string    `json:"type"`
 }
 
 type JSONLogger struct {
-	W io.Writer
+	Encoder *json.Encoder
 }
 
-func (w JSONLogger) Write(p []byte) (int, error) {
-	w.Log(string(p))
+func (j JSONLogger) Write(p []byte) (int, error) {
+	j.Info(string(p))
 	return len(p), nil
 }
 
-func (w JSONLogger) Logf(format string, a ...any) {
-	w.Log(fmt.Sprintf(format, a...))
+func (j JSONLogger) Infof(format string, a ...any) {
+	j.Info(fmt.Sprintf(format, a...))
 }
 
-func (w JSONLogger) Log(output string) {
-	raw, err := json.Marshal(JSONLog{
+func (j JSONLogger) Info(output string) {
+	j.log(JSONLog{
 		Output: output,
 		Time:   time.Now(),
+		Type:   JSONLogTypeInfo,
 	})
-	if err != nil {
-		panic(err)
-	}
+}
 
-	_, err = w.W.Write(raw)
+func (j JSONLogger) Errorf(format string, a ...any) {
+	j.Error(fmt.Sprintf(format, a...))
+}
+
+func (j JSONLogger) Error(output string) {
+	j.log(JSONLog{
+		Output: output,
+		Time:   time.Now(),
+		Type:   JSONLogTypeError,
+	})
+}
+
+// nolint
+func (j JSONLogger) log(jlog JSONLog) {
+	err := j.Encoder.Encode(jlog)
 	if err != nil {
 		panic(err)
 	}
 }
 
 func (j JSONLogger) Close() {
-	j.Log(LoggerDoneMsg)
+	j.log(JSONLog{
+		Type: JSONLogTypeDone,
+		Time: time.Now(),
+	})
 }

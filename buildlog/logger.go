@@ -6,8 +6,6 @@ import (
 	"io"
 )
 
-const LoggerDoneMsg = "envbox successfully built"
-
 type loggerCtxKey struct{}
 
 func GetLogger(ctx context.Context) Logger {
@@ -24,8 +22,10 @@ func WithLogger(ctx context.Context, l Logger) context.Context {
 }
 
 type Logger interface {
-	Log(output string)
-	Logf(format string, a ...any)
+	Info(output string)
+	Infof(format string, a ...any)
+	Error(output string)
+	Errorf(format string, a ...any)
 	Close()
 	io.Writer
 }
@@ -38,18 +38,28 @@ type multiLogger struct {
 	loggers []Logger
 }
 
-func (m multiLogger) Logf(format string, a ...any) {
-	m.Log(fmt.Sprintf(format, a...))
+func (m multiLogger) Infof(format string, a ...any) {
+	m.Info(fmt.Sprintf(format, a...))
 }
 
-func (m multiLogger) Log(output string) {
+func (m multiLogger) Info(output string) {
 	for _, log := range m.loggers {
-		log.Log(output)
+		log.Info(output)
+	}
+}
+
+func (m multiLogger) Errorf(format string, a ...any) {
+	m.Error(fmt.Sprintf(format, a...))
+}
+
+func (m multiLogger) Error(output string) {
+	for _, log := range m.loggers {
+		log.Error(output)
 	}
 }
 
 func (m multiLogger) Write(p []byte) (int, error) {
-	m.Log(string(p))
+	m.Info(string(p))
 	return len(p), nil
 }
 
@@ -61,7 +71,9 @@ func (m multiLogger) Close() {
 
 type nopLogger struct{}
 
-func (nopLogger) Log(string)                {}
-func (nopLogger) Logf(string, ...any)       {}
+func (nopLogger) Info(string)               {}
+func (nopLogger) Infof(string, ...any)      {}
+func (nopLogger) Errorf(string, ...any)     {}
+func (nopLogger) Error(string)              {}
 func (nopLogger) Write([]byte) (int, error) { return 0, nil }
 func (nopLogger) Close()                    {}

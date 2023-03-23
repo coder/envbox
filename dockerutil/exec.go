@@ -26,8 +26,8 @@ func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) 
 		Detach:       true,
 		Cmd:          append([]string{config.Cmd}, config.Args...),
 		User:         config.User,
-		AttachStderr: config.StdOutErr != nil,
-		AttachStdout: config.StdOutErr != nil,
+		AttachStderr: true,
+		AttachStdout: true,
 		AttachStdin:  config.Stdin != nil,
 		Env:          config.Env,
 	})

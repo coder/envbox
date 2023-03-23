@@ -233,7 +233,7 @@ func LogImagePullFn(log buildlog.Logger) func(ImagePullEvent) error {
 	)
 	return func(e ImagePullEvent) error {
 		if e.Error != "" {
-			log.Logf("ERROR: %s", e.Error)
+			log.Errorf(e.Error)
 			return xerrors.Errorf("pull image: %s", e.Error)
 		}
 
@@ -246,7 +246,7 @@ func LogImagePullFn(log buildlog.Logger) func(ImagePullEvent) error {
 		if e.Progress != "" {
 			msg = fmt.Sprintf("%s: %s", e.Status, e.Progress)
 		}
-		log.Log(msg)
+		log.Info(msg)
 		lastLog = time.Now()
 
 		return nil

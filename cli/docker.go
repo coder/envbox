@@ -2,8 +2,8 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -20,7 +20,6 @@ import (
 	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/cli/cliflag"
 	"github.com/coder/envbox/dockerutil"
-	"github.com/coder/envbox/envboxlog"
 	"github.com/coder/envbox/slogkubeterminate"
 	"github.com/coder/envbox/sysboxutil"
 	"github.com/coder/envbox/xunix"
@@ -115,45 +114,49 @@ func dockerCmd() *cobra.Command {
 		Short: "Create a docker-based CVM",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			var (
-				ctx = cmd.Context()
-				log = slog.Make(envboxlog.NewSink(os.Stderr), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
+				ctx  = cmd.Context()
+				log  = slog.Make(slogkubeterminate.Make()).Leveled(slog.LevelDebug)
+				blog = buildlog.GetLogger(ctx)
 			)
 
+			if !flags.noStartupLogs {
+				blog = buildlog.JSONLogger{Encoder: json.NewEncoder(os.Stderr)}
+			}
+
 			if !flags.noStartupLogs && flags.agentToken != "" && flags.coderURL != "" {
-				coderURL, err := url.Parse(flags.coderURL)
-				if err != nil {
-					return xerrors.Errorf("parse coder URL %q: %w", flags.coderURL, err)
-				}
+				// coderURL, err := url.Parse(flags.coderURL)
+				// if err != nil {
+				// 	return xerrors.Errorf("parse coder URL %q: %w", flags.coderURL, err)
+				// }
 
 				logger := buildlog.MultiLogger(
-					buildlog.OpenCoderLogger(ctx, coderURL, flags.agentToken),
-					buildlog.JSONLogger{W: os.Stderr},
+					// buildlog.OpenCoderLogger(ctx, coderURL, flags.agentToken),
+					blog,
 				)
 				defer logger.Close()
 
 				ctx = buildlog.WithLogger(ctx, logger)
 			}
-
-			blog := buildlog.GetLogger(ctx)
+			defer blog.Close()
 
 			defer func(err *error) {
 				if *err != nil {
-					blog.Logf("Failed to run envbox: %v", *err)
+					blog.Errorf("Failed to run envbox: %v", *err)
 				}
 			}(&err)
 
-			blog.Log("Waiting for dockerd to startup...")
+			blog.Info("Waiting for dockerd to startup...")
 
 			go func() {
 				select {
 				// Start sysbox-mgr and sysbox-fs in order to run
 				// sysbox containers.
 				case err := <-background.New(ctx, log, "sysbox-mgr").Run():
-					blog.Log(sysboxErrMsg)
+					blog.Info(sysboxErrMsg)
 					//nolint
 					log.Fatal(ctx, "sysbox-mgr exited", slog.Error(err))
 				case err := <-background.New(ctx, log, "sysbox-fs").Run():
-					blog.Log(sysboxErrMsg)
+					blog.Info(sysboxErrMsg)
 					//nolint
 					log.Fatal(ctx, "sysbox-fs exited", slog.Error(err))
 				}
@@ -200,14 +203,14 @@ func dockerCmd() *cobra.Command {
 				if xunix.IsNoSpaceErr(err) {
 					args, err = dockerdArgs(ctx, log, flags.ethlink, cidr, true)
 					if err != nil {
-						blog.Log("Failed to create Container-based Virtual Machine: " + err.Error())
+						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 						//nolint
 						log.Fatal(ctx, "dockerd exited, failed getting args for restart", slog.Error(err))
 					}
 
 					err = dockerd.Restart(ctx, "dockerd", args...)
 					if err != nil {
-						blog.Log("Failed to create Container-based Virtual Machine: " + err.Error())
+						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 						//nolint
 						log.Fatal(ctx, "restart dockerd", slog.Error(err))
 					}
@@ -219,7 +222,7 @@ func dockerCmd() *cobra.Command {
 				// the docker daemon if we run out of disk while starting the
 				// container.
 				if err != nil && !xerrors.Is(err, background.ErrUserKilled) {
-					blog.Log("Failed to create Container-based Virtual Machine: " + err.Error())
+					blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 					//nolint
 					log.Fatal(ctx, "dockerd exited", slog.Error(err))
 				}
@@ -243,7 +246,7 @@ func dockerCmd() *cobra.Command {
 				// a user can access their workspace and try to delete whatever
 				// is causing their disk to fill up.
 				if xunix.IsNoSpaceErr(err) {
-					blog.Log("Insufficient space to start inner container. Restarting dockerd using the vfs driver. Your performance will be degraded. Clean up your home volume and then restart the workspace to improve performance.")
+					blog.Info("Insufficient space to start inner container. Restarting dockerd using the vfs driver. Your performance will be degraded. Clean up your home volume and then restart the workspace to improve performance.")
 					log.Debug(ctx, "encountered 'no space left on device' error while starting workspace", slog.Error(err))
 					args, err := dockerdArgs(ctx, log, flags.ethlink, cidr, true)
 					if err != nil {
@@ -266,15 +269,12 @@ func dockerCmd() *cobra.Command {
 					err = runDockerCVM(ctx, log, client, flags)
 				}
 				if err != nil {
-					blog.Log(fmt.Sprintf("Failed to run envbox: %v", err))
+					blog.Info(fmt.Sprintf("Failed to run envbox: %v", err))
 					return xerrors.Errorf("run: %w", err)
 				}
 			}
 
-			blog.Log("Workspace successfully started!")
-
-			// Allow the remainder of the buildlog to continue
-			_ = envboxlog.YieldBuildLog()
+			blog.Info("Workspace successfully started!")
 
 			return nil
 		},
@@ -369,7 +369,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	devices := make([]container.DeviceMapping, 0, 2)
 	if flags.addTUN {
 		log.Debug(ctx, "creating TUN device", slog.F("path", OuterTUNPath))
-		blog.Log("Creating TUN device")
+		blog.Info("Creating TUN device")
 		dev, err := xunix.CreateTUNDevice(ctx, OuterTUNPath)
 		if err != nil {
 			return xerrors.Errorf("creat tun device: %w", err)
@@ -384,7 +384,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	if flags.addFUSE {
 		log.Debug(ctx, "creating FUSE device", slog.F("path", OuterFUSEPath))
-		blog.Log("Creating FUSE device")
+		blog.Info("Creating FUSE device")
 		dev, err := xunix.CreateFuseDevice(ctx, OuterFUSEPath)
 		if err != nil {
 			return xerrors.Errorf("create fuse device: %w", err)
@@ -415,7 +415,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	log.Debug(ctx, "pulling image", slog.F("image", flags.innerImage))
 
-	blog.Logf("Pulling %s image", flags.innerImage)
+	blog.Infof("Pulling %s image", flags.innerImage)
 	err = dockerutil.PullImage(ctx, &dockerutil.PullImageConfig{
 		Client:     client,
 		Image:      flags.innerImage,
@@ -442,7 +442,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		slog.F("username", flags.innerUsername),
 	)
 
-	blog.Log("Getting image metadata...")
+	blog.Info("Getting image metadata...")
 	// Get metadata about the image. We need to know things like the UID/GID
 	// of the user so that we can chown directories to the namespaced UID inside
 	// the inner container as well as whether we should be starting the container
@@ -452,7 +452,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		return xerrors.Errorf("get image metadata: %w", err)
 	}
 
-	blog.Logf("Detected entrypoint user '%s:%s' with home directory %q", imgMeta.UID, imgMeta.UID, imgMeta.HomeDir)
+	blog.Infof("Detected entrypoint user '%s:%s' with home directory %q", imgMeta.UID, imgMeta.UID, imgMeta.HomeDir)
 
 	log.Debug(ctx, "fetched image metadata",
 		slog.F("uid", imgMeta.UID),
@@ -524,7 +524,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	// 	}
 	// }
 
-	blog.Log("Creating workspace...")
+	blog.Info("Creating workspace...")
 
 	// Create the inner container.
 	containerID, err := dockerutil.CreateContainer(ctx, client, &dockerutil.ContainerConfig{
@@ -543,7 +543,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		return xerrors.Errorf("create container: %w", err)
 	}
 
-	blog.Log("Pruning images to free up disk...")
+	blog.Info("Pruning images to free up disk...")
 	// Prune images to avoid taking up any unnecessary disk from the user.
 	_, err = dockerutil.PruneImages(ctx, client)
 	if err != nil {
@@ -552,7 +552,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	// TODO fix iptables when istio detected.
 
-	blog.Log("Starting up workspace...")
+	blog.Info("Starting up workspace...")
 	err = client.ContainerStart(ctx, containerID, dockertypes.ContainerStartOptions{})
 	if err != nil {
 		if err != nil {
@@ -565,7 +565,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	// Create the directory to which we will download the agent.
 	bootDir := filepath.Join(imgMeta.HomeDir, ".coder")
 
-	blog.Logf("Creating %q directory to host Coder assets...", bootDir)
+	blog.Infof("Creating %q directory to host Coder assets...", bootDir)
 	_, err = dockerutil.ExecContainer(ctx, client, dockerutil.ExecConfig{
 		ContainerID: containerID,
 		User:        imgMeta.UID,
@@ -578,7 +578,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	log.Debug(ctx, "bootstrapping container", slog.F("script", flags.boostrapScript))
 	// Bootstrap the container if a script has been provided.
-	blog.Logf("Bootstrapping workspace...")
+	blog.Infof("Bootstrapping workspace...")
 	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
 		ContainerID: containerID,
 		User:        imgMeta.UID,
