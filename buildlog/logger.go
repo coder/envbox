@@ -64,4 +64,4 @@ type nopLogger struct{}
 func (nopLogger) Log(string)                {}
 func (nopLogger) Logf(string, ...any)       {}
 func (nopLogger) Write([]byte) (int, error) { return 0, nil }
-func (nopLogger) Close()
+func (nopLogger) Close()                    {}

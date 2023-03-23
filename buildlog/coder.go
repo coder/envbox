@@ -7,8 +7,6 @@ import (
 	"io"
 	"net/url"
 	"time"
-
-	"github.com/coder/coder/codersdk/agentsdk"
 )
 
 type StartupLog struct {
@@ -34,9 +32,6 @@ type coder struct {
 }
 
 func OpenCoderLogger(ctx context.Context, accessURL *url.URL, agentToken string) Logger {
-	agent := agentsdk.New(accessURL)
-	agent.SetSessionToken(agentToken)
-
 	ctx, cancel := context.WithCancel(ctx)
 
 	pr, pw := io.Pipe()
