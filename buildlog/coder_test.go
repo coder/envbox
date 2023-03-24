@@ -1,22 +1,19 @@
 package buildlog_test
 
 import (
-	"crypto/rand"
-	"encoding/binary"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"golang.org/x/exp/slices"
 	"golang.org/x/net/context"
-	"golang.org/x/xerrors"
 
 	"cdr.dev/slog/sloggers/slogtest"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/coder/codersdk/agentsdk"
+	"github.com/coder/coder/cryptorand"
 	"github.com/coder/envbox/buildlog"
 )
 
@@ -27,13 +24,14 @@ func TestCoderLog(t *testing.T) {
 		t.Parallel()
 
 		var (
-			client      = &fakeCoderClient{}
-			ctx         = context.Background()
-			slogger     = slogtest.Make(t, nil)
-			expectedLog = MustString(10)
-			logMu       sync.Mutex
+			client  = &fakeCoderClient{}
+			ctx     = context.Background()
+			slogger = slogtest.Make(t, nil)
+			logMu   sync.Mutex
 		)
 
+		expectedLog, err := cryptorand.String(10)
+		require.NoError(t, err)
 		var actualLog string
 		client.PatchStartupLogsFn = func(ctx context.Context, logs agentsdk.PatchStartupLogs) error {
 			logMu.Lock()
@@ -88,7 +86,8 @@ func TestCoderLog(t *testing.T) {
 
 		log := buildlog.OpenCoderLogger(ctx, client, slogger)
 
-		bigLine := MustString(buildlog.MaxCoderLogSize + buildlog.MaxCoderLogSize/2)
+		bigLine, err := cryptorand.String(buildlog.MaxCoderLogSize + buildlog.MaxCoderLogSize/2)
+		require.NoError(t, err)
 		// The line should be chopped up into smaller logs so that we don't
 		// drop output.
 		expectedLogs := []string{
@@ -116,125 +115,3 @@ func (f fakeCoderClient) PatchStartupLogs(ctx context.Context, req agentsdk.Patc
 	}
 	return nil
 }
-
-// StringCharset generates a random string using the provided charset and size
-func StringCharset(charSetStr string, size int) (string, error) {
-	charSet := []rune(charSetStr)
-
-	if len(charSet) == 0 || size == 0 {
-		return "", nil
-	}
-
-	// This buffer facilitates pre-emptively creation of random uint32s
-	// to reduce syscall overhead.
-	ibuf := make([]byte, 4*size)
-
-	_, err := rand.Read(ibuf)
-	if err != nil {
-		return "", err
-	}
-
-	var buf strings.Builder
-	buf.Grow(size)
-
-	for i := 0; i < size; i++ {
-		count, err := UnbiasedModulo32(
-			binary.BigEndian.Uint32(ibuf[i*4:(i+1)*4]),
-			int32(len(charSet)),
-		)
-		if err != nil {
-			return "", err
-		}
-
-		_, _ = buf.WriteRune(charSet[count])
-	}
-
-	return buf.String(), nil
-}
-
-func MustString(size int) string {
-	s, err := String(size)
-	if err != nil {
-		panic(err)
-	}
-	return s
-}
-
-// String returns a random string using Default.
-func String(size int) (string, error) {
-	return StringCharset(Default, size)
-}
-
-// UnbiasedModulo32 uniformly modulos v by n over a sufficiently large data
-// set, regenerating v if necessary. n must be > 0. All input bits in v must be
-// fully random, you cannot cast a random uint8/uint16 for input into this
-// function.
-//
-//nolint:varnamelen
-func UnbiasedModulo32(v uint32, n int32) (int32, error) {
-	prod := uint64(v) * uint64(n)
-	low := uint32(prod)
-	if low < uint32(n) {
-		thresh := uint32(-n) % uint32(n)
-		for low < thresh {
-			var err error
-			v, err = Uint32()
-			if err != nil {
-				return 0, err
-			}
-			prod = uint64(v) * uint64(n)
-			low = uint32(prod)
-		}
-	}
-	return int32(prod >> 32), nil
-}
-
-// Uint32 returns a 32-bit value as a uint32.
-func Uint32() (uint32, error) {
-	i, err := Int63()
-	if err != nil {
-		return 0, err
-	}
-
-	return uint32(i >> 31), nil
-}
-
-// Int64 returns a non-negative random 63-bit integer as a int64.
-func Int63() (int64, error) {
-	var i int64
-	err := binary.Read(rand.Reader, binary.BigEndian, &i)
-	if err != nil {
-		return 0, xerrors.Errorf("read binary: %w", err)
-	}
-
-	if i < 0 {
-		return -i, nil
-	}
-	return i, nil
-}
-
-// Charsets
-const (
-	// Numeric includes decimal numbers (0-9)
-	Numeric = "0123456789"
-
-	// Upper is uppercase characters in the Latin alphabet
-	Upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-	// Lower is lowercase characters in the Latin alphabet
-	Lower = "abcdefghijklmnopqrstuvwxyz"
-
-	// Alpha is upper or lowercase alphabetic characters
-	Alpha = Upper + Lower
-
-	// Default is uppercase, lowercase, or numeric characters
-	Default = Numeric + Alpha
-
-	// Hex is hexadecimal lowercase characters
-	Hex = "0123456789abcdef"
-
-	// Human creates strings which are easily distinguishable from
-	// others created with the same charset. It contains most lowercase
-	// alphanumeric characters without 0,o,i,1,l.
-	Human = "23456789abcdefghjkmnpqrstuvwxyz"
-)
