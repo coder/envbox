@@ -62,7 +62,7 @@ func New(t *testing.T, cmd string, args ...string) (context.Context, *cobra.Comm
 	// let's avoid it for now.
 	// If a consumer sets the ethlink arg it should overwrite our
 	// default we set here.
-	args = append([]string{cmd, "--ethlink=" + iface.Attrs().Name}, args...)
+	args = append([]string{cmd, "--ethlink=" + iface.Attrs().Name, "--no-startup-log"}, args...)
 	root.SetArgs(args)
 
 	MockSysboxManagerReady(t, fs)

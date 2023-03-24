@@ -2,7 +2,10 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,10 +18,12 @@ import (
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog"
+	"cdr.dev/slog/sloggers/slogjson"
+	"github.com/coder/coder/codersdk/agentsdk"
 	"github.com/coder/envbox/background"
+	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/cli/cliflag"
 	"github.com/coder/envbox/dockerutil"
-	"github.com/coder/envbox/envboxlog"
 	"github.com/coder/envbox/slogkubeterminate"
 	"github.com/coder/envbox/sysboxutil"
 	"github.com/coder/envbox/xunix"
@@ -85,6 +90,7 @@ var (
 	EnvBridgeCIDR         = "CODER_ENVBOX_BRIDGE_CIDR"
 	//nolint
 	EnvAgentToken = "CODER_AGENT_TOKEN"
+	EnvAgentURL   = "CODER_AGENT_URL"
 	EnvBootstrap  = "CODER_BOOTSTRAP_SCRIPT"
 	EnvMounts     = "CODER_MOUNTS"
 	EnvCPUs       = "CODER_CPUS"
@@ -104,40 +110,95 @@ var envboxPrivateMounts = map[string]struct{}{
 	"/var/lib/coder": {},
 }
 
+type flags struct {
+	innerImage         string
+	innerUsername      string
+	innerContainerName string
+	agentToken         string
+
+	// Optional flags.
+	innerEnvs         string
+	innerWorkDir      string
+	innerHostname     string
+	imagePullSecret   string
+	coderURL          string
+	addTUN            bool
+	addFUSE           bool
+	noStartupLogs     bool
+	dockerdBridgeCIDR string
+	boostrapScript    string
+	ethlink           string
+	containerMounts   string
+	cpus              int
+	memory            int
+}
+
 func dockerCmd() *cobra.Command {
-	var flag flags
+	var flags flags
 
 	cmd := &cobra.Command{
 		Use:   "docker",
 		Short: "Create a docker-based CVM",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			var (
-				ctx = cmd.Context()
-				log = slog.Make(envboxlog.NewSink(os.Stderr), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
+				ctx  = cmd.Context()
+				log  = slog.Make(slogjson.Sink(io.Discard))
+				blog = buildlog.GetLogger(ctx)
 			)
+
+			if !flags.noStartupLogs {
+				log = slog.Make(slogjson.Sink(cmd.ErrOrStderr()), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
+				blog = buildlog.JSONLogger{Encoder: json.NewEncoder(os.Stderr)}
+			}
+
+			if !flags.noStartupLogs && flags.agentToken != "" && flags.coderURL != "" {
+				coderURL, err := url.Parse(flags.coderURL)
+				if err != nil {
+					return xerrors.Errorf("parse coder URL %q: %w", flags.coderURL, err)
+				}
+
+				agent := agentsdk.New(coderURL)
+				agent.SetSessionToken(flags.agentToken)
+
+				blog = buildlog.MultiLogger(
+					buildlog.OpenCoderLogger(ctx, agent, log),
+					blog,
+				)
+
+				ctx = buildlog.WithLogger(ctx, blog)
+			}
+			defer blog.Close()
+
+			defer func(err *error) {
+				if *err != nil {
+					blog.Errorf("Failed to run envbox: %v", *err)
+				}
+			}(&err)
+
+			blog.Info("Waiting for dockerd to startup...")
 
 			go func() {
 				select {
 				// Start sysbox-mgr and sysbox-fs in order to run
 				// sysbox containers.
 				case err := <-background.New(ctx, log, "sysbox-mgr").Run():
-					_ = envboxlog.YieldAndFailBuild(sysboxErrMsg)
+					blog.Info(sysboxErrMsg)
 					//nolint
 					log.Fatal(ctx, "sysbox-mgr exited", slog.Error(err))
 				case err := <-background.New(ctx, log, "sysbox-fs").Run():
-					_ = envboxlog.YieldAndFailBuild(sysboxErrMsg)
+					blog.Info(sysboxErrMsg)
 					//nolint
 					log.Fatal(ctx, "sysbox-fs exited", slog.Error(err))
 				}
 			}()
 
 			cidr := dockerutil.DefaultBridgeCIDR
-			if flag.dockerdBridgeCIDR != "" {
-				cidr = flag.dockerdBridgeCIDR
+			if flags.dockerdBridgeCIDR != "" {
+				cidr = flags.dockerdBridgeCIDR
 				log.Debug(ctx, "using custom docker bridge CIDR", slog.F("cidr", cidr))
 			}
 
-			dargs, err := dockerdArgs(ctx, log, flag.ethlink, cidr, false)
+			dargs, err := dockerdArgs(ctx, log, flags.ethlink, cidr, false)
 			if err != nil {
 				return xerrors.Errorf("dockerd args: %w", err)
 			}
@@ -170,16 +231,16 @@ func dockerCmd() *cobra.Command {
 				// directory is going to be on top of an overlayfs filesystem
 				// we have to use the vfs storage driver.
 				if xunix.IsNoSpaceErr(err) {
-					args, err = dockerdArgs(ctx, log, flag.ethlink, cidr, true)
+					args, err = dockerdArgs(ctx, log, flags.ethlink, cidr, true)
 					if err != nil {
-						_ = envboxlog.YieldAndFailBuild("Failed to create Container-based Virtual Machine: " + err.Error())
+						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 						//nolint
 						log.Fatal(ctx, "dockerd exited, failed getting args for restart", slog.Error(err))
 					}
 
 					err = dockerd.Restart(ctx, "dockerd", args...)
 					if err != nil {
-						_ = envboxlog.YieldAndFailBuild("Failed to create Container-based Virtual Machine: " + err.Error())
+						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 						//nolint
 						log.Fatal(ctx, "restart dockerd", slog.Error(err))
 					}
@@ -191,7 +252,7 @@ func dockerCmd() *cobra.Command {
 				// the docker daemon if we run out of disk while starting the
 				// container.
 				if err != nil && !xerrors.Is(err, background.ErrUserKilled) {
-					_ = envboxlog.YieldAndFailBuild("Failed to create Container-based Virtual Machine: " + err.Error())
+					blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 					//nolint
 					log.Fatal(ctx, "dockerd exited", slog.Error(err))
 				}
@@ -207,7 +268,7 @@ func dockerCmd() *cobra.Command {
 				return xerrors.Errorf("wait for dockerd: %w", err)
 			}
 
-			err = runDockerCVM(ctx, log, client, flag)
+			err = runDockerCVM(ctx, log, client, flags)
 			if err != nil {
 				// It's possible we failed because we ran out of disk while
 				// pulling the image. We should restart the daemon and use
@@ -215,8 +276,9 @@ func dockerCmd() *cobra.Command {
 				// a user can access their workspace and try to delete whatever
 				// is causing their disk to fill up.
 				if xunix.IsNoSpaceErr(err) {
+					blog.Info("Insufficient space to start inner container. Restarting dockerd using the vfs driver. Your performance will be degraded. Clean up your home volume and then restart the workspace to improve performance.")
 					log.Debug(ctx, "encountered 'no space left on device' error while starting workspace", slog.Error(err))
-					args, err := dockerdArgs(ctx, log, flag.ethlink, cidr, true)
+					args, err := dockerdArgs(ctx, log, flags.ethlink, cidr, true)
 					if err != nil {
 						return xerrors.Errorf("dockerd args for restart: %w", err)
 					}
@@ -229,71 +291,56 @@ func dockerCmd() *cobra.Command {
 					}
 					go func() {
 						err = <-dockerd.Wait()
+						blog.Errorf("restarted dockerd exited: %v", err)
 						//nolint
 						log.Fatal(ctx, "restarted dockerd exited", slog.Error(err))
 					}()
 
 					log.Debug(ctx, "reattempting container creation")
-					err = runDockerCVM(ctx, log, client, flag)
+					err = runDockerCVM(ctx, log, client, flags)
 				}
 				if err != nil {
+					blog.Errorf("Failed to run envbox: %v", err)
 					return xerrors.Errorf("run: %w", err)
 				}
 			}
-
-			// Allow the remainder of the buildlog to continue
-			_ = envboxlog.YieldBuildLog()
 
 			return nil
 		},
 	}
 
 	// Required flags.
-	cliflag.StringVarP(cmd.Flags(), &flag.innerImage, "image", "", EnvInnerImage, "", "The image for the inner container. Required.")
-	cliflag.StringVarP(cmd.Flags(), &flag.innerUsername, "username", "", EnvInnerUsername, "", "The username to use for the inner container. Required.")
-	cliflag.StringVarP(cmd.Flags(), &flag.innerContainerName, "container-name", "", EnvInnerContainerName, "", "The name of the inner container. Required.")
-	cliflag.StringVarP(cmd.Flags(), &flag.agentToken, "agent-token", "", EnvAgentToken, "", "The token to be used by the workspace agent to estabish a connection with the control plane. Required.")
+	cliflag.StringVarP(cmd.Flags(), &flags.innerImage, "image", "", EnvInnerImage, "", "The image for the inner container. Required.")
+	cliflag.StringVarP(cmd.Flags(), &flags.innerUsername, "username", "", EnvInnerUsername, "", "The username to use for the inner container. Required.")
+	cliflag.StringVarP(cmd.Flags(), &flags.innerContainerName, "container-name", "", EnvInnerContainerName, "", "The name of the inner container. Required.")
+	cliflag.StringVarP(cmd.Flags(), &flags.agentToken, "agent-token", "", EnvAgentToken, "", "The token to be used by the workspace agent to estabish a connection with the control plane. Required.")
+	cliflag.StringVarP(cmd.Flags(), &flags.coderURL, "coder-url", "", EnvAgentURL, "", "The URL of the Coder deployement.")
 
 	// Optional flags.
-	cliflag.StringVarP(cmd.Flags(), &flag.innerEnvs, "envs", "", EnvInnerEnvs, "", "Comma separated list of envs to add to the inner container.")
-	cliflag.StringVarP(cmd.Flags(), &flag.innerWorkDir, "work-dir", "", EnvInnerWorkDir, "", "The working directory of the inner container.")
-	cliflag.StringVarP(cmd.Flags(), &flag.innerHostname, "hostname", "", EnvInnerHostname, "", "The hostname to use for the inner container.")
-	cliflag.StringVarP(cmd.Flags(), &flag.imagePullSecret, "image-secret", "", EnvBoxPullImageSecretEnvVar, "", fmt.Sprintf("The secret to use to pull the image. It is highly encouraged to provide this via the %s environment variable.", EnvBoxPullImageSecretEnvVar))
-	cliflag.StringVarP(cmd.Flags(), &flag.dockerdBridgeCIDR, "bridge-cidr", "", EnvBridgeCIDR, "", "The CIDR to use for the docker bridge.")
-	cliflag.StringVarP(cmd.Flags(), &flag.boostrapScript, "boostrap-script", "", EnvBootstrap, "", "The script to use to bootstrap the container. This should typically install and start the agent.")
-	cliflag.StringVarP(cmd.Flags(), &flag.containerMounts, "mounts", "", EnvMounts, "", "Comma separated list of mounts in the form of '<source>:<target>[:options]' (e.g. /var/lib/docker:/var/lib/docker:ro,/usr/src:/usr/src).")
-	cliflag.StringVarP(cmd.Flags(), &flag.ethlink, "ethlink", "", "", defaultNetLink, "The ethernet link to query for the MTU that is passed to docerd. Used for tests.")
-	cliflag.BoolVarP(cmd.Flags(), &flag.addTUN, "add-tun", "", EnvAddTun, false, "Add a TUN device to the inner container.")
-	cliflag.BoolVarP(cmd.Flags(), &flag.addFUSE, "add-fuse", "", EnvAddFuse, false, "Add a FUSE device to the inner container.")
-	cliflag.IntVarP(cmd.Flags(), &flag.cpus, "cpus", "", EnvCPUs, 0, "Number of CPUs to allocate inner container. e.g. 2")
-	cliflag.IntVarP(cmd.Flags(), &flag.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
+	cliflag.StringVarP(cmd.Flags(), &flags.innerEnvs, "envs", "", EnvInnerEnvs, "", "Comma separated list of envs to add to the inner container.")
+	cliflag.StringVarP(cmd.Flags(), &flags.innerWorkDir, "work-dir", "", EnvInnerWorkDir, "", "The working directory of the inner container.")
+	cliflag.StringVarP(cmd.Flags(), &flags.innerHostname, "hostname", "", EnvInnerHostname, "", "The hostname to use for the inner container.")
+	cliflag.StringVarP(cmd.Flags(), &flags.imagePullSecret, "image-secret", "", EnvBoxPullImageSecretEnvVar, "", fmt.Sprintf("The secret to use to pull the image. It is highly encouraged to provide this via the %s environment variable.", EnvBoxPullImageSecretEnvVar))
+	cliflag.StringVarP(cmd.Flags(), &flags.dockerdBridgeCIDR, "bridge-cidr", "", EnvBridgeCIDR, "", "The CIDR to use for the docker bridge.")
+	cliflag.StringVarP(cmd.Flags(), &flags.boostrapScript, "boostrap-script", "", EnvBootstrap, "", "The script to use to bootstrap the container. This should typically install and start the agent.")
+	cliflag.StringVarP(cmd.Flags(), &flags.containerMounts, "mounts", "", EnvMounts, "", "Comma separated list of mounts in the form of '<source>:<target>[:options]' (e.g. /var/lib/docker:/var/lib/docker:ro,/usr/src:/usr/src).")
+	cliflag.StringVarP(cmd.Flags(), &flags.ethlink, "ethlink", "", "", defaultNetLink, "The ethernet link to query for the MTU that is passed to docerd. Used for tests.")
+	cliflag.BoolVarP(cmd.Flags(), &flags.addTUN, "add-tun", "", EnvAddTun, false, "Add a TUN device to the inner container.")
+	cliflag.BoolVarP(cmd.Flags(), &flags.addFUSE, "add-fuse", "", EnvAddFuse, false, "Add a FUSE device to the inner container.")
+	cliflag.IntVarP(cmd.Flags(), &flags.cpus, "cpus", "", EnvCPUs, 0, "Number of CPUs to allocate inner container. e.g. 2")
+	cliflag.IntVarP(cmd.Flags(), &flags.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
+
+	// Test flags.
+	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")
 
 	return cmd
 }
 
-type flags struct {
-	innerImage         string
-	innerUsername      string
-	innerContainerName string
-	agentToken         string
-
-	// Optional flags.
-	innerEnvs         string
-	innerWorkDir      string
-	innerHostname     string
-	imagePullSecret   string
-	addTUN            bool
-	addFUSE           bool
-	dockerdBridgeCIDR string
-	boostrapScript    string
-	ethlink           string
-	containerMounts   string
-	cpus              int
-	memory            int
-}
-
 func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, flags flags) error {
-	fs := xunix.GetFS(ctx)
+	var (
+		fs   = xunix.GetFS(ctx)
+		blog = buildlog.GetLogger(ctx)
+	)
 
 	// Set our OOM score to something really unfavorable to avoid getting killed
 	// in memory-scarce scenarios.
@@ -328,6 +375,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	devices := make([]container.DeviceMapping, 0, 2)
 	if flags.addTUN {
 		log.Debug(ctx, "creating TUN device", slog.F("path", OuterTUNPath))
+		blog.Info("Creating TUN device")
 		dev, err := xunix.CreateTUNDevice(ctx, OuterTUNPath)
 		if err != nil {
 			return xerrors.Errorf("creat tun device: %w", err)
@@ -342,6 +390,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	if flags.addFUSE {
 		log.Debug(ctx, "creating FUSE device", slog.F("path", OuterFUSEPath))
+		blog.Info("Creating FUSE device")
 		dev, err := xunix.CreateFuseDevice(ctx, OuterFUSEPath)
 		if err != nil {
 			return xerrors.Errorf("create fuse device: %w", err)
@@ -376,7 +425,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		Client:     client,
 		Image:      flags.innerImage,
 		Auth:       dockerAuth,
-		ProgressFn: func(e dockerutil.ImagePullEvent) error { return nil },
+		ProgressFn: dockerutil.DefaultLogImagePullFn(blog),
 	})
 	if err != nil {
 		return xerrors.Errorf("pull image: %w", err)
@@ -398,6 +447,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		slog.F("username", flags.innerUsername),
 	)
 
+	blog.Info("Getting image metadata...")
 	// Get metadata about the image. We need to know things like the UID/GID
 	// of the user so that we can chown directories to the namespaced UID inside
 	// the inner container as well as whether we should be starting the container
@@ -406,6 +456,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	if err != nil {
 		return xerrors.Errorf("get image metadata: %w", err)
 	}
+
+	blog.Infof("Detected entrypoint user '%s:%s' with home directory %q", imgMeta.UID, imgMeta.UID, imgMeta.HomeDir)
 
 	log.Debug(ctx, "fetched image metadata",
 		slog.F("uid", imgMeta.UID),
@@ -477,6 +529,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	// 	}
 	// }
 
+	blog.Info("Creating workspace...")
+
 	// Create the inner container.
 	containerID, err := dockerutil.CreateContainer(ctx, client, &dockerutil.ContainerConfig{
 		Log:         log,
@@ -494,6 +548,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		return xerrors.Errorf("create container: %w", err)
 	}
 
+	blog.Info("Pruning images to free up disk...")
 	// Prune images to avoid taking up any unnecessary disk from the user.
 	_, err = dockerutil.PruneImages(ctx, client)
 	if err != nil {
@@ -502,6 +557,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	// TODO fix iptables when istio detected.
 
+	blog.Info("Starting up workspace...")
 	err = client.ContainerStart(ctx, containerID, dockertypes.ContainerStartOptions{})
 	if err != nil {
 		if err != nil {
@@ -513,6 +569,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	// Create the directory to which we will download the agent.
 	bootDir := filepath.Join(imgMeta.HomeDir, ".coder")
+
+	blog.Infof("Creating %q directory to host Coder assets...", bootDir)
 	_, err = dockerutil.ExecContainer(ctx, client, dockerutil.ExecConfig{
 		ContainerID: containerID,
 		User:        imgMeta.UID,
@@ -521,22 +579,6 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	})
 	if err != nil {
 		return xerrors.Errorf("make bootstrap dir: %w", err)
-	}
-
-	log.Debug(ctx, "bootstrapping container", slog.F("script", flags.boostrapScript))
-	// Bootstrap the container if a script has been provided.
-	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
-		ContainerID: containerID,
-		User:        imgMeta.UID,
-		Script:      flags.boostrapScript,
-		// We set this because the default behavior is to download the agent
-		// to /tmp/coder.XXXX. This causes a race to happen where we finish
-		// downloading the binary but before we can execute systemd remounts
-		// /tmp.
-		Env: []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
-	})
-	if err != nil {
-		return xerrors.Errorf("boostrap container: %w", err)
 	}
 
 	cpuQuota, err := xunix.ReadCPUQuota(ctx)
@@ -554,6 +596,24 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	err = dockerutil.SetContainerCPUQuota(ctx, containerID, cpuQuota.Quota, cpuQuota.Period)
 	if err != nil {
 		return xerrors.Errorf("set inner container CPU quota: %w", err)
+	}
+
+	blog.Info("Envbox startup complete!")
+
+	// Bootstrap the container if a script has been provided.
+	blog.Infof("Bootstrapping workspace...")
+	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
+		ContainerID: containerID,
+		User:        imgMeta.UID,
+		Script:      flags.boostrapScript,
+		// We set this because the default behavior is to download the agent
+		// to /tmp/coder.XXXX. This causes a race to happen where we finish
+		// downloading the binary but before we can execute systemd remounts
+		// /tmp.
+		Env: []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
+	})
+	if err != nil {
+		return xerrors.Errorf("boostrap container: %w", err)
 	}
 
 	return nil

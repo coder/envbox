@@ -99,6 +99,7 @@ type BootstrapConfig struct {
 	User        string
 	Script      string
 	Env         []string
+	Detach      bool
 }
 
 // BoostrapContainer runs a script inside the container as the provided user.

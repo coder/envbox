@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"os"
 
 	dockertypes "github.com/docker/docker/api/types"
 	"golang.org/x/xerrors"
+
+	"github.com/coder/envbox/xio"
 )
 
 type ExecConfig struct {
@@ -16,7 +17,9 @@ type ExecConfig struct {
 	Cmd         string
 	Args        []string
 	Stdin       io.Reader
+	StdOutErr   io.Writer
 	Env         []string
+	Detach      bool
 }
 
 // ExecContainer runs a command in a container. It returns the output and any error.
@@ -52,9 +55,23 @@ func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) 
 		}
 	}
 
-	var buf bytes.Buffer
-	mwr := io.MultiWriter(os.Stderr, os.Stdout, &buf)
-	_, err = io.Copy(mwr, resp.Reader)
+	var (
+		buf bytes.Buffer
+		// Avoid capturing too much output. We want to prevent
+		// a memory leak. This is especially important when
+		// we run the bootstrap script since we do not return.
+		psw = &xio.PrefixSuffixWriter{
+			W: &buf,
+			N: 1 << 10,
+		}
+		wr io.Writer = psw
+	)
+
+	if config.StdOutErr != nil {
+		wr = io.MultiWriter(psw, config.StdOutErr)
+	}
+
+	_, err = io.Copy(wr, resp.Reader)
 	if err != nil {
 		return nil, xerrors.Errorf("copy cmd output: %w", err)
 	}

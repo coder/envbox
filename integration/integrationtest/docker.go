@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
 
+	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/cli"
-	"github.com/coder/envbox/envboxlog"
 	"github.com/coder/retry"
 )
 
@@ -197,18 +197,18 @@ func waitForCVM(t *testing.T, pool *dockertest.Pool, resource *dockertest.Resour
 		log := scanner.Text()
 
 		t.Log(log)
-		var blog envboxlog.BuildLog
+		var blog buildlog.JSONLog
 		if err := json.Unmarshal([]byte(log), &blog); err != nil {
 			continue
 		}
 
-		if blog.Type == envboxlog.BuildLogTypeYield {
+		if blog.Type == buildlog.JSONLogTypeDone {
 			finished = true
 			break
 		}
 
-		if blog.Type == envboxlog.BuildLogTypeYieldFail {
-			t.Fatalf("envbox failed (%s)", blog.Msg)
+		if blog.Type == buildlog.JSONLogTypeError {
+			t.Fatalf("envbox failed (%s)", blog.Output)
 		}
 	}
 	require.NoError(t, scanner.Err())

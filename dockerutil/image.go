@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"golang.org/x/xerrors"
 
+	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/xunix"
 	"github.com/coder/retry"
 )
@@ -220,4 +222,34 @@ func GetImageMetadata(ctx context.Context, client DockerClient, image, username 
 		HomeDir: users[0].HomeDir,
 		HasInit: initExists,
 	}, nil
+}
+
+func DefaultLogImagePullFn(log buildlog.Logger) func(ImagePullEvent) error {
+	var (
+		// Avoid spamming too frequently, the messages can come quickly
+		delayDur = time.Second * 2
+		// We use a zero-value time.Time to start since we want to log
+		// the first event we get.
+		lastLog time.Time
+	)
+	return func(e ImagePullEvent) error {
+		if e.Error != "" {
+			log.Errorf(e.Error)
+			return xerrors.Errorf("pull image: %s", e.Error)
+		}
+
+		// Not enough time has transpired, return without logging.
+		if time.Since(lastLog) < delayDur {
+			return nil
+		}
+
+		msg := e.Status
+		if e.Progress != "" {
+			msg = fmt.Sprintf("%s: %s", e.Status, e.Progress)
+		}
+		log.Info(msg)
+		lastLog = time.Now()
+
+		return nil
+	}
 }

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -euo pipefail
 
@@ -7,6 +7,12 @@ PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 
 cdroot() {
 	cd "$PROJECT_ROOT" || error "Could not change directory to '$PROJECT_ROOT'"
+}
+
+# error prints an error message and returns an error exit code.
+error() {
+  log "ERROR: $*"
+  exit 1
 }
 
 # log prints a message to stderr.
