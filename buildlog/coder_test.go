@@ -23,44 +23,47 @@ import (
 func TestCoderLog(t *testing.T) {
 	t.Parallel()
 
-	t.Run("MaxLogsCausesSend", func(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			maxLogs      = buildlog.CoderLoggerMaxLogs
-			client       = fakeCoderClient{}
-			ctx          = context.Background()
-			slogger      = slogtest.Make(t, nil)
-			expectedLogs = make([]string, 20)
-			actualLogs   = make([]string, 0, 20)
-			logMu        sync.Mutex
+			client      = &fakeCoderClient{}
+			ctx         = context.Background()
+			slogger     = slogtest.Make(t, nil)
+			expectedLog = MustString(10)
+			logMu       sync.Mutex
 		)
+
+		var actualLog string
 		client.PatchStartupLogsFn = func(ctx context.Context, logs agentsdk.PatchStartupLogs) error {
 			logMu.Lock()
 			defer logMu.Unlock()
 
-			require.Len(t, logs.Logs, maxLogs)
-			for _, l := range logs.Logs {
-				require.NotZero(t, l.CreatedAt)
-				actualLogs = append(actualLogs, l.Output)
-			}
+			require.Len(t, logs.Logs, 1)
+			require.NotZero(t, logs.Logs[0].CreatedAt)
+			require.Equal(t, expectedLog, logs.Logs[0].Output)
+			actualLog = logs.Logs[0].Output
 			return nil
 		}
 
 		log := buildlog.OpenCoderLogger(ctx, client, slogger)
 
-		for i := 0; i < maxLogs; i++ {
-			expectedLogs[i] = MustString(10)
-			log.Info(expectedLogs[i])
-		}
+		log.Info(expectedLog)
 
 		require.Eventually(t, func() bool {
 			logMu.Lock()
 			defer logMu.Unlock()
-			return slices.Equal(expectedLogs, actualLogs)
+			equal := actualLog == expectedLog
+			if !equal {
+				t.Logf("actual log %q does not equal expected log %q", actualLog, expectedLog)
+			}
+			return equal
 		}, time.Millisecond*5, time.Millisecond)
+
 	})
 
+	// Try sending a large line that exceeds the maximum Coder accepts (1KiB).
+	// Assert that it is sent as two logs instead.
 	t.Run("OutputNotDropped", func(t *testing.T) {
 		t.Parallel()
 
@@ -101,47 +104,6 @@ func TestCoderLog(t *testing.T) {
 			defer logMu.Unlock()
 			return slices.Equal(expectedLogs, actualLogs)
 		}, time.Millisecond*5, time.Millisecond)
-	})
-
-	t.Run("CloseFlushes", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			maxLogs      = 20
-			numLogs      = maxLogs / 2
-			client       = fakeCoderClient{}
-			ctx          = context.Background()
-			slogger      = slogtest.Make(t, nil)
-			expectedLogs = make([]string, numLogs)
-			logMu        sync.Mutex
-			actualLogs   = make([]string, 0, numLogs)
-		)
-		client.PatchStartupLogsFn = func(ctx context.Context, logs agentsdk.PatchStartupLogs) error {
-			logMu.Lock()
-			defer logMu.Unlock()
-			require.Len(t, logs.Logs, numLogs)
-			for _, l := range logs.Logs {
-				require.NotZero(t, l.CreatedAt)
-				actualLogs = append(actualLogs, l.Output)
-			}
-			return nil
-		}
-
-		log := buildlog.OpenCoderLogger(ctx, client, slogger)
-
-		for i := 0; i < numLogs; i++ {
-			expectedLogs[i] = MustString(10)
-			log.Info(expectedLogs[i])
-		}
-
-		log.Close()
-
-		require.Eventually(t, func() bool {
-			logMu.Lock()
-			defer logMu.Unlock()
-
-			return slices.Equal(expectedLogs, actualLogs)
-		}, time.Millisecond*100, time.Millisecond*10)
 	})
 }
 

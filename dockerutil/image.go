@@ -224,12 +224,13 @@ func GetImageMetadata(ctx context.Context, client DockerClient, image, username 
 	}, nil
 }
 
-func LogImagePullFn(log buildlog.Logger) func(ImagePullEvent) error {
-	// Avoid spamming too frequently, the messages can come quickly
+func DefaultLogImagePullFn(log buildlog.Logger) func(ImagePullEvent) error {
 	var (
+		// Avoid spamming too frequently, the messages can come quickly
 		delayDur = time.Second * 2
-		// We subtract the delay duration so that we log the first message.
-		lastLog = time.Now().Add(-delayDur * 2)
+		// We use a zero-value time.Time to start since we want to log
+		// the first event we get.
+		lastLog time.Time
 	)
 	return func(e ImagePullEvent) error {
 		if e.Error != "" {

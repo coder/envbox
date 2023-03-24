@@ -83,16 +83,12 @@ func (c *CoderLogger) Close() {
 }
 
 func (c *CoderLogger) processLogs() {
-	var (
-		logs   = make([]agentsdk.StartupLog, 0, CoderLoggerMaxLogs)
-		closed bool
-	)
-
-	for !closed {
+	for {
 		var (
-			sendLogs bool
-			line     string
+			line string
+			logs = make([]agentsdk.StartupLog, 0, CoderLoggerMaxLogs)
 		)
+
 		select {
 		case line = <-c.logChan:
 			lines := cutString(line, MaxCoderLogSize)
@@ -104,14 +100,9 @@ func (c *CoderLogger) processLogs() {
 				})
 			}
 
-			sendLogs = len(logs) >= CoderLoggerMaxLogs
 		case <-c.ctx.Done():
-			closed = true
-			sendLogs = len(logs) > 0
-		}
-
-		if !sendLogs {
-			continue
+			close(c.logChan)
+			return
 		}
 
 		// Send the logs in a goroutine so that we can avoid blocking
@@ -125,13 +116,7 @@ func (c *CoderLogger) processLogs() {
 				c.logger.Error(c.ctx, "send startup logs", slog.Error(err))
 			}
 		}(cpLogs)
-
-		// Reset the slice. We _technically_ leak memory in the form of the
-		// elements still in the underlying slice but it's only
-		// temporary and should max out at around 20KB.
-		logs = logs[:0]
 	}
-	logs = nil
 }
 
 // cutString cuts a string up into smaller strings that have a len no greater

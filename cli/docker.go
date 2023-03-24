@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path"
@@ -17,6 +18,7 @@ import (
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog"
+	"cdr.dev/slog/sloggers/slogjson"
 	"github.com/coder/coder/codersdk/agentsdk"
 	"github.com/coder/envbox/background"
 	"github.com/coder/envbox/buildlog"
@@ -108,6 +110,29 @@ var envboxPrivateMounts = map[string]struct{}{
 	"/var/lib/coder": {},
 }
 
+type flags struct {
+	innerImage         string
+	innerUsername      string
+	innerContainerName string
+	agentToken         string
+
+	// Optional flags.
+	innerEnvs         string
+	innerWorkDir      string
+	innerHostname     string
+	imagePullSecret   string
+	coderURL          string
+	addTUN            bool
+	addFUSE           bool
+	noStartupLogs     bool
+	dockerdBridgeCIDR string
+	boostrapScript    string
+	ethlink           string
+	containerMounts   string
+	cpus              int
+	memory            int
+}
+
 func dockerCmd() *cobra.Command {
 	var flags flags
 
@@ -117,11 +142,12 @@ func dockerCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			var (
 				ctx  = cmd.Context()
-				log  = slog.Make(slogkubeterminate.Make()).Leveled(slog.LevelDebug)
+				log  = slog.Make(slogjson.Sink(io.Discard))
 				blog = buildlog.GetLogger(ctx)
 			)
 
 			if !flags.noStartupLogs {
+				log = slog.Make(slogjson.Sink(cmd.ErrOrStderr()), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
 				blog = buildlog.JSONLogger{Encoder: json.NewEncoder(os.Stderr)}
 			}
 
@@ -134,13 +160,12 @@ func dockerCmd() *cobra.Command {
 				agent := agentsdk.New(coderURL)
 				agent.SetSessionToken(flags.agentToken)
 
-				logger := buildlog.MultiLogger(
+				blog = buildlog.MultiLogger(
 					buildlog.OpenCoderLogger(ctx, agent, log),
 					blog,
 				)
-				defer logger.Close()
 
-				ctx = buildlog.WithLogger(ctx, logger)
+				ctx = buildlog.WithLogger(ctx, blog)
 			}
 			defer blog.Close()
 
@@ -266,6 +291,7 @@ func dockerCmd() *cobra.Command {
 					}
 					go func() {
 						err = <-dockerd.Wait()
+						blog.Errorf("restarted dockerd exited: %v", err)
 						//nolint
 						log.Fatal(ctx, "restarted dockerd exited", slog.Error(err))
 					}()
@@ -274,12 +300,10 @@ func dockerCmd() *cobra.Command {
 					err = runDockerCVM(ctx, log, client, flags)
 				}
 				if err != nil {
-					blog.Info(fmt.Sprintf("Failed to run envbox: %v", err))
+					blog.Errorf("Failed to run envbox: %v", err)
 					return xerrors.Errorf("run: %w", err)
 				}
 			}
-
-			blog.Info("Workspace successfully started!")
 
 			return nil
 		},
@@ -310,29 +334,6 @@ func dockerCmd() *cobra.Command {
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")
 
 	return cmd
-}
-
-type flags struct {
-	innerImage         string
-	innerUsername      string
-	innerContainerName string
-	agentToken         string
-
-	// Optional flags.
-	innerEnvs         string
-	innerWorkDir      string
-	innerHostname     string
-	imagePullSecret   string
-	coderURL          string
-	addTUN            bool
-	addFUSE           bool
-	noStartupLogs     bool
-	dockerdBridgeCIDR string
-	boostrapScript    string
-	ethlink           string
-	containerMounts   string
-	cpus              int
-	memory            int
 }
 
 func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, flags flags) error {
@@ -420,12 +421,11 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	log.Debug(ctx, "pulling image", slog.F("image", flags.innerImage))
 
-	blog.Infof("Pulling %s image", flags.innerImage)
 	err = dockerutil.PullImage(ctx, &dockerutil.PullImageConfig{
 		Client:     client,
 		Image:      flags.innerImage,
 		Auth:       dockerAuth,
-		ProgressFn: dockerutil.LogImagePullFn(blog),
+		ProgressFn: dockerutil.DefaultLogImagePullFn(blog),
 	})
 	if err != nil {
 		return xerrors.Errorf("pull image: %w", err)
@@ -581,24 +581,6 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		return xerrors.Errorf("make bootstrap dir: %w", err)
 	}
 
-	log.Debug(ctx, "bootstrapping container", slog.F("script", flags.boostrapScript))
-	// Bootstrap the container if a script has been provided.
-	blog.Infof("Bootstrapping workspace...")
-	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
-		ContainerID: containerID,
-		User:        imgMeta.UID,
-		Script:      flags.boostrapScript,
-		// We set this because the default behavior is to download the agent
-		// to /tmp/coder.XXXX. This causes a race to happen where we finish
-		// downloading the binary but before we can execute systemd remounts
-		// /tmp.
-		Env:      []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
-		BuildLog: blog,
-	})
-	if err != nil {
-		return xerrors.Errorf("boostrap container: %w", err)
-	}
-
 	cpuQuota, err := xunix.ReadCPUQuota(ctx)
 	if err != nil {
 		return xerrors.Errorf("read CPU quota: %w", err)
@@ -614,6 +596,24 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	err = dockerutil.SetContainerCPUQuota(ctx, containerID, cpuQuota.Quota, cpuQuota.Period)
 	if err != nil {
 		return xerrors.Errorf("set inner container CPU quota: %w", err)
+	}
+
+	blog.Info("Envbox startup complete!")
+
+	// Bootstrap the container if a script has been provided.
+	blog.Infof("Bootstrapping workspace...")
+	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
+		ContainerID: containerID,
+		User:        imgMeta.UID,
+		Script:      flags.boostrapScript,
+		// We set this because the default behavior is to download the agent
+		// to /tmp/coder.XXXX. This causes a race to happen where we finish
+		// downloading the binary but before we can execute systemd remounts
+		// /tmp.
+		Env: []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
+	})
+	if err != nil {
+		return xerrors.Errorf("boostrap container: %w", err)
 	}
 
 	return nil
