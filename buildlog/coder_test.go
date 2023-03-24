@@ -59,7 +59,6 @@ func TestCoderLog(t *testing.T) {
 			}
 			return equal
 		}, time.Millisecond*5, time.Millisecond)
-
 	})
 
 	// Try sending a large line that exceeds the maximum Coder accepts (1KiB).
