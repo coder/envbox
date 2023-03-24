@@ -4,17 +4,19 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"golang.org/x/exp/slices"
 	"golang.org/x/net/context"
 	"golang.org/x/xerrors"
-	"k8s.io/utils/strings/slices"
 
 	"cdr.dev/slog/sloggers/slogtest"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/coder/coder/codersdk/agentsdk"
 	"github.com/coder/envbox/buildlog"
 )
 
@@ -25,17 +27,18 @@ func TestCoderLog(t *testing.T) {
 		t.Parallel()
 
 		var (
-			maxLogs = 20
-			// Make this really big so that we don't unintentionally
-			// test that we send logs after a max delay period.
-			delayDur     = time.Minute
+			maxLogs      = buildlog.CoderLoggerMaxLogs
 			client       = fakeCoderClient{}
 			ctx          = context.Background()
 			slogger      = slogtest.Make(t, nil)
 			expectedLogs = make([]string, 20)
 			actualLogs   = make([]string, 0, 20)
+			logMu        sync.Mutex
 		)
-		client.PatchStartupLogsFn = func(ctx context.Context, logs buildlog.PatchStartupLogs) error {
+		client.PatchStartupLogsFn = func(ctx context.Context, logs agentsdk.PatchStartupLogs) error {
+			logMu.Lock()
+			defer logMu.Unlock()
+
 			require.Len(t, logs.Logs, maxLogs)
 			for _, l := range logs.Logs {
 				require.NotZero(t, l.CreatedAt)
@@ -44,33 +47,35 @@ func TestCoderLog(t *testing.T) {
 			return nil
 		}
 
-		log := buildlog.OpenCoderLogger(ctx, client, slogger, &buildlog.CoderOptions{
-			MaxLogs:  maxLogs,
-			DelayDur: delayDur,
-		})
+		log := buildlog.OpenCoderLogger(ctx, client, slogger)
 
 		for i := 0; i < maxLogs; i++ {
 			expectedLogs[i] = MustString(10)
 			log.Info(expectedLogs[i])
 		}
 
-		require.Eventually(t, func() bool { return slices.Equal(expectedLogs, actualLogs) }, time.Second, time.Millisecond*10, "slices %+v and %+v differ", expectedLogs, actualLogs)
+		require.Eventually(t, func() bool {
+			logMu.Lock()
+			defer logMu.Unlock()
+			return slices.Equal(expectedLogs, actualLogs)
+		}, time.Millisecond*5, time.Millisecond)
 	})
 
 	t.Run("OutputNotDropped", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			maxLogs = 2
-			// Make this really big so that we don't unintentionally
-			// test that we send logs after a max delay period.
-			delayDur   = time.Minute
+			maxLogs    = 2
 			client     = fakeCoderClient{}
 			ctx        = context.Background()
 			slogger    = slogtest.Make(t, nil)
 			actualLogs = make([]string, 0, maxLogs)
+			logMu      sync.Mutex
 		)
-		client.PatchStartupLogsFn = func(ctx context.Context, logs buildlog.PatchStartupLogs) error {
+		client.PatchStartupLogsFn = func(ctx context.Context, logs agentsdk.PatchStartupLogs) error {
+			logMu.Lock()
+			defer logMu.Unlock()
+
 			require.Len(t, logs.Logs, maxLogs)
 			for _, l := range logs.Logs {
 				require.NotZero(t, l.CreatedAt)
@@ -79,10 +84,7 @@ func TestCoderLog(t *testing.T) {
 			return nil
 		}
 
-		log := buildlog.OpenCoderLogger(ctx, client, slogger, &buildlog.CoderOptions{
-			MaxLogs:  maxLogs,
-			DelayDur: delayDur,
-		})
+		log := buildlog.OpenCoderLogger(ctx, client, slogger)
 
 		bigLine := MustString(buildlog.MaxCoderLogSize + buildlog.MaxCoderLogSize/2)
 		// The line should be chopped up into smaller logs so that we don't
@@ -92,25 +94,31 @@ func TestCoderLog(t *testing.T) {
 			bigLine[buildlog.MaxCoderLogSize:],
 		}
 		log.Info(bigLine)
-		require.Eventually(t, func() bool { return slices.Equal(expectedLogs, actualLogs) }, time.Millisecond*5, time.Millisecond, "slices %+v and %+v differ", expectedLogs, actualLogs)
+		// Close the logger to flush the logs.
+		log.Close()
+		require.Eventually(t, func() bool {
+			logMu.Lock()
+			defer logMu.Unlock()
+			return slices.Equal(expectedLogs, actualLogs)
+		}, time.Millisecond*5, time.Millisecond)
 	})
 
 	t.Run("CloseFlushes", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			maxLogs = 20
-			numLogs = maxLogs / 2
-			// Make this really big so that we don't unintentionally
-			// test that we send logs after a max delay period.
-			delayDur     = time.Minute
+			maxLogs      = 20
+			numLogs      = maxLogs / 2
 			client       = fakeCoderClient{}
 			ctx          = context.Background()
 			slogger      = slogtest.Make(t, nil)
 			expectedLogs = make([]string, numLogs)
+			logMu        sync.Mutex
 			actualLogs   = make([]string, 0, numLogs)
 		)
-		client.PatchStartupLogsFn = func(ctx context.Context, logs buildlog.PatchStartupLogs) error {
+		client.PatchStartupLogsFn = func(ctx context.Context, logs agentsdk.PatchStartupLogs) error {
+			logMu.Lock()
+			defer logMu.Unlock()
 			require.Len(t, logs.Logs, numLogs)
 			for _, l := range logs.Logs {
 				require.NotZero(t, l.CreatedAt)
@@ -119,10 +127,7 @@ func TestCoderLog(t *testing.T) {
 			return nil
 		}
 
-		log := buildlog.OpenCoderLogger(ctx, client, slogger, &buildlog.CoderOptions{
-			MaxLogs:  maxLogs,
-			DelayDur: delayDur,
-		})
+		log := buildlog.OpenCoderLogger(ctx, client, slogger)
 
 		for i := 0; i < numLogs; i++ {
 			expectedLogs[i] = MustString(10)
@@ -131,90 +136,20 @@ func TestCoderLog(t *testing.T) {
 
 		log.Close()
 
-		require.Eventually(t, func() bool { return slices.Equal(expectedLogs, actualLogs) }, time.Millisecond*100, time.Millisecond*10, "slices %+v and %+v differ", expectedLogs, actualLogs)
-	})
+		require.Eventually(t, func() bool {
+			logMu.Lock()
+			defer logMu.Unlock()
 
-	t.Run("MaxDelayCausesSend", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			maxLogs = 20
-			numLogs = 1
-			// Make this negative so that the timer fires immediately.
-			delayDur     = -time.Minute
-			client       = fakeCoderClient{}
-			ctx          = context.Background()
-			slogger      = slogtest.Make(t, nil)
-			expectedLogs = make([]string, numLogs)
-			actualLogs   = make([]string, 0, numLogs)
-		)
-		client.PatchStartupLogsFn = func(ctx context.Context, logs buildlog.PatchStartupLogs) error {
-			require.Len(t, logs.Logs, numLogs)
-			for _, l := range logs.Logs {
-				require.NotZero(t, l.CreatedAt)
-				actualLogs = append(actualLogs, l.Output)
-			}
-			return nil
-		}
-
-		log := buildlog.OpenCoderLogger(ctx, client, slogger, &buildlog.CoderOptions{
-			MaxLogs:  maxLogs,
-			DelayDur: delayDur,
-		})
-
-		for i := 0; i < numLogs; i++ {
-			expectedLogs[i] = MustString(10)
-			log.Info(expectedLogs[i])
-		}
-
-		require.Eventually(t, func() bool { return slices.Equal(expectedLogs, actualLogs) }, time.Millisecond*50, time.Millisecond, "slices %+v and %+v differ", expectedLogs, actualLogs)
-	})
-
-	t.Run("TimerResets", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			maxLogs = 10
-			numLogs = 2
-			// Make this negative so that the timer fires immediately.
-			delayDur     = -time.Millisecond
-			client       = fakeCoderClient{}
-			ctx          = context.Background()
-			slogger      = slogtest.Make(t, nil)
-			expectedLogs = make([]string, 0, numLogs)
-			actualLogs   = make([]string, 0, numLogs)
-		)
-		client.PatchStartupLogsFn = func(ctx context.Context, logs buildlog.PatchStartupLogs) error {
-			require.Len(t, logs.Logs, 1)
-			for _, l := range logs.Logs {
-				require.NotZero(t, l.CreatedAt)
-				actualLogs = append(actualLogs, l.Output)
-			}
-			return nil
-		}
-
-		log := buildlog.OpenCoderLogger(ctx, client, slogger, &buildlog.CoderOptions{
-			MaxLogs:  maxLogs,
-			DelayDur: delayDur,
-		})
-
-		expectedLogs = append(expectedLogs, MustString(10))
-		log.Info(expectedLogs[0])
-
-		require.Eventually(t, func() bool { return slices.Equal(expectedLogs, actualLogs) }, time.Millisecond*5, time.Millisecond, "slices %+v and %+v differ", expectedLogs, actualLogs)
-
-		expectedLogs = append(expectedLogs, MustString(10))
-		log.Info(expectedLogs[1])
-
-		require.Eventually(t, func() bool { return slices.Equal(expectedLogs, actualLogs) }, time.Millisecond*5, time.Millisecond, "slices %+v and %+v differ", expectedLogs, actualLogs)
+			return slices.Equal(expectedLogs, actualLogs)
+		}, time.Millisecond*100, time.Millisecond*10)
 	})
 }
 
 type fakeCoderClient struct {
-	PatchStartupLogsFn func(context.Context, buildlog.PatchStartupLogs) error
+	PatchStartupLogsFn func(context.Context, agentsdk.PatchStartupLogs) error
 }
 
-func (f fakeCoderClient) PatchStartupLogs(ctx context.Context, req buildlog.PatchStartupLogs) error {
+func (f fakeCoderClient) PatchStartupLogs(ctx context.Context, req agentsdk.PatchStartupLogs) error {
 	if f.PatchStartupLogsFn != nil {
 		return f.PatchStartupLogsFn(ctx, req)
 	}

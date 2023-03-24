@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog"
+	"github.com/coder/coder/codersdk/agentsdk"
 	"github.com/coder/envbox/background"
 	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/cli/cliflag"
@@ -124,13 +126,16 @@ func dockerCmd() *cobra.Command {
 			}
 
 			if !flags.noStartupLogs && flags.agentToken != "" && flags.coderURL != "" {
-				// coderURL, err := url.Parse(flags.coderURL)
-				// if err != nil {
-				// 	return xerrors.Errorf("parse coder URL %q: %w", flags.coderURL, err)
-				// }
+				coderURL, err := url.Parse(flags.coderURL)
+				if err != nil {
+					return xerrors.Errorf("parse coder URL %q: %w", flags.coderURL, err)
+				}
+
+				agent := agentsdk.New(coderURL)
+				agent.SetSessionToken(flags.agentToken)
 
 				logger := buildlog.MultiLogger(
-					// buildlog.OpenCoderLogger(ctx, coderURL, flags.agentToken),
+					buildlog.OpenCoderLogger(ctx, agent, log),
 					blog,
 				)
 				defer logger.Close()
