@@ -15,7 +15,6 @@ import (
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/pkg/namesgenerator"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
@@ -39,11 +38,9 @@ func TestDocker(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		t.Parallel()
 
-		name := namesgenerator.GetRandomName(1)
 		ctx, cmd := clitest.New(t, "docker",
 			"--image=ubuntu",
 			"--username=root",
-			fmt.Sprintf("--container-name=%s", name),
 			"--agent-token=hi",
 		)
 
@@ -56,7 +53,6 @@ func TestDocker(t *testing.T) {
 		t.Parallel()
 
 		var (
-			name       = namesgenerator.GetRandomName(1)
 			nl         = clitest.GetNetLink(t)
 			bridgeCIDR = "172.31.0.129/30"
 		)
@@ -64,7 +60,6 @@ func TestDocker(t *testing.T) {
 		ctx, cmd := clitest.New(t, "docker",
 			"--image=ubuntu",
 			"--username=root",
-			fmt.Sprintf("--container-name=%s", name),
 			"--agent-token=hi",
 			fmt.Sprintf("--bridge-cidr=%s", bridgeCIDR),
 		)
@@ -95,11 +90,9 @@ func TestDocker(t *testing.T) {
 	t.Run("SetOOMScore", func(t *testing.T) {
 		t.Parallel()
 
-		name := namesgenerator.GetRandomName(1)
 		ctx, cmd := clitest.New(t, "docker",
 			"--image=ubuntu",
 			"--username=root",
-			fmt.Sprintf("--container-name=%s", name),
 			"--agent-token=hi",
 		)
 
@@ -150,12 +143,10 @@ func TestDocker(t *testing.T) {
 			}
 		)
 
-		name := namesgenerator.GetRandomName(1)
 		ctx, cmd := clitest.New(t, "docker",
 			"docker",
 			"--image=ubuntu",
 			"--username=root",
-			fmt.Sprintf("--container-name=%s", name),
 			"--agent-token=hi",
 			fmt.Sprintf("--envs=%s", strings.Join(cntEnvs, ",")),
 		)
@@ -183,14 +174,12 @@ func TestDocker(t *testing.T) {
 
 		var (
 			userMounts     = []string{"/home/coder:/home/coder", "/etc/hosts:/etc/hosts:ro", "/etc/hostname:/idc/where:ro", "/usr/src:/a/b/c"}
-			name           = namesgenerator.GetRandomName(1)
 			expectedMounts = append([]string{"/var/lib/coder/docker:/var/lib/docker", "/var/lib/coder/containers:/var/lib/containers"}, userMounts...)
 		)
 		ctx, cmd := clitest.New(t, "docker",
 			"docker",
 			"--image=ubuntu",
 			"--username=root",
-			fmt.Sprintf("--container-name=%s", name),
 			"--agent-token=hi",
 			fmt.Sprintf("--mounts=%s", strings.Join(userMounts, ",")),
 		)
@@ -245,11 +234,9 @@ func TestDocker(t *testing.T) {
 	t.Run("RemountSysfs", func(t *testing.T) {
 		t.Parallel()
 
-		name := namesgenerator.GetRandomName(1)
 		ctx, cmd := clitest.New(t, "docker",
 			"--image=ubuntu",
 			"--username=root",
-			fmt.Sprintf("--container-name=%s", name),
 			"--agent-token=hi",
 		)
 
@@ -272,12 +259,10 @@ func TestDocker(t *testing.T) {
 	t.Run("Devices", func(t *testing.T) {
 		t.Parallel()
 
-		name := namesgenerator.GetRandomName(1)
 		ctx, cmd := clitest.New(t, "docker",
 			"docker",
 			"--image=ubuntu",
 			"--username=root",
-			fmt.Sprintf("--container-name=%s", name),
 			"--agent-token=hi",
 			"--add-tun",
 			"--add-fuse",
@@ -332,12 +317,10 @@ func TestDocker(t *testing.T) {
 	t.Run("NoInit", func(t *testing.T) {
 		t.Parallel()
 
-		name := namesgenerator.GetRandomName(1)
 		ctx, cmd := clitest.New(t, "docker",
 			"docker",
 			"--image=ubuntu",
 			"--username=root",
-			fmt.Sprintf("--container-name=%s", name),
 			"--agent-token=hi",
 			"--add-tun",
 			"--add-fuse",
@@ -385,11 +368,9 @@ func TestDocker(t *testing.T) {
 	t.Run("DockerAuth", func(t *testing.T) {
 		t.Parallel()
 
-		name := namesgenerator.GetRandomName(1)
 		ctx, cmd := clitest.New(t, "docker",
 			"--image=ubuntu",
 			"--username=root",
-			fmt.Sprintf("--container-name=%s", name),
 			"--agent-token=hi",
 			fmt.Sprintf("--image-secret=%s", rawDockerAuth),
 		)
@@ -416,11 +397,10 @@ func TestDocker(t *testing.T) {
 			memory = 4 << 30
 			cpus   = 6
 		)
-		name := namesgenerator.GetRandomName(1)
+
 		ctx, cmd := clitest.New(t, "docker",
 			"--image=ubuntu",
 			"--username=root",
-			fmt.Sprintf("--container-name=%s", name),
 			"--agent-token=hi",
 			fmt.Sprintf("--cpus=%d", cpus),
 			fmt.Sprintf("--memory=%d", memory),

@@ -110,10 +110,9 @@ var envboxPrivateMounts = map[string]struct{}{
 }
 
 type flags struct {
-	innerImage         string
-	innerUsername      string
-	innerContainerName string
-	agentToken         string
+	innerImage    string
+	innerUsername string
+	agentToken    string
 
 	// Optional flags.
 	innerEnvs         string
