@@ -18,7 +18,17 @@ build/image/envbox/.ctx: build/envbox $(IMAGE_FILES)
 	docker build -t envbox $(@D)
 	touch $@
 
-fmt:
+.PHONY: fmt
+fmt: fmt/go fmt/tf
+
+.PHONY: fmt/go
+fmt/go:
 	# VS Code users should check out
 	# https://github.com/mvdan/gofumpt#visual-studio-code
 	go run mvdan.cc/gofumpt@v0.4.0 -w -l .
+
+.PHONY: fmt/tf
+fmt/tf:
+	# VS Code users should check out
+	# https://github.com/mvdan/gofumpt#visual-studio-code
+	terraform fmt ./template.tf
