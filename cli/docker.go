@@ -79,15 +79,14 @@ const (
 )
 
 var (
-	EnvInnerImage         = "CODER_INNER_IMAGE"
-	EnvInnerUsername      = "CODER_INNER_USERNAME"
-	EnvInnerContainerName = "CODER_INNER_CONTAINER_NAME"
-	EnvInnerEnvs          = "CODER_INNER_ENVS"
-	EnvInnerWorkDir       = "CODER_INNER_WORK_DIR"
-	EnvInnerHostname      = "CODER_INNER_HOSTNAME"
-	EnvAddTun             = "CODER_ADD_TUN"
-	EnvAddFuse            = "CODER_ADD_FUSE"
-	EnvBridgeCIDR         = "CODER_ENVBOX_BRIDGE_CIDR"
+	EnvInnerImage    = "CODER_INNER_IMAGE"
+	EnvInnerUsername = "CODER_INNER_USERNAME"
+	EnvInnerEnvs     = "CODER_INNER_ENVS"
+	EnvInnerWorkDir  = "CODER_INNER_WORK_DIR"
+	EnvInnerHostname = "CODER_INNER_HOSTNAME"
+	EnvAddTun        = "CODER_ADD_TUN"
+	EnvAddFuse       = "CODER_ADD_FUSE"
+	EnvBridgeCIDR    = "CODER_ENVBOX_BRIDGE_CIDR"
 	//nolint
 	EnvAgentToken = "CODER_AGENT_TOKEN"
 	EnvAgentURL   = "CODER_AGENT_URL"
@@ -111,10 +110,9 @@ var envboxPrivateMounts = map[string]struct{}{
 }
 
 type flags struct {
-	innerImage         string
-	innerUsername      string
-	innerContainerName string
-	agentToken         string
+	innerImage    string
+	innerUsername string
+	agentToken    string
 
 	// Optional flags.
 	innerEnvs         string
@@ -312,7 +310,6 @@ func dockerCmd() *cobra.Command {
 	// Required flags.
 	cliflag.StringVarP(cmd.Flags(), &flags.innerImage, "image", "", EnvInnerImage, "", "The image for the inner container. Required.")
 	cliflag.StringVarP(cmd.Flags(), &flags.innerUsername, "username", "", EnvInnerUsername, "", "The username to use for the inner container. Required.")
-	cliflag.StringVarP(cmd.Flags(), &flags.innerContainerName, "container-name", "", EnvInnerContainerName, "", "The name of the inner container. Required.")
 	cliflag.StringVarP(cmd.Flags(), &flags.agentToken, "agent-token", "", EnvAgentToken, "", "The token to be used by the workspace agent to estabish a connection with the control plane. Required.")
 	cliflag.StringVarP(cmd.Flags(), &flags.coderURL, "coder-url", "", EnvAgentURL, "", "The URL of the Coder deployement.")
 
@@ -480,7 +477,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 			continue
 		}
 
-		log.Debug(ctx, "chmod'ing home directory",
+		log.Debug(ctx, "chmod'ing directory",
 			slog.F("path", m.Source),
 			slog.F("mode", "02755"),
 		)
