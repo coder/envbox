@@ -10,12 +10,12 @@ import (
 	"github.com/coder/envbox/xunix"
 )
 
-func MockSysboxManagerReady(t *testing.T, fs afero.Fs) {
+func FakeSysboxManagerReady(t *testing.T, fs afero.Fs) {
 	err := afero.WriteFile(fs, sysboxutil.ManagerSocketPath, []byte(""), 0o644)
 	require.NoError(t, err)
 }
 
-func MockCPUCGroups(t *testing.T, fs afero.Fs, quota, period string) {
+func FakeCPUGroups(t *testing.T, fs afero.Fs, quota, period string) {
 	err := afero.WriteFile(fs, xunix.CPUPeriodPath, []byte(period), 0o600)
 	require.NoError(t, err)
 

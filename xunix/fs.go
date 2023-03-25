@@ -2,10 +2,19 @@ package xunix
 
 import (
 	"context"
+	"io/fs"
+	"os"
 
 	"github.com/spf13/afero"
 	"golang.org/x/sys/unix"
 )
+
+type FS interface {
+	afero.Fs
+	Mknod(path string, mode uint32, dev int) error
+	LStat(path string) (fs.FileInfo, error)
+	Readlink(path string) (string, error)
+}
 
 type fsKey struct{}
 
@@ -23,15 +32,18 @@ func GetFS(ctx context.Context) FS {
 	return fs.(FS)
 }
 
-type FS interface {
-	afero.Fs
-	Mknod(path string, mode uint32, dev int) error
-}
-
 type osFS struct {
 	*afero.OsFs
 }
 
 func (*osFS) Mknod(path string, mode uint32, dev int) error {
 	return unix.Mknod(path, mode, dev)
+}
+
+func (*osFS) LStat(path string) (fs.FileInfo, error) {
+	return os.Lstat(path)
+}
+
+func (*osFS) Readlink(path string) (string, error) {
+	return os.Readlink(path)
 }
