@@ -1,6 +1,7 @@
 package xunixfake
 
 import (
+	"io/fs"
 	"os"
 	"strconv"
 
@@ -38,4 +39,15 @@ func (m *MemFS) Chown(path string, uid int, gid int) error {
 func (m *MemFS) GetFileOwner(path string) (FileOwner, bool) {
 	owner, ok := m.Owner[path]
 	return owner, ok
+}
+
+// LStat doesn't follow symbolic links since this is a in-mem fake.
+func (m *MemFS) LStat(path string) (fs.FileInfo, error) {
+	return m.MemMapFs.Stat(path)
+}
+
+// Readlink doesn't actually read symbolic links since this is a in-mem
+// fake.
+func (*MemFS) Readlink(path string) (string, error) {
+	return path, nil
 }

@@ -36,7 +36,7 @@ func GPUEnvs(ctx context.Context) []string {
 	return gpus
 }
 
-func GPUs(ctx context.Context, log slog.Logger, usrLibMountpoint string) ([]Device, []mount.MountPoint, error) {
+func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []mount.MountPoint, error) {
 	var (
 		mounter = Mounter(ctx)
 		devices = []Device{}
@@ -53,7 +53,7 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibMountpoint string) ([]Devi
 			// If we find the GPU in /dev treat it as a device.
 			if strings.HasPrefix(m.Path, "/dev/") {
 				// TODO(JonA): We could populate the rest of the fields but it
-				// doesn't seem like we need them. We'll just have to expand
+				// doesn't seem like we need them. We'll have to expand
 				// the FS interface to allow for a real unix stat.
 				devices = append(devices, Device{
 					Path: m.Path,
@@ -66,9 +66,9 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibMountpoint string) ([]Devi
 		}
 	}
 
-	extraGPUS, err := usrLibGPUs(ctx, log, usrLibMountpoint)
+	extraGPUS, err := usrLibGPUs(ctx, log, usrLibDir)
 	if err != nil {
-		return nil, nil, xerrors.Errorf("find %q gpus: %w", usrLibMountpoint, err)
+		return nil, nil, xerrors.Errorf("find %q gpus: %w", usrLibDir, err)
 	}
 
 	for _, gpu := range extraGPUS {
@@ -87,16 +87,16 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibMountpoint string) ([]Devi
 	return devices, binds, nil
 }
 
-func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibMountpoint string) ([]mount.MountPoint, error) {
+func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]mount.MountPoint, error) {
 	var (
 		afs   = GetFS(ctx)
 		binds = []string{}
 	)
 
-	err := afero.Walk(afs, usrLibMountpoint,
+	err := afero.Walk(afs, usrLibDir,
 		func(path string, info fs.FileInfo, err error) error {
-			if path == usrLibMountpoint && err != nil {
-				return xerrors.Errorf("stat /usr/lib mountpoint %q: %w", usrLibMountpoint, err)
+			if path == usrLibDir && err != nil {
+				return xerrors.Errorf("stat /usr/lib mountpoint %q: %w", usrLibDir, err)
 			}
 			if err != nil {
 				log.Error(ctx, "list directory", slog.F("dir", path), slog.Error(err))
@@ -107,7 +107,7 @@ func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibMountpoint string) (
 				return nil
 			}
 
-			paths, err := recursiveSymlinks(afs, usrLibMountpoint, path)
+			paths, err := recursiveSymlinks(afs, usrLibDir, path)
 			if err != nil {
 				log.Error(ctx, "find recursive symlinks", slog.F("path", path), slog.Error(err))
 			}
@@ -118,7 +118,7 @@ func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibMountpoint string) (
 		})
 
 	if err != nil {
-		return nil, xerrors.Errorf("walk %q for GPU drivers: %w", usrLibMountpoint, err)
+		return nil, xerrors.Errorf("walk %q for GPU drivers: %w", usrLibDir, err)
 	}
 
 	mounts := make([]mount.MountPoint, 0, len(binds))
