@@ -176,7 +176,7 @@ jobs:
         run: make -j build/image/envbox
   publish:
     runs-on: ubuntu-20.04
-    if: github.ref == "refs/head/jon/imageci"
+    if: github.ref == 'refs/head/jon/imageci'
     steps:
       - name: Docker Login
         uses: docker/login-action@v2
