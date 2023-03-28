@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -18,6 +19,7 @@ import (
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
+	"k8s.io/mount-utils"
 	testingexec "k8s.io/utils/exec/testing"
 
 	"github.com/coder/envbox/cli"
@@ -420,6 +422,135 @@ func TestDocker(t *testing.T) {
 		}
 
 		err := cmd.ExecuteContext(ctx)
+		require.NoError(t, err)
+		require.True(t, called, "create function was not called for inner container")
+	})
+
+	t.Run("GPUNoUsrLibDir", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cmd := clitest.New(t, "docker",
+			"--image=ubuntu",
+			"--username=root",
+			"--agent-token=hi",
+			"--add-gpu=true",
+		)
+
+		err := cmd.ExecuteContext(ctx)
+		require.Error(t, err)
+		require.ErrorContains(t, err, fmt.Sprintf("when using GPUs, %q must be specified", cli.EnvUsrLibDir))
+	})
+
+	t.Run("GPU", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cmd := clitest.New(t, "docker",
+			"--image=ubuntu",
+			"--username=root",
+			"--agent-token=hi",
+			"--add-gpu=true",
+			"--usr-lib-dir=/var/coder/usr/lib",
+		)
+
+		var (
+			mounter = clitest.Mounter(ctx)
+			afs     = clitest.FS(ctx)
+
+			procGPUDrivers = []string{
+				"/proc/vulkan/foo",
+				"/proc/nvidia/bar",
+				"/proc/cuda/baz",
+			}
+
+			// This path intentionally has a trailing '/' to ensure we are
+			// trimming correctly when remapping host-mounted /usr/lib dirs to
+			// /usr/lib inside the container.
+			usrLibMountpoint = "/var/coder/usr/lib/"
+			// expectedUsrLibFiles are files that we expect to be returned as bind mounts.
+			expectedUsrLibFiles = []string{
+				filepath.Join(usrLibMountpoint, "nvidia", "libglxserver_nvidia.so"),
+				filepath.Join(usrLibMountpoint, "libnvidia-ml.so"),
+			}
+			expectedEnvs = []string{
+				"NVIDIA_TEST=1",
+				"TEST_NVIDIA=1",
+				"nvidia_test=1",
+			}
+		)
+
+		environ := func() []string {
+			return append(
+				[]string{
+					"LIBGL_TEST=1",
+					"VULKAN_TEST=1",
+				}, expectedEnvs...)
+		}
+
+		ctx = xunix.WithEnvironFn(ctx, environ)
+
+		// Fake all the files.
+		for _, file := range append(expectedUsrLibFiles, procGPUDrivers...) {
+			// dir := filepath.Dir(driver)
+			// err := afs.MkdirAll(dir, 0755)
+			// require.NoError(t, err)
+			_, err := afs.Create(file)
+			require.NoError(t, err)
+		}
+
+		mounter.MountPoints = []mount.MountPoint{
+			{
+				Device: "/dev/sda1",
+				Path:   "/usr/local/nvidia",
+				Opts:   []string{"ro"},
+			},
+			{
+				Device: "/dev/sda2",
+				Path:   "/etc/hosts",
+			},
+			{
+				Path: "/dev/nvidia0",
+			},
+			{
+				Path: "/dev/nvidia1",
+			},
+		}
+
+		_, err := afs.Create("/usr/local/nvidia")
+		require.NoError(t, err)
+
+		unmounts := []string{}
+		mounter.UnmountFunc = func(path string) error {
+			unmounts = append(unmounts, path)
+			return nil
+		}
+
+		var called bool
+		client := clitest.DockerClient(t, ctx)
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+			if containerName == cli.InnerContainerName {
+				called = true
+				require.Contains(t, hostConfig.Devices, container.DeviceMapping{
+					PathOnHost:        "/dev/nvidia0",
+					PathInContainer:   "/dev/nvidia0",
+					CgroupPermissions: "rwm",
+				})
+				require.Contains(t, hostConfig.Devices, container.DeviceMapping{
+					PathOnHost:        "/dev/nvidia1",
+					PathInContainer:   "/dev/nvidia1",
+					CgroupPermissions: "rwm",
+				})
+				for _, file := range expectedUsrLibFiles {
+					require.Contains(t, hostConfig.Binds, fmt.Sprintf("%s:%s:ro",
+						file,
+						strings.Replace(file, usrLibMountpoint, "/usr/lib/", -1),
+					))
+				}
+			}
+
+			return container.ContainerCreateCreatedBody{}, nil
+		}
+
+		err = cmd.ExecuteContext(ctx)
 		require.NoError(t, err)
 		require.True(t, called, "create function was not called for inner container")
 	})
