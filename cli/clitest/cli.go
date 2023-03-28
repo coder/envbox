@@ -65,8 +65,8 @@ func New(t *testing.T, cmd string, args ...string) (context.Context, *cobra.Comm
 	args = append([]string{cmd, "--ethlink=" + iface.Attrs().Name, "--no-startup-log"}, args...)
 	root.SetArgs(args)
 
-	MockSysboxManagerReady(t, fs)
-	MockCPUCGroups(t, fs, "1234", "5678")
+	FakeSysboxManagerReady(t, fs)
+	FakeCPUGroups(t, fs, "1234", "5678")
 
 	return ctx, root
 }

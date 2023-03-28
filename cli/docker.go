@@ -15,6 +15,7 @@ import (
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/spf13/cobra"
+	"golang.org/x/exp/slices"
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog"
@@ -94,6 +95,8 @@ var (
 	EnvMounts     = "CODER_MOUNTS"
 	EnvCPUs       = "CODER_CPUS"
 	EnvMemory     = "CODER_MEMORY"
+	EnvAddGPU     = "CODER_ADD_GPU"
+	EnvUsrLibDir  = "CODER_USR_LIB_DIR"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -122,11 +125,13 @@ type flags struct {
 	coderURL          string
 	addTUN            bool
 	addFUSE           bool
+	addGPU            bool
 	noStartupLogs     bool
 	dockerdBridgeCIDR string
 	boostrapScript    string
 	ethlink           string
 	containerMounts   string
+	hostUsrLibDir     string
 	cpus              int
 	memory            int
 }
@@ -322,8 +327,10 @@ func dockerCmd() *cobra.Command {
 	cliflag.StringVarP(cmd.Flags(), &flags.boostrapScript, "boostrap-script", "", EnvBootstrap, "", "The script to use to bootstrap the container. This should typically install and start the agent.")
 	cliflag.StringVarP(cmd.Flags(), &flags.containerMounts, "mounts", "", EnvMounts, "", "Comma separated list of mounts in the form of '<source>:<target>[:options]' (e.g. /var/lib/docker:/var/lib/docker:ro,/usr/src:/usr/src).")
 	cliflag.StringVarP(cmd.Flags(), &flags.ethlink, "ethlink", "", "", defaultNetLink, "The ethernet link to query for the MTU that is passed to docerd. Used for tests.")
+	cliflag.StringVarP(cmd.Flags(), &flags.hostUsrLibDir, "usr-lib-dir", "", EnvUsrLibDir, "", "The host /usr/lib mountpoint. Used to detect GPU drivers to mount into inner container.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.addTUN, "add-tun", "", EnvAddTun, false, "Add a TUN device to the inner container.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.addFUSE, "add-fuse", "", EnvAddFuse, false, "Add a FUSE device to the inner container.")
+	cliflag.BoolVarP(cmd.Flags(), &flags.addGPU, "add-gpu", "", EnvAddGPU, false, "Add detected GPUs to the inner container.")
 	cliflag.IntVarP(cmd.Flags(), &flags.cpus, "cpus", "", EnvCPUs, 0, "Number of CPUs to allocate inner container. e.g. 2")
 	cliflag.IntVarP(cmd.Flags(), &flags.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
 
@@ -436,8 +443,48 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		return xerrors.Errorf("remount /sys: %w", err)
 	}
 
-	// TODO There's some bespoke logic related to aws service account keys
-	// that we handle that we should probably port over.
+	if flags.addGPU {
+		if flags.hostUsrLibDir == "" {
+			return xerrors.Errorf("when using GPUs, %q must be specified", EnvUsrLibDir)
+		}
+		// Unmount GPU drivers in /proc as it causes issues when creating any
+		// container in some cases (even the image metadata container).
+		_, err = xunix.TryUnmountProcGPUDrivers(ctx, log)
+		if err != nil {
+			return xerrors.Errorf("unmount /proc GPU drivers: %w", err)
+		}
+
+		devs, binds, err := xunix.GPUs(ctx, log, flags.hostUsrLibDir)
+		if err != nil {
+			return xerrors.Errorf("find gpus: %w", err)
+		}
+
+		for _, dev := range devs {
+			devices = append(devices, container.DeviceMapping{
+				PathOnHost:        dev.Path,
+				PathInContainer:   dev.Path,
+				CgroupPermissions: "rwm",
+			})
+		}
+
+		for _, bind := range binds {
+			// If the bind has a path that points to the host-mounted /usr/lib
+			// directory we need to remap it to /usr/lib inside the container.
+			mountpoint := bind.Path
+			if strings.HasPrefix(mountpoint, flags.hostUsrLibDir) {
+				mountpoint = filepath.Join(
+					"/usr/lib",
+					strings.TrimPrefix(mountpoint, strings.TrimSuffix(flags.hostUsrLibDir, "/")),
+				)
+			}
+			mounts = append(mounts, xunix.Mount{
+				Source:     bind.Path,
+				Mountpoint: mountpoint,
+				ReadOnly:   slices.Contains(bind.Opts, "ro"),
+			})
+		}
+		envs = append(envs, xunix.GPUEnvs(ctx)...)
+	}
 
 	log.Debug(ctx, "fetching image metadata",
 		slog.F("image", flags.innerImage),
@@ -525,17 +572,6 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 			return xerrors.Errorf("chown mountpoint %q: %w", m.Source, err)
 		}
 	}
-
-	// TODO unmount gpus
-	// Unmount GPU stuff in /proc as it causes issues when creating any
-	// container in some cases (even the parseImageFS container). Ignore any
-	// errors (but report to user).
-	// if shouldHaveGPUs() {
-	// 	err = unmountProblematicGPUDrivers(ctx, log)
-	// 	if err != nil {
-	// 		return xerrors.Errorf("unmount problematic GPU driver mounts: %w", err)
-	// 	}
-	// }
 
 	blog.Info("Creating workspace...")
 
