@@ -132,6 +132,10 @@ func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]mount
 	return mounts, nil
 }
 
+// recursiveSymlinks returns all of the paths in the chain of symlinks starting
+// at `path`. If `path` isn't a symlink, only `path` is returned. If at any
+// point the symlink chain goes outside of `mountpoint` then nil is returned.
+// Despite its name it's interestingly enough not implemented recursively.
 func recursiveSymlinks(afs FS, mountpoint string, path string) ([]string, error) {
 	if !strings.HasSuffix(mountpoint, "/") {
 		mountpoint += "/"
