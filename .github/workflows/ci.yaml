@@ -176,7 +176,7 @@ jobs:
         run: make -j build/image/envbox
   publish:
     runs-on: ubuntu-20.04
-    if: github.ref == 'refs/remotes/pull/16/merge'
+    if: github.ref == 'refs/pull/16/merge'
     steps:
       - name: Docker Login
         uses: docker/login-action@v2
