@@ -19,7 +19,7 @@ build/image/envbox/.ctx: build/envbox $(IMAGE_FILES)
 	touch $@
 
 .PHONY: fmt
-fmt: fmt/go fmt/tf
+fmt: fmt/go fmt/tf fmt/md
 
 .PHONY: fmt/go
 fmt/go:
@@ -32,3 +32,9 @@ fmt/tf:
 	# VS Code users should check out
 	# https://github.com/mvdan/gofumpt#visual-studio-code
 	terraform fmt ./template.tf
+
+.PHONY: fmt/md
+fmt/tf:
+	# VS Code users should check out
+	# https://github.com/mvdan/gofumpt#visual-studio-code
+	markdownfmt -w ./README.md

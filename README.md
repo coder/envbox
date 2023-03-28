@@ -2,20 +2,16 @@
 
 ## Introduction
 
-`envbox` is an image that enables creating non-privileged containers capable of running
-system-level software (e.g. `dockerd`, `systemd`, etc) in Kubernetes.
+`envbox` is an image that enables creating non-privileged containers capable of running system-level software (e.g. `dockerd`, `systemd`, etc) in Kubernetes.
 
-It mainly acts as a wrapper for the excellent [sysbox runtime](https://github.com/nestybox/sysbox/)
-developed by [Nestybox](https://www.nestybox.com/). For more details on the security of `sysbox` containers see
-sysbox's [official documentation](https://github.com/nestybox/sysbox/blob/master/docs/user-guide/security.md).
+It mainly acts as a wrapper for the excellent [sysbox runtime](https://github.com/nestybox/sysbox/) developed by [Nestybox](https://www.nestybox.com/). For more details on the security of `sysbox` containers see sysbox's [official documentation](https://github.com/nestybox/sysbox/blob/master/docs/user-guide/security.md).
 
 ## Envbox Configuration
 
-The following flags and environment variables can be used to configure various
-aspects of the inner and outer container.
+The following flags and environment variables can be used to configure various aspects of the inner and outer container.
 
 | env                        | usage                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | required |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+|----------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
 | `CODER_INNER_IMAGE`        | The image to use for the inner container.                                                                                                                                                                                                                                                                                                                                                                                                                                       | True     |
 | `CODER_INNER_USERNAME`     | The username to use for the inner container.                                                                                                                                                                                                                                                                                                                                                                                                                                    | True     |
 | `CODER_AGENT_TOKEN`        | The [Coder Agent](https://coder.com/docs/v2/latest/about/architecture#agents) token to pass to the inner container.                                                                                                                                                                                                                                                                                                                                                             | True     |
@@ -33,8 +29,7 @@ aspects of the inner and outer container.
 
 ## Coder Template
 
-A [Coder Template](https://coder.com/docs/v2/latest/templates) can be found in the [root of the repo](./template.tf)
-to provide a starting point for customizing an envbox container.
+A [Coder Template](https://coder.com/docs/v2/latest/templates) can be found in the [root of the repo](./template.tf) to provide a starting point for customizing an envbox container.
 
 ## Development
 
