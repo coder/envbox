@@ -8,7 +8,7 @@ It mainly acts as a wrapper for the excellent [sysbox runtime](https://github.co
 
 ## Envbox Configuration
 
-The following flags and environment variables can be used to configure various aspects of the inner and outer container.
+The environment variables can be used to configure various aspects of the inner and outer container.
 
 | env                        | usage                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | required |
 |----------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
