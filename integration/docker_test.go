@@ -95,7 +95,7 @@ func TestDocker(t *testing.T) {
 
 		binds = append(binds,
 			bindMount(homeDir, "/home/coder", false),
-			bindMount(secretDir, "/var/secrets", false),
+			bindMount(secretDir, "/var/secrets", true),
 		)
 
 		var (

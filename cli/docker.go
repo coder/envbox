@@ -487,7 +487,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		// the inner container.
 		if m.ReadOnly {
 			mounter := xunix.Mounter(ctx)
-			err = mounter.Mount(m.Source, m.Source, "", []string{"remount, rw"})
+			err := mounter.Mount("", m.Source, "", []string{"remount,rw"})
 			if err != nil {
 				return xerrors.Errorf("remount: %w", err)
 			}
