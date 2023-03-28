@@ -18,18 +18,18 @@ type FS interface {
 
 type fsKey struct{}
 
-func WithFS(ctx context.Context, fs FS) context.Context {
-	return context.WithValue(ctx, fsKey{}, fs)
+func WithFS(ctx context.Context, f FS) context.Context {
+	return context.WithValue(ctx, fsKey{}, f)
 }
 
 func GetFS(ctx context.Context) FS {
-	fs := ctx.Value(fsKey{})
-	if fs == nil {
+	f := ctx.Value(fsKey{})
+	if f == nil {
 		return &osFS{&afero.OsFs{}}
 	}
 
 	//nolint we should panic if this isn't the case.
-	return fs.(FS)
+	return f.(FS)
 }
 
 type osFS struct {
