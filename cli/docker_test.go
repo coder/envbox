@@ -490,9 +490,6 @@ func TestDocker(t *testing.T) {
 
 		// Fake all the files.
 		for _, file := range append(expectedUsrLibFiles, procGPUDrivers...) {
-			// dir := filepath.Dir(driver)
-			// err := afs.MkdirAll(dir, 0755)
-			// require.NoError(t, err)
 			_, err := afs.Create(file)
 			require.NoError(t, err)
 		}
@@ -501,7 +498,7 @@ func TestDocker(t *testing.T) {
 			{
 				Device: "/dev/sda1",
 				Path:   "/usr/local/nvidia",
-				Opts:   []string{"ro"},
+				Opts:   []string{"rw"},
 			},
 			{
 				Device: "/dev/sda2",
@@ -513,6 +510,12 @@ func TestDocker(t *testing.T) {
 			{
 				Path: "/dev/nvidia1",
 			},
+		}
+
+		for _, driver := range procGPUDrivers {
+			mounter.MountPoints = append(mounter.MountPoints, mount.MountPoint{
+				Path: driver,
+			})
 		}
 
 		_, err := afs.Create("/usr/local/nvidia")
@@ -529,6 +532,7 @@ func TestDocker(t *testing.T) {
 		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
+				// Test that '/dev' mounts are passed as devices.
 				require.Contains(t, hostConfig.Devices, container.DeviceMapping{
 					PathOnHost:        "/dev/nvidia0",
 					PathInContainer:   "/dev/nvidia0",
@@ -539,11 +543,22 @@ func TestDocker(t *testing.T) {
 					PathInContainer:   "/dev/nvidia1",
 					CgroupPermissions: "rwm",
 				})
+
+				// Test that the mountpoint that we provided that is not under
+				// '/dev' is passed as a bind mount.
+				require.Contains(t, hostConfig.Binds, fmt.Sprintf("%s:%s", "/usr/local/nvidia", "/usr/local/nvidia"))
+
+				// Test that host /usr/lib bind mounts were passed through as read-only.
 				for _, file := range expectedUsrLibFiles {
 					require.Contains(t, hostConfig.Binds, fmt.Sprintf("%s:%s:ro",
 						file,
 						strings.Replace(file, usrLibMountpoint, "/usr/lib/", -1),
 					))
+				}
+
+				// Test that we captured the GPU-related env vars.
+				for _, env := range expectedEnvs {
+					require.Contains(t, config.Env, env)
 				}
 			}
 
@@ -553,6 +568,10 @@ func TestDocker(t *testing.T) {
 		err = cmd.ExecuteContext(ctx)
 		require.NoError(t, err)
 		require.True(t, called, "create function was not called for inner container")
+		// Assert that we unmounted /proc GPU drivers.
+		for _, driver := range procGPUDrivers {
+			require.Contains(t, unmounts, driver)
+		}
 	})
 }
 
