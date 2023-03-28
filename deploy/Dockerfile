@@ -4,6 +4,12 @@ FROM ubuntu:focal
 # Copy configuration files to appropriate locations
 COPY files /
 
+LABEL \
+  org.opencontainers.image.title="Envbox" \
+  org.opencontainers.image.url="https://github.com/coder/envbox" \
+  org.opencontainers.image.source="https://github.com/coder/envbox" \
+  org.opencontainers.image.description="Run Docker in Docker in Kubernetes"
+
 # Basic utilities
 ARG DEBIAN_FRONTEND=noninteractive
 #   Ignore other repositories, as some require HTTPS
