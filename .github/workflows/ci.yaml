@@ -79,6 +79,9 @@ jobs:
           terraform_version: 1.1.9
           terraform_wrapper: false
 
+      - name: Install markdownfmt
+        run: go install github.com/Kunde21/markdownfmt/v3/cmd/markdownfmt@latest
+
       - name: make fmt
         run: |
           export PATH=${PATH}:$(go env GOPATH)/bin

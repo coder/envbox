@@ -87,7 +87,7 @@ var (
 	EnvInnerHostname = "CODER_INNER_HOSTNAME"
 	EnvAddTun        = "CODER_ADD_TUN"
 	EnvAddFuse       = "CODER_ADD_FUSE"
-	EnvBridgeCIDR    = "CODER_ENVBOX_BRIDGE_CIDR"
+	EnvBridgeCIDR    = "CODER_DOCKER_BRIDGE_CIDR"
 	//nolint
 	EnvAgentToken = "CODER_AGENT_TOKEN"
 	EnvAgentURL   = "CODER_AGENT_URL"
@@ -326,7 +326,6 @@ func dockerCmd() *cobra.Command {
 	cliflag.StringVarP(cmd.Flags(), &flags.dockerdBridgeCIDR, "bridge-cidr", "", EnvBridgeCIDR, "", "The CIDR to use for the docker bridge.")
 	cliflag.StringVarP(cmd.Flags(), &flags.boostrapScript, "boostrap-script", "", EnvBootstrap, "", "The script to use to bootstrap the container. This should typically install and start the agent.")
 	cliflag.StringVarP(cmd.Flags(), &flags.containerMounts, "mounts", "", EnvMounts, "", "Comma separated list of mounts in the form of '<source>:<target>[:options]' (e.g. /var/lib/docker:/var/lib/docker:ro,/usr/src:/usr/src).")
-	cliflag.StringVarP(cmd.Flags(), &flags.ethlink, "ethlink", "", "", defaultNetLink, "The ethernet link to query for the MTU that is passed to docerd. Used for tests.")
 	cliflag.StringVarP(cmd.Flags(), &flags.hostUsrLibDir, "usr-lib-dir", "", EnvUsrLibDir, "", "The host /usr/lib mountpoint. Used to detect GPU drivers to mount into inner container.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.addTUN, "add-tun", "", EnvAddTun, false, "Add a TUN device to the inner container.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.addFUSE, "add-fuse", "", EnvAddFuse, false, "Add a FUSE device to the inner container.")
@@ -336,6 +335,7 @@ func dockerCmd() *cobra.Command {
 
 	// Test flags.
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")
+	cliflag.StringVarP(cmd.Flags(), &flags.ethlink, "ethlink", "", "", defaultNetLink, "The ethernet link to query for the MTU that is passed to docerd. Used for tests.")
 
 	return cmd
 }
