@@ -116,7 +116,6 @@ func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]mount
 
 			return nil
 		})
-
 	if err != nil {
 		return nil, xerrors.Errorf("walk %q for GPU drivers: %w", usrLibDir, err)
 	}
@@ -180,9 +179,7 @@ func recursiveSymlinks(afs FS, mountpoint string, path string) ([]string, error)
 // issues when creating any container in some cases. Errors encountered while
 // unmounting are treated as non-fatal.
 func TryUnmountProcGPUDrivers(ctx context.Context, log slog.Logger) ([]mount.MountPoint, error) {
-	var (
-		mounter = Mounter(ctx)
-	)
+	mounter := Mounter(ctx)
 
 	mounts, err := mounter.List()
 	if err != nil {

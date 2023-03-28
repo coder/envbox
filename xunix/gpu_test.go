@@ -21,17 +21,15 @@ func TestGPUEnvs(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			ctx = xunix.WithEnvironFn(context.Background(), func() []string {
-				return []string{
-					"NVIDIA_TEST=1",
-					"VULKAN_TEST=1",
-					"LIBGL_TEST=1",
-					"TEST_NVIDIA=1",
-					"nvidia_test=1",
-				}
-			})
-		)
+		ctx := xunix.WithEnvironFn(context.Background(), func() []string {
+			return []string{
+				"NVIDIA_TEST=1",
+				"VULKAN_TEST=1",
+				"LIBGL_TEST=1",
+				"TEST_NVIDIA=1",
+				"nvidia_test=1",
+			}
+		})
 
 		envs := xunix.GPUEnvs(ctx)
 		require.Contains(t, envs, "NVIDIA_TEST=1")
@@ -89,7 +87,7 @@ func TestGPUs(t *testing.T) {
 			},
 		}
 
-		err := fs.MkdirAll(filepath.Join(usrLibMountpoint, "nvidia"), 0755)
+		err := fs.MkdirAll(filepath.Join(usrLibMountpoint, "nvidia"), 0o755)
 		require.NoError(t, err)
 
 		for _, file := range fakeUsrLibFiles {
