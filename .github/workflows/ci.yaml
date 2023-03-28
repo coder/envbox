@@ -166,6 +166,7 @@ jobs:
 
   build:
     runs-on: ubuntu-20.04
+    if: github.ref != "refs/head/main"
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
@@ -173,3 +174,28 @@ jobs:
           go-version: "~1.20"
       - name: build image
         run: make -j build/image/envbox
+  publish:
+    runs-on: ubuntu-20.04
+    if: github.ref == "refs/head/jon/imageci"
+    steps:
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "~1.20"
+
+      - name: build image
+        run: make -j build/image/envbox
+
+      - name: tag image
+        run: docker tag envbox ghcr.io/coder/envbox:latest
+
+      - name: push image
+        run: docker push ghcr.io/coder/envbox:latest
