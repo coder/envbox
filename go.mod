@@ -11,7 +11,7 @@ require (
 	cdr.dev/slog v1.4.2-0.20230228204227-60d22dceaf04
 	github.com/coder/coder v0.20.2-0.20230323233815-982274536509
 	github.com/coder/retry v1.3.1-0.20230210155434-e90a2e1e091d
-	github.com/docker/docker v23.0.1+incompatible
+	github.com/docker/docker v23.0.3+incompatible
 	github.com/opencontainers/image-spec v1.1.0-rc2
 	github.com/ory/dockertest/v3 v3.9.1
 	github.com/quasilyte/go-ruleguard/dsl v0.3.22
