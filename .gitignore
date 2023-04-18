@@ -1,4 +1,0 @@
-build
-cmd/envbox/envbox
-.terraform/
-*.lock.hcl
