@@ -14,7 +14,7 @@ LABEL \
 ARG DEBIAN_FRONTEND=noninteractive
 #   Ignore other repositories, as some require HTTPS
 RUN apt-get update --quiet --option Dir::Etc::SourceParts="" && \
-		apt-get upgrade -y && \
+    apt-get upgrade -y && \
     apt-get install --no-install-recommends --yes --quiet --option Dir::Etc::SourceParts="" \
       apt-transport-https \
       apt-utils \
