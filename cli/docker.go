@@ -339,9 +339,7 @@ func dockerCmd() *cobra.Command {
 }
 
 func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, blog buildlog.Logger, flags flags) error {
-	var (
-		fs = xunix.GetFS(ctx)
-	)
+	fs := xunix.GetFS(ctx)
 
 	// Set our OOM score to something really unfavorable to avoid getting killed
 	// in memory-scarce scenarios.
