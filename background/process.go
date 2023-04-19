@@ -173,32 +173,24 @@ func (d *Process) kill(sig syscall.Signal) error {
 
 	fs := xunix.GetFS(d.ctx)
 
-	// Try to find the process in the procfs. If we can't find
-	// it, it means the process has exited. It's also possible that
-	// we find the same PID but the cmd is different indicating the PID
-	// has been reused.
-	exited, err := isProcExited(fs, pid, d.binName)
-	if err != nil {
-		return xerrors.Errorf("is proc cmd: %w", err)
-	}
-
-	if exited {
-		return nil
-	}
-
 	for {
+		// Try to find the process in the procfs. If we can't find
+		// it, it means the process has exited. It's also possible that
+		// we find the same PID but the cmd is different indicating the PID
+		// has been reused.
+		exited, err := isProcExited(fs, pid, d.binName)
+		if err != nil {
+			return xerrors.Errorf("is proc cmd: %w", err)
+		}
+
+		if exited {
+			return nil
+		}
+
 		select {
 		case <-d.ctx.Done():
 			return d.ctx.Err()
 		case <-ticker.C:
-			exited, err = isProcExited(fs, pid, d.binName)
-			if err != nil {
-				return xerrors.Errorf("is proc cmd: %w", err)
-			}
-
-			if exited {
-				return nil
-			}
 		}
 	}
 }

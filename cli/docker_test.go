@@ -160,7 +160,7 @@ func TestDocker(t *testing.T) {
 		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
-				require.Equal(t, expectedEnvs, config.Env)
+				require.ElementsMatch(t, expectedEnvs, config.Env)
 			}
 			return container.ContainerCreateCreatedBody{}, nil
 		}

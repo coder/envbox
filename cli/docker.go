@@ -144,9 +144,9 @@ func dockerCmd() *cobra.Command {
 		Short: "Create a docker-based CVM",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			var (
-				ctx  = cmd.Context()
-				log  = slog.Make(slogjson.Sink(io.Discard))
-				blog = buildlog.GetLogger(ctx)
+				ctx                  = cmd.Context()
+				log                  = slog.Make(slogjson.Sink(io.Discard))
+				blog buildlog.Logger = buildlog.NopLogger{}
 			)
 
 			if !flags.noStartupLogs {
@@ -167,8 +167,6 @@ func dockerCmd() *cobra.Command {
 					buildlog.OpenCoderLogger(ctx, agent, log),
 					blog,
 				)
-
-				ctx = buildlog.WithLogger(ctx, blog)
 			}
 			defer blog.Close()
 
@@ -201,7 +199,7 @@ func dockerCmd() *cobra.Command {
 				log.Debug(ctx, "using custom docker bridge CIDR", slog.F("cidr", cidr))
 			}
 
-			dargs, err := dockerdArgs(ctx, log, flags.ethlink, cidr, false)
+			dargs, err := dockerdArgs(flags.ethlink, cidr, false)
 			if err != nil {
 				return xerrors.Errorf("dockerd args: %w", err)
 			}
@@ -234,7 +232,7 @@ func dockerCmd() *cobra.Command {
 				// directory is going to be on top of an overlayfs filesystem
 				// we have to use the vfs storage driver.
 				if xunix.IsNoSpaceErr(err) {
-					args, err = dockerdArgs(ctx, log, flags.ethlink, cidr, true)
+					args, err = dockerdArgs(flags.ethlink, cidr, true)
 					if err != nil {
 						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 						//nolint
@@ -271,7 +269,7 @@ func dockerCmd() *cobra.Command {
 				return xerrors.Errorf("wait for dockerd: %w", err)
 			}
 
-			err = runDockerCVM(ctx, log, client, flags)
+			err = runDockerCVM(ctx, log, client, blog, flags)
 			if err != nil {
 				// It's possible we failed because we ran out of disk while
 				// pulling the image. We should restart the daemon and use
@@ -281,7 +279,7 @@ func dockerCmd() *cobra.Command {
 				if xunix.IsNoSpaceErr(err) {
 					blog.Info("Insufficient space to start inner container. Restarting dockerd using the vfs driver. Your performance will be degraded. Clean up your home volume and then restart the workspace to improve performance.")
 					log.Debug(ctx, "encountered 'no space left on device' error while starting workspace", slog.Error(err))
-					args, err := dockerdArgs(ctx, log, flags.ethlink, cidr, true)
+					args, err := dockerdArgs(flags.ethlink, cidr, true)
 					if err != nil {
 						return xerrors.Errorf("dockerd args for restart: %w", err)
 					}
@@ -300,7 +298,7 @@ func dockerCmd() *cobra.Command {
 					}()
 
 					log.Debug(ctx, "reattempting container creation")
-					err = runDockerCVM(ctx, log, client, flags)
+					err = runDockerCVM(ctx, log, client, blog, flags)
 				}
 				if err != nil {
 					blog.Errorf("Failed to run envbox: %v", err)
@@ -340,10 +338,9 @@ func dockerCmd() *cobra.Command {
 	return cmd
 }
 
-func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, flags flags) error {
+func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, blog buildlog.Logger, flags flags) error {
 	var (
-		fs   = xunix.GetFS(ctx)
-		blog = buildlog.GetLogger(ctx)
+		fs = xunix.GetFS(ctx)
 	)
 
 	// Set our OOM score to something really unfavorable to avoid getting killed
@@ -612,6 +609,10 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	log.Debug(ctx, "creating bootstrap directory", slog.F("directory", imgMeta.HomeDir))
 
 	// Create the directory to which we will download the agent.
+	// We create this directory because the default behavior is
+	// to download the agent to /tmp/coder.XXXX. This causes a race to happen
+	// where we finish downloading the binary but before we can execute
+	// systemd remounts /tmp.
 	bootDir := filepath.Join(imgMeta.HomeDir, ".coder")
 
 	blog.Infof("Creating %q directory to host Coder assets...", bootDir)
@@ -663,8 +664,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	return nil
 }
 
-// nolint
-func dockerdArgs(ctx context.Context, log slog.Logger, link, cidr string, isNoSpace bool) ([]string, error) {
+//nolint:revive
+func dockerdArgs(link, cidr string, isNoSpace bool) ([]string, error) {
 	// We need to adjust the MTU for the host otherwise packets will fail delivery.
 	// 1500 is the standard, but certain deployments (like GKE) use custom MTU values.
 	// See: https://www.atlantis-press.com/journals/ijndc/125936177/view#sec-s3.1
@@ -731,7 +732,7 @@ func parseMounts(containerMounts string) ([]xunix.Mount, error) {
 	mounts := make([]xunix.Mount, 0, len(mountsStr))
 	for _, mount := range mountsStr {
 		tokens := strings.Split(mount, ":")
-		if len(tokens) < 2 {
+		if len(tokens) < 2 || len(tokens) > 3 {
 			return nil, xerrors.Errorf("malformed mounts value %q", containerMounts)
 		}
 		m := xunix.Mount{

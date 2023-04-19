@@ -1,25 +1,9 @@
 package buildlog
 
 import (
-	"context"
 	"fmt"
 	"io"
 )
-
-type loggerCtxKey struct{}
-
-func GetLogger(ctx context.Context) Logger {
-	l := ctx.Value(loggerCtxKey{})
-	if l == nil {
-		return nopLogger{}
-	}
-	//nolint
-	return l.(Logger)
-}
-
-func WithLogger(ctx context.Context, l Logger) context.Context {
-	return context.WithValue(ctx, loggerCtxKey{}, l)
-}
 
 type Logger interface {
 	Info(output string)
@@ -69,11 +53,11 @@ func (m multiLogger) Close() {
 	}
 }
 
-type nopLogger struct{}
+type NopLogger struct{}
 
-func (nopLogger) Info(string)               {}
-func (nopLogger) Infof(string, ...any)      {}
-func (nopLogger) Errorf(string, ...any)     {}
-func (nopLogger) Error(string)              {}
-func (nopLogger) Write([]byte) (int, error) { return 0, nil }
-func (nopLogger) Close()                    {}
+func (NopLogger) Info(string)               {}
+func (NopLogger) Infof(string, ...any)      {}
+func (NopLogger) Errorf(string, ...any)     {}
+func (NopLogger) Error(string)              {}
+func (NopLogger) Write([]byte) (int, error) { return 0, nil }
+func (NopLogger) Close()                    {}

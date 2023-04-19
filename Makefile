@@ -34,7 +34,7 @@ fmt/tf:
 	terraform fmt ./template.tf
 
 .PHONY: fmt/md
-fmt/tf:
+fmt/md:
 	# VS Code users should check out
 	# https://github.com/mvdan/gofumpt#visual-studio-code
 	markdownfmt -w ./README.md
