@@ -577,6 +577,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		Devices:     devices,
 		Envs:        envs,
 		Name:        InnerContainerName,
+		Hostname:    flags.innerHostname,
 		WorkingDir:  flags.innerWorkDir,
 		HasInit:     imgMeta.HasInit,
 		Image:       flags.innerImage,

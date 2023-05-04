@@ -573,6 +573,32 @@ func TestDocker(t *testing.T) {
 			require.Contains(t, unmounts, driver)
 		}
 	})
+
+	t.Run("Hostname", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cmd := clitest.New(t, "docker",
+			"--image=ubuntu",
+			"--username=root",
+			"--agent-token=hi",
+			"--hostname=hello-world",
+		)
+
+		var called bool
+		client := clitest.DockerClient(t, ctx)
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+			if containerName == cli.InnerContainerName {
+				called = true
+				require.Equal(t, "hello-world", config.Hostname)
+			}
+
+			return container.ContainerCreateCreatedBody{}, nil
+		}
+
+		err := cmd.ExecuteContext(ctx)
+		require.NoError(t, err)
+		require.True(t, called, "container create not called")
+	})
 }
 
 // rawDockerAuth is sample input for a kubernetes secret to a gcr.io private
