@@ -6,7 +6,7 @@ on:
       commit:
         description: "commit SHA to make release from"
         required: true
-        default: HEAD
+        default: main
       version:
         description: "release version, also creates a tag e.g. (0.1.0)"
         required: true
