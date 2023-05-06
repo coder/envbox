@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-#!/bin/bash
 VERSION="${1}"
 rx='^([0-9]+\.){2}(\*|[0-9]+)$'
 if [[ $VERSION =~ $rx ]]; then
