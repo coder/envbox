@@ -1,0 +1,75 @@
+name: ci
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "commit SHA to make release from"
+        required: true
+        default: HEAD
+      version:
+        description: "release version, also creates a tag e.g. (0.1.0)"
+        required: true
+    
+permissions:
+  actions: read
+  checks: none
+  contents: read
+  deployments: none
+  issues: none
+  packages: write
+  pull-requests: none
+  repository-projects: none
+  security-events: none
+  statuses: none
+
+jobs:
+  release:
+    runs-on: ${{ github.repository_owner == 'coder' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
+    steps:
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.commit }}
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "~1.20"
+
+      - name: Go Cache Paths
+        id: go-cache-paths
+        run: |
+          echo "GOMODCACHE=$(go env GOMODCACHE)" >> $GITHUB_OUTPUT
+
+      - name: Go Mod Cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.go-cache-paths.outputs.GOMODCACHE }}
+          key: ${{ runner.os }}-release-go-mod-${{ hashFiles('**/go.sum') }}
+
+      - name: Setup Git
+        run: |
+          git config --global user.email "ci@coder.com"
+          git config --global user.name "Coder CI"
+
+      - name: Tag commit
+        run: |
+          git tag -a ${{ github.event.inputs.version }} -m ${{ github.event.inputs.version }}
+          # git push --tags
+
+      - name: Build Image
+        run: make -j build/image/envbox
+
+      - name: Tag Image
+        run: docker tag envbox ghcr.io/coder/envbox:${{ github.event.inputs.version }}
+
+        #- name: Push Image
+        #  run: docker push ghcr.io/coder/envbox:${{ github.event.inputs.version }}
