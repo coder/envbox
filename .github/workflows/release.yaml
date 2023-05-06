@@ -63,16 +63,16 @@ jobs:
           git config --global user.email "ci@coder.com"
           git config --global user.name "Coder CI"
 
-      - name: Tag commit
-        run: |
-          git tag -a ${{ github.event.inputs.version }} -m ${{ github.event.inputs.version }}
-          git push --tags
-
       - name: Build Image
         run: make -j build/image/envbox
 
       - name: Tag Image
         run: docker tag envbox ghcr.io/coder/envbox:${{ github.event.inputs.version }}
+
+      - name: Tag and Push Commit
+        run: |
+          git tag -a ${{ github.event.inputs.version }} -m ${{ github.event.inputs.version }}
+          git push --tags
 
       - name: Push Image
         run: docker push ghcr.io/coder/envbox:${{ github.event.inputs.version }}
