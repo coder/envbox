@@ -14,7 +14,7 @@ on:
 permissions:
   actions: read
   checks: none
-  contents: read
+  contents: write
   deployments: none
   issues: none
   packages: write
