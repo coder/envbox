@@ -115,24 +115,13 @@ func TestDocker(t *testing.T) {
 		t.Parallel()
 		var (
 			cntEnvs = []string{
-				"FOO=bar",
-				"CODER_VAR=baz",
-				"bar=123",
+				"FOO",
+				"CODER_VAR",
+				"bar",
 				// Test that wildcard works.
 				"KUBERNETES_*",
 				"US_*",
 			}
-
-			osEnvs = append([]string{
-				"USER=root",
-				"USA=yay",
-				"HOME=/root",
-				"PATH=/usr/bin:/sbin:/bin",
-				"KUBERNETES_SERVICE_HOST=10.0.0.1",
-				"KUBERNETES_PORT=tcp://10.0.0.1:443",
-				"KUBERNETES_PORT_443_TCP_PORT=443",
-				// Don't include the wildcards.
-			}, cntEnvs[:3]...)
 
 			expectedEnvs = []string{
 				"CODER_AGENT_TOKEN=hi",
@@ -143,6 +132,14 @@ func TestDocker(t *testing.T) {
 				"KUBERNETES_PORT=tcp://10.0.0.1:443",
 				"KUBERNETES_PORT_443_TCP_PORT=443",
 			}
+
+			osEnvs = (append([]string{
+				"USER=root",
+				"USA=yay",
+				"HOME=/root",
+				"PATH=/usr/bin:/sbin:/bin",
+				// Don't include the wildcards.
+			}, expectedEnvs...))
 		)
 
 		ctx, cmd := clitest.New(t, "docker",
