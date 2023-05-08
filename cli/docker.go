@@ -703,14 +703,22 @@ func dockerdArgs(link, cidr string, isNoSpace bool) ([]string, error) {
 func filterElements(ss []string, filters ...string) []string {
 	filtered := make([]string, 0, len(ss))
 	for _, f := range filters {
+		f = strings.TrimSpace(f)
 		for _, s := range ss {
-			filter := f
-			if strings.HasSuffix(filter, "*") {
-				filter = strings.TrimSuffix(filter, "*")
-				if strings.HasPrefix(s, filter) {
+			toks := strings.Split(s, "=")
+			if len(toks) < 2 {
+				// Malformed environment variable.
+				continue
+			}
+
+			key := toks[0]
+
+			if strings.HasSuffix(f, "*") {
+				filter := strings.TrimSuffix(f, "*")
+				if strings.HasPrefix(key, filter) {
 					filtered = append(filtered, s)
 				}
-			} else if s == filter {
+			} else if key == f {
 				filtered = append(filtered, s)
 			}
 		}

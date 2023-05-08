@@ -101,8 +101,9 @@ func TestDocker(t *testing.T) {
 		var (
 			envFilter = []string{
 				"KUBERNETES_*",
-				"HELLO=world",
-				"TEST_ME=pls",
+				"HELLO",
+				"TEST_ME",
+				"TEST_VAR",
 			}
 
 			envs = []string{
@@ -112,6 +113,7 @@ func TestDocker(t *testing.T) {
 				"TEST_ME=pls",
 				"ENVBOX_ONLY=hi",
 				"TEST_ME_PLS=hmm",
+				"TEST_VAR=hello=world",
 				// Add a mount mapping to the inner container.
 				fmt.Sprintf("%s=%s:%s,%s:%s:ro", cli.EnvMounts, "/home/coder", "/home/coder", "/var/secrets", "/var/secrets"),
 			}
@@ -155,6 +157,7 @@ func TestDocker(t *testing.T) {
 			"KUBERNETES_SERVICE_HOST=10.0.1",
 			"HELLO=world",
 			"TEST_ME=pls",
+			"TEST_VAR=hello=world",
 		)
 		requireSliceNoContains(t, envVars,
 			"ENVBOX_ONLY=hi",
