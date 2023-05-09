@@ -16,9 +16,9 @@ func FakeSysboxManagerReady(t *testing.T, fs afero.Fs) {
 }
 
 func FakeCPUGroups(t *testing.T, fs afero.Fs, quota, period string) {
-	err := afero.WriteFile(fs, xunix.CPUPeriodPath, []byte(period), 0o600)
+	err := afero.WriteFile(fs, xunix.CPUPeriodPathCGroupV1, []byte(period), 0o600)
 	require.NoError(t, err)
 
-	err = afero.WriteFile(fs, xunix.CPUQuotaPath, []byte(quota), 0o600)
+	err = afero.WriteFile(fs, xunix.CPUQuotaPathCGroupV1, []byte(quota), 0o600)
 	require.NoError(t, err)
 }
