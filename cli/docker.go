@@ -630,19 +630,19 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		return xerrors.Errorf("make bootstrap dir: %w", err)
 	}
 
-	cpuQuota, err := xunix.ReadCPUQuota(ctx, blog)
+	cpuQuota, err := xunix.ReadCPUQuota(ctx, log)
 	if err != nil {
 		blog.Infof("Unable to read CPU quota: %s", err.Error())
 	} else {
 		log.Debug(ctx, "setting CPU quota",
 			slog.F("quota", cpuQuota.Quota),
 			slog.F("period", cpuQuota.Period),
+			slog.F("cgroup", cpuQuota.CGroup.String()),
 		)
 
 		// We want the inner container to have the same limits as the outer container
 		// so that processes inside the container know what they're working with.
-		err = dockerutil.SetContainerQuota(ctx, containerID, cpuQuota)
-		if err != nil {
+		if err := dockerutil.SetContainerQuota(ctx, containerID, cpuQuota); err != nil {
 			blog.Infof("Unable to set quota for inner container: %s", err.Error())
 			blog.Info("This is not a fatal error, but it may cause cgroup-aware applications to misbehave.")
 		}

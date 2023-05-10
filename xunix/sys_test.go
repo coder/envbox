@@ -7,7 +7,8 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 
-	"github.com/coder/envbox/buildlog"
+	"cdr.dev/slog/sloggers/slogtest"
+
 	"github.com/coder/envbox/xunix"
 	"github.com/coder/envbox/xunix/xunixfake"
 )
@@ -67,12 +68,13 @@ func TestReadCPUQuota(t *testing.T) {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			t.Parallel()
+			log := slogtest.Make(t, &slogtest.Options{IgnoreErrors: true})
 			tmpfs := &xunixfake.MemFS{MemMapFs: &afero.MemMapFs{}}
 			ctx := xunix.WithFS(context.Background(), tmpfs)
 			for path, content := range tc.FS {
 				require.NoError(t, afero.WriteFile(tmpfs, path, []byte(content), 0o644))
 			}
-			actual, err := xunix.ReadCPUQuota(ctx, &buildlog.NopLogger{})
+			actual, err := xunix.ReadCPUQuota(ctx, log)
 			if tc.Error == "" {
 				require.NoError(t, err)
 				require.Equal(t, tc.Expected, actual)

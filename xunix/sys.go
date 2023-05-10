@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/afero"
 	"golang.org/x/xerrors"
 
-	"github.com/coder/envbox/buildlog"
+	"cdr.dev/slog"
 )
 
 type CPUQuota struct {
@@ -46,14 +46,13 @@ const (
 // Relevant paths for cgroupv1:
 // - /sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us
 // - /sys/fs/cgroup/cpu,cpuacct/cpu.cfs_period_us
-func ReadCPUQuota(ctx context.Context, blog buildlog.Logger) (CPUQuota, error) {
+func ReadCPUQuota(ctx context.Context, log slog.Logger) (CPUQuota, error) {
 	quota, err := readCPUQuotaCGroupV2(ctx)
 	if err == nil {
 		return quota, nil
 	}
 
-	blog.Infof("Unable to read cgroupv2 quota, error: %s", err.Error())
-	blog.Info("Falling back to cgroupv1.")
+	log.Info(ctx, "Unable to read cgroupv2 quota, falling back to cgroupv1", slog.Error(err))
 	return readCPUQuotaCGroupV1(ctx)
 }
 
