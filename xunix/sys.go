@@ -59,9 +59,9 @@ func ReadCPUQuota(ctx context.Context, blog buildlog.Logger) (CPUQuota, error) {
 
 func readCPUQuotaCGroupV2(ctx context.Context) (CPUQuota, error) {
 	fs := GetFS(ctx)
-	self, err := ReadCGroupSelf(ctx, "") // TODO: should we just go from the first line?
+	self, err := ReadCGroupSelf(ctx)
 	if err != nil {
-		return CPUQuota{}, xerrors.Errorf("")
+		return CPUQuota{}, xerrors.Errorf("determine own cgroup: %w", err)
 	}
 
 	maxStr, err := afero.ReadFile(fs, filepath.Join("/sys/fs/cgroup/", self, "cpu.max"))
@@ -124,11 +124,10 @@ func readCPUQuotaCGroupV1(ctx context.Context) (CPUQuota, error) {
 	}, nil
 }
 
-// readCGroup reads the lines of /proc/self/cgroup where the third field
-// (separated by `:`) of the line starts with prefix.
-// If prefix is empty, we just check the first line.
-// pid is a string so you can use `self` to look at your own cgroup.
-func ReadCGroupSelf(ctx context.Context, prefix string) (string, error) {
+// readCGroup attempts to determine the cgroup for the container by
+// reading the fields of /proc/self/cgroup (third field)
+// We currently only check the first line of /proc/self/cgroup.
+func ReadCGroupSelf(ctx context.Context) (string, error) {
 	fs := GetFS(ctx)
 	raw, err := afero.ReadFile(fs, "/proc/self/cgroup")
 	if err != nil {
@@ -140,20 +139,12 @@ func ReadCGroupSelf(ctx context.Context, prefix string) (string, error) {
 		return "", xerrors.Errorf("unexpected content of /proc/self/cgroup: %s", string(raw))
 	}
 
-	// Loop through all the lines
-	for _, line := range lines {
-		fields := bytes.Split(line, []byte(":"))
-		if len(fields) != 3 {
-			return "", xerrors.Errorf("expected 3 fields in last line of /proc/self/cgroup: %s", string(raw))
-		}
-
-		// An empty prefix will always match.
-		if !bytes.HasPrefix(fields[2], []byte(prefix)) {
-			continue
-		}
-
-		return string(fields[2]), nil
+	// Just pick the first line.
+	line := lines[0]
+	fields := bytes.Split(line, []byte(":"))
+	if len(fields) != 3 {
+		return "", xerrors.Errorf("expected 3 fields in last line of /proc/self/cgroup: %s", string(raw))
 	}
 
-	return "", xerrors.Errorf("no cgroup found with prefix %s", prefix)
+	return string(fields[2]), nil
 }
