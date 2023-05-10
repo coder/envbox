@@ -632,20 +632,20 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	cpuQuota, err := xunix.ReadCPUQuota(ctx, blog)
 	if err != nil {
-		blog.Errorf("Unable to read CPU quota: %w", err)
-	}
+		blog.Infof("Unable to read CPU quota: %s", err.Error())
+	} else {
+		log.Debug(ctx, "setting CPU quota",
+			slog.F("quota", cpuQuota.Quota),
+			slog.F("period", cpuQuota.Period),
+		)
 
-	log.Debug(ctx, "setting CPU quota",
-		slog.F("quota", cpuQuota.Quota),
-		slog.F("period", cpuQuota.Period),
-	)
-
-	// We want the inner container to have the same limits as the outer container
-	// so that processes inside the container know what they're working with.
-	err = dockerutil.SetContainerCPUQuota(ctx, containerID, cpuQuota.Quota, cpuQuota.Period)
-	if err != nil {
-		blog.Errorf("Unable to set quota for inner container: %w", err)
-		blog.Errorf("This is not a fatal error, but it may cause CGroup-aware applications to misbehave.")
+		// We want the inner container to have the same limits as the outer container
+		// so that processes inside the container know what they're working with.
+		err = dockerutil.SetContainerQuota(ctx, containerID, cpuQuota)
+		if err != nil {
+			blog.Infof("Unable to set quota for inner container: %s", err.Error())
+			blog.Info("This is not a fatal error, but it may cause cgroup-aware applications to misbehave.")
+		}
 	}
 
 	blog.Info("Envbox startup complete!")
