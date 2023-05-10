@@ -7,7 +7,7 @@ clean:
 	rm -rf build
 
 build/envbox: $(GO_FILES)
-	go build -o build/envbox ./cmd/envbox
+	CGO_ENABLED=0 go build -o build/envbox ./cmd/envbox
 
 .PHONY: build/image/envbox
 build/image/envbox: build/image/envbox/.ctx
