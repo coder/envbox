@@ -26,8 +26,8 @@ func TestReadCPUQuota(t *testing.T) {
 			Name:    "CGroupV1",
 			Subpath: "docker/dummy",
 			FS: map[string]string{
-				xunix.CPUQuotaPathCGroupV1:  "150000",
-				xunix.CPUPeriodPathCGroupV1: "100000",
+				xunix.CPUQuotaPathCGroupV1:  "150000\n",
+				xunix.CPUPeriodPathCGroupV1: "100000\n",
 			},
 			Expected: xunix.CPUQuota{Quota: 150000, Period: 100000, CGroup: xunix.CGroupV1},
 		},
@@ -35,8 +35,8 @@ func TestReadCPUQuota(t *testing.T) {
 			Name:    "CGroupV1_Invalid",
 			Subpath: "docker/dummy",
 			FS: map[string]string{
-				xunix.CPUQuotaPathCGroupV1:  "100000",
-				xunix.CPUPeriodPathCGroupV1: "invalid",
+				xunix.CPUQuotaPathCGroupV1:  "100000\n",
+				xunix.CPUPeriodPathCGroupV1: "invalid\n",
 			},
 			Error: `period invalid not an int`,
 		},
@@ -44,8 +44,8 @@ func TestReadCPUQuota(t *testing.T) {
 			Name:    "CGroupV2",
 			Subpath: "docker/dummy",
 			FS: map[string]string{
-				"/proc/self/cgroup":                             "0::/kubepods/pod/container",
-				"/sys/fs/cgroup/kubepods/pod/container/cpu.max": "150000 100000",
+				"/proc/self/cgroup":                             "0::/kubepods/pod/container\n",
+				"/sys/fs/cgroup/kubepods/pod/container/cpu.max": "150000 100000\n",
 			},
 			Expected: xunix.CPUQuota{Quota: 150000, Period: 100000, CGroup: xunix.CGroupV2},
 		},
@@ -53,8 +53,8 @@ func TestReadCPUQuota(t *testing.T) {
 			Name:    "CGroupV2_Max",
 			Subpath: "docker/dummy",
 			FS: map[string]string{
-				"/proc/self/cgroup":                             "0::/kubepods/pod/container",
-				"/sys/fs/cgroup/kubepods/pod/container/cpu.max": "max 100000",
+				"/proc/self/cgroup":                             "0::/kubepods/pod/container\n",
+				"/sys/fs/cgroup/kubepods/pod/container/cpu.max": "max 100000\n",
 			},
 			Expected: xunix.CPUQuota{Quota: -1, Period: 100000, CGroup: xunix.CGroupV2},
 		},

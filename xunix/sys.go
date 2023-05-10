@@ -52,7 +52,8 @@ func ReadCPUQuota(ctx context.Context, blog buildlog.Logger) (CPUQuota, error) {
 		return quota, nil
 	}
 
-	blog.Infof("Unable to read cgroupv2 quota, falling back to cgroupv1: %w", err)
+	blog.Infof("Unable to read cgroupv2 quota, error: %s", err.Error())
+	blog.Info("Falling back to cgroupv1.")
 	return readCPUQuotaCGroupV1(ctx)
 }
 
@@ -68,7 +69,7 @@ func readCPUQuotaCGroupV2(ctx context.Context) (CPUQuota, error) {
 		return CPUQuota{}, xerrors.Errorf("read cpu.max outside container: %w", err)
 	}
 
-	list := strings.Split(string(maxStr), " ")
+	list := strings.Split(string(bytes.TrimSpace(maxStr)), " ")
 	if len(list) != 2 {
 		return CPUQuota{}, xerrors.Errorf("expected cpu.max to have exactly two entries, got: %s", string(maxStr))
 	}
@@ -95,22 +96,24 @@ func readCPUQuotaCGroupV2(ctx context.Context) (CPUQuota, error) {
 
 func readCPUQuotaCGroupV1(ctx context.Context) (CPUQuota, error) {
 	fs := GetFS(ctx)
-	periodStr, err := afero.ReadFile(fs, CPUPeriodPathCGroupV1)
+	periodRaw, err := afero.ReadFile(fs, CPUPeriodPathCGroupV1)
 	if err != nil {
 		return CPUQuota{}, xerrors.Errorf("read cpu.cfs_period_us outside container: %w", err)
 	}
 
-	quotaStr, err := afero.ReadFile(fs, CPUQuotaPathCGroupV1)
+	quotaRaw, err := afero.ReadFile(fs, CPUQuotaPathCGroupV1)
 	if err != nil {
 		return CPUQuota{}, xerrors.Errorf("read cpu.cfs_quota_us outside container: %w", err)
 	}
 
-	period, err := strconv.Atoi(string(bytes.TrimSpace(periodStr)))
+	periodStr := string(bytes.TrimSpace(periodRaw))
+	period, err := strconv.Atoi(periodStr)
 	if err != nil {
 		return CPUQuota{}, xerrors.Errorf("period %s not an int: %w", periodStr, err)
 	}
 
-	quota, err := strconv.Atoi(string(bytes.TrimSpace(quotaStr)))
+	quotaStr := string(bytes.TrimSpace(quotaRaw))
+	quota, err := strconv.Atoi(quotaStr)
 	if err != nil {
 		return CPUQuota{}, xerrors.Errorf("quota %s not an int: %w", quotaStr, err)
 	}
