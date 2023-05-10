@@ -89,15 +89,16 @@ var (
 	EnvAddFuse       = "CODER_ADD_FUSE"
 	EnvBridgeCIDR    = "CODER_DOCKER_BRIDGE_CIDR"
 	//nolint
-	EnvAgentToken = "CODER_AGENT_TOKEN"
-	EnvAgentURL   = "CODER_AGENT_URL"
-	EnvBootstrap  = "CODER_BOOTSTRAP_SCRIPT"
-	EnvMounts     = "CODER_MOUNTS"
-	EnvCPUs       = "CODER_CPUS"
-	EnvMemory     = "CODER_MEMORY"
-	EnvAddGPU     = "CODER_ADD_GPU"
-	EnvUsrLibDir  = "CODER_USR_LIB_DIR"
-	EnvDebug      = "CODER_DEBUG"
+	EnvAgentToken           = "CODER_AGENT_TOKEN"
+	EnvAgentURL             = "CODER_AGENT_URL"
+	EnvBootstrap            = "CODER_BOOTSTRAP_SCRIPT"
+	EnvMounts               = "CODER_MOUNTS"
+	EnvCPUs                 = "CODER_CPUS"
+	EnvMemory               = "CODER_MEMORY"
+	EnvAddGPU               = "CODER_ADD_GPU"
+	EnvUsrLibDir            = "CODER_USR_LIB_DIR"
+	EnvDebug                = "CODER_DEBUG"
+	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -119,20 +120,21 @@ type flags struct {
 	agentToken    string
 
 	// Optional flags.
-	innerEnvs         string
-	innerWorkDir      string
-	innerHostname     string
-	imagePullSecret   string
-	coderURL          string
-	addTUN            bool
-	addFUSE           bool
-	addGPU            bool
-	dockerdBridgeCIDR string
-	boostrapScript    string
-	containerMounts   string
-	hostUsrLibDir     string
-	cpus              int
-	memory            int
+	innerEnvs            string
+	innerWorkDir         string
+	innerHostname        string
+	imagePullSecret      string
+	coderURL             string
+	addTUN               bool
+	addFUSE              bool
+	addGPU               bool
+	dockerdBridgeCIDR    string
+	boostrapScript       string
+	containerMounts      string
+	hostUsrLibDir        string
+	cpus                 int
+	memory               int
+	disableIDMappedMount bool
 
 	// Test flags.
 	noStartupLogs bool
@@ -181,12 +183,16 @@ func dockerCmd() *cobra.Command {
 			}(&err)
 
 			blog.Info("Waiting for dockerd to startup...")
+			sysboxArgs := []string{}
+			if flags.disableIDMappedMount {
+				sysboxArgs = append(sysboxArgs, "--disable-idmapped-mount")
+			}
 
 			go func() {
 				select {
 				// Start sysbox-mgr and sysbox-fs in order to run
 				// sysbox containers.
-				case err := <-background.New(ctx, log, "sysbox-mgr").Run():
+				case err := <-background.New(ctx, log, "sysbox-mgr", sysboxArgs...).Run():
 					blog.Info(sysboxErrMsg)
 					//nolint
 					log.Fatal(ctx, "sysbox-mgr exited", slog.Error(err))
@@ -334,6 +340,7 @@ func dockerCmd() *cobra.Command {
 	cliflag.BoolVarP(cmd.Flags(), &flags.addGPU, "add-gpu", "", EnvAddGPU, false, "Add detected GPUs to the inner container.")
 	cliflag.IntVarP(cmd.Flags(), &flags.cpus, "cpus", "", EnvCPUs, 0, "Number of CPUs to allocate inner container. e.g. 2")
 	cliflag.IntVarP(cmd.Flags(), &flags.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
+	cliflag.BoolVarP(cmd.Flags(), &flags.disableIDMappedMount, "disable-idmapped-mount", "", EnvDisableIDMappedMount, false, "Disable idmapped mounts in sysbox. Note that you may need an alternative (e.g. shiftfs).")
 
 	// Test flags.
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")

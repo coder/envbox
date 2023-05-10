@@ -596,6 +596,32 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, called, "container create not called")
 	})
+
+	t.Run("DisableIDMappedMounts", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cmd := clitest.New(t, "docker",
+			"--image=ubuntu",
+			"--username=root",
+			"--agent-token=hi",
+			"--disable-idmapped-mount",
+		)
+
+		execer := clitest.Execer(ctx)
+		execer.AddCommands(&xunixfake.FakeCmd{
+			FakeCmd: &testingexec.FakeCmd{
+				Argv: []string{
+					"sysbox-mgr",
+					"--disable-idmapped-mount",
+				},
+			},
+			WaitFn: func() error { select {} }, //nolint:revive
+		})
+
+		err := cmd.ExecuteContext(ctx)
+		require.NoError(t, err)
+		execer.AssertCommandsCalled(t)
+	})
 }
 
 // rawDockerAuth is sample input for a kubernetes secret to a gcr.io private
