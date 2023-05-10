@@ -3,6 +3,7 @@ package dockerutil
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -100,6 +101,7 @@ type BootstrapConfig struct {
 	Script      string
 	Env         []string
 	Detach      bool
+	StdOutErr   io.Writer
 }
 
 // BoostrapContainer runs a script inside the container as the provided user.
@@ -119,6 +121,7 @@ func BootstrapContainer(ctx context.Context, client DockerClient, conf Bootstrap
 			Args:        []string{"-s"},
 			Stdin:       strings.NewReader(conf.Script),
 			Env:         conf.Env,
+			StdOutErr:   conf.StdOutErr,
 		})
 		if err != nil {
 			err = xerrors.Errorf("boostrap container (%s): %w", out, err)

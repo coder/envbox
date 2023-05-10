@@ -97,6 +97,7 @@ var (
 	EnvMemory     = "CODER_MEMORY"
 	EnvAddGPU     = "CODER_ADD_GPU"
 	EnvUsrLibDir  = "CODER_USR_LIB_DIR"
+	EnvDebug      = "CODER_DEBUG"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -126,14 +127,17 @@ type flags struct {
 	addTUN            bool
 	addFUSE           bool
 	addGPU            bool
-	noStartupLogs     bool
 	dockerdBridgeCIDR string
 	boostrapScript    string
-	ethlink           string
 	containerMounts   string
 	hostUsrLibDir     string
 	cpus              int
 	memory            int
+
+	// Test flags.
+	noStartupLogs bool
+	debug         bool
+	ethlink       string
 }
 
 func dockerCmd() *cobra.Command {
@@ -333,6 +337,7 @@ func dockerCmd() *cobra.Command {
 
 	// Test flags.
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")
+	cliflag.BoolVarP(cmd.Flags(), &flags.debug, "debug", "", "", false, "Log additional output.")
 	cliflag.StringVarP(cmd.Flags(), &flags.ethlink, "ethlink", "", "", defaultNetLink, "The ethernet link to query for the MTU that is passed to docerd. Used for tests.")
 
 	return cmd
@@ -644,6 +649,15 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	blog.Info("Envbox startup complete!")
 
+	// The bootstrap script doesn't return since it execs the agent
+	// meaning that it can get pretty noisy if we were to log by default.
+	// In order to allow users to discern issues getting the bootstrap script
+	// to complete successfully we pipe the output to stdout if
+	// CODER_DEBUG=true.
+	debugWriter := io.Discard
+	if flags.debug {
+		debugWriter = os.Stdout
+	}
 	// Bootstrap the container if a script has been provided.
 	blog.Infof("Bootstrapping workspace...")
 	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
@@ -654,7 +668,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		// to /tmp/coder.XXXX. This causes a race to happen where we finish
 		// downloading the binary but before we can execute systemd remounts
 		// /tmp.
-		Env: []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
+		Env:       []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
+		StdOutErr: debugWriter,
 	})
 	if err != nil {
 		return xerrors.Errorf("boostrap container: %w", err)
