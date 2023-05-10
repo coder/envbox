@@ -46,8 +46,19 @@ func TestDocker(t *testing.T) {
 			"--agent-token=hi",
 		)
 
+		execer := clitest.Execer(ctx)
+		execer.AddCommands(&xunixfake.FakeCmd{
+			FakeCmd: &testingexec.FakeCmd{
+				Argv: []string{
+					"sysbox-mgr",
+				},
+			},
+			WaitFn: func() error { select {} }, //nolint:revive
+		})
+
 		err := cmd.ExecuteContext(ctx)
 		require.NoError(t, err)
+		execer.AssertCommandsCalled(t)
 	})
 
 	// Test that dockerd is configured correctly.
