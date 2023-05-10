@@ -337,7 +337,7 @@ func dockerCmd() *cobra.Command {
 
 	// Test flags.
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")
-	cliflag.BoolVarP(cmd.Flags(), &flags.debug, "debug", "", "", false, "Log additional output.")
+	cliflag.BoolVarP(cmd.Flags(), &flags.debug, "debug", "", EnvDebug, false, "Log additional output.")
 	cliflag.StringVarP(cmd.Flags(), &flags.ethlink, "ethlink", "", "", defaultNetLink, "The ethernet link to query for the MTU that is passed to docerd. Used for tests.")
 
 	return cmd
