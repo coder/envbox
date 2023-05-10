@@ -630,9 +630,9 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		return xerrors.Errorf("make bootstrap dir: %w", err)
 	}
 
-	cpuQuota, err := xunix.ReadCPUQuota(ctx)
+	cpuQuota, err := xunix.ReadCPUQuota(ctx, blog)
 	if err != nil {
-		return xerrors.Errorf("read CPU quota: %w", err)
+		blog.Errorf("Unable to read CPU quota: %w", err)
 	}
 
 	log.Debug(ctx, "setting CPU quota",
@@ -644,7 +644,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	// so that processes inside the container know what they're working with.
 	err = dockerutil.SetContainerCPUQuota(ctx, containerID, cpuQuota.Quota, cpuQuota.Period)
 	if err != nil {
-		return xerrors.Errorf("set inner container CPU quota: %w", err)
+		blog.Errorf("Unable to set quota for inner container: %w", err)
+		blog.Errorf("This is not a fatal error, but it may cause CGroup-aware applications to misbehave.")
 	}
 
 	blog.Info("Envbox startup complete!")

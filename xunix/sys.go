@@ -9,6 +9,8 @@ import (
 
 	"github.com/spf13/afero"
 	"golang.org/x/xerrors"
+
+	"github.com/coder/envbox/buildlog"
 )
 
 type CPUQuota struct {
@@ -20,24 +22,37 @@ type CPUQuota struct {
 const (
 	CPUPeriodPathCGroupV1 = "/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_period_us"
 	CPUQuotaPathCGroupV1  = "/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us"
-	CPUMaxPathCGroupV2    = "/sys/fs/cgroup/"
 )
 
-type CGroup string
+type CGroup int
+
+func (c CGroup) String() string {
+	return [...]string{"cgroupv1", "cgroupv2"}[c]
+}
 
 const (
-	CGroupV1 CGroup = "cgroupv1"
-	CGroupV2 CGroup = "cgroupv2"
+	CGroupV1 CGroup = iota
+	CGroupV2
 )
 
-func ReadCPUQuota(ctx context.Context) (CPUQuota, error) {
-	// Try first to read the cgroupv2 version.
-	if quota, err := readCPUQuotaCGroupV2(ctx); err == nil {
-		// TODO: log this somewhere
+// ReadCPUQuota attempts to read the CFS CPU quota and period from the current
+// container context. It first attempts to read the paths relevant to cgroupv2
+// and falls back to reading the paths relevant go cgroupv1
+//
+// Relevant paths for cgroupv2:
+// - /proc/self/cgroup
+// - /sys/fs/cgroup/<self>/cpu.max
+//
+// Relevant paths for cgroupv1:
+// - /sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us
+// - /sys/fs/cgroup/cpu,cpuacct/cpu.cfs_period_us
+func ReadCPUQuota(ctx context.Context, blog buildlog.Logger) (CPUQuota, error) {
+	quota, err := readCPUQuotaCGroupV2(ctx)
+	if err == nil {
 		return quota, nil
 	}
 
-	// Fall back to cgroupv1
+	blog.Infof("Unable to read cgroupv2 quota, falling back to cgroupv1: %w", err)
 	return readCPUQuotaCGroupV1(ctx)
 }
 
@@ -80,12 +95,12 @@ func readCPUQuotaCGroupV2(ctx context.Context) (CPUQuota, error) {
 
 func readCPUQuotaCGroupV1(ctx context.Context) (CPUQuota, error) {
 	fs := GetFS(ctx)
-	periodStr, err := afero.ReadFile(fs, "/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_period_us")
+	periodStr, err := afero.ReadFile(fs, CPUPeriodPathCGroupV1)
 	if err != nil {
 		return CPUQuota{}, xerrors.Errorf("read cpu.cfs_period_us outside container: %w", err)
 	}
 
-	quotaStr, err := afero.ReadFile(fs, "/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us")
+	quotaStr, err := afero.ReadFile(fs, CPUQuotaPathCGroupV1)
 	if err != nil {
 		return CPUQuota{}, xerrors.Errorf("read cpu.cfs_quota_us outside container: %w", err)
 	}
