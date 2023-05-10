@@ -46,6 +46,7 @@ func TestDocker(t *testing.T) {
 			"--agent-token=hi",
 		)
 
+		called := make(chan struct{})
 		execer := clitest.Execer(ctx)
 		execer.AddCommands(&xunixfake.FakeCmd{
 			FakeCmd: &testingexec.FakeCmd{
@@ -53,10 +54,11 @@ func TestDocker(t *testing.T) {
 					"sysbox-mgr",
 				},
 			},
-			WaitFn: func() error { select {} }, //nolint:revive
+			WaitFn: func() error { close(called); select {} }, //nolint:revive
 		})
 
 		err := cmd.ExecuteContext(ctx)
+		<-called
 		require.NoError(t, err)
 		execer.AssertCommandsCalled(t)
 	})
@@ -618,6 +620,7 @@ func TestDocker(t *testing.T) {
 			"--disable-idmapped-mount",
 		)
 
+		called := make(chan struct{})
 		execer := clitest.Execer(ctx)
 		execer.AddCommands(&xunixfake.FakeCmd{
 			FakeCmd: &testingexec.FakeCmd{
@@ -626,10 +629,11 @@ func TestDocker(t *testing.T) {
 					"--disable-idmapped-mount",
 				},
 			},
-			WaitFn: func() error { select {} }, //nolint:revive
+			WaitFn: func() error { close(called); select {} }, //nolint:revive
 		})
 
 		err := cmd.ExecuteContext(ctx)
+		<-called
 		require.NoError(t, err)
 		execer.AssertCommandsCalled(t)
 	})
