@@ -35,4 +35,4 @@ fmt/tf:
 
 .PHONY: fmt/md
 fmt/md:
-	go run github.com/shurcooL/markdownfmt@v0.0.0-20210117162146-75134924a9fd -w ./README.md
+	go run github.com/Kunde21/markdownfmt/v3/cmd/markdownfmt@v3.1.0 -w ./README.md

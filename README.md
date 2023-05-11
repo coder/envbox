@@ -1,15 +1,12 @@
-envbox
-======
+# envbox
 
-Introduction
-------------
+## Introduction
 
 `envbox` is an image that enables creating non-privileged containers capable of running system-level software (e.g. `dockerd`, `systemd`, etc) in Kubernetes.
 
 It mainly acts as a wrapper for the excellent [sysbox runtime](https://github.com/nestybox/sysbox/) developed by [Nestybox](https://www.nestybox.com/). For more details on the security of `sysbox` containers see sysbox's [official documentation](https://github.com/nestybox/sysbox/blob/master/docs/user-guide/security.md).
 
-Envbox Configuration
---------------------
+## Envbox Configuration
 
 The environment variables can be used to configure various aspects of the inner and outer container.
 
@@ -31,12 +28,10 @@ The environment variables can be used to configure various aspects of the inner 
 | `CODER_MEMORY`                 | Dictates the max memory (in bytes) to allocate the inner container. It is recommended to set this using the Kubernetes [Downward API](https://kubernetes.io/docs/tasks/inject-data-application/environment-variable-expose-pod-information/#use-container-fields-as-values-for-environment-variables).                                                                                                                                                                          | false    |
 | `CODER_DISABLE_IDMAPPED_MOUNT` | Disables idmapped mounts in sysbox. For more information, see the [Sysbox Documentation](https://github.com/nestybox/sysbox/blob/master/docs/user-guide/configuration.md#disabling-id-mapped-mounts-on-sysbox).                                                                                                                                                                                                                                                                 | false    |
 
-Coder Template
---------------
+## Coder Template
 
 A [Coder Template](https://coder.com/docs/v2/latest/templates) can be found in the [root of the repo](./template.tf) to provide a starting point for customizing an envbox container.
 
-Development
------------
+## Development
 
 It is not possible to develop `envbox` effectively using a containerized environment (includes developing `envbox` using `envbox`). A VM, personal machine, or similar environment is required to run the [integration](./integration/) test suite.
