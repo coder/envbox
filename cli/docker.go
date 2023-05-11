@@ -637,21 +637,22 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		return xerrors.Errorf("make bootstrap dir: %w", err)
 	}
 
-	cpuQuota, err := xunix.ReadCPUQuota(ctx)
+	cpuQuota, err := xunix.ReadCPUQuota(ctx, log)
 	if err != nil {
-		return xerrors.Errorf("read CPU quota: %w", err)
-	}
+		blog.Infof("Unable to read CPU quota: %s", err.Error())
+	} else {
+		log.Debug(ctx, "setting CPU quota",
+			slog.F("quota", cpuQuota.Quota),
+			slog.F("period", cpuQuota.Period),
+			slog.F("cgroup", cpuQuota.CGroup.String()),
+		)
 
-	log.Debug(ctx, "setting CPU quota",
-		slog.F("quota", cpuQuota.Quota),
-		slog.F("period", cpuQuota.Period),
-	)
-
-	// We want the inner container to have the same limits as the outer container
-	// so that processes inside the container know what they're working with.
-	err = dockerutil.SetContainerCPUQuota(ctx, containerID, cpuQuota.Quota, cpuQuota.Period)
-	if err != nil {
-		return xerrors.Errorf("set inner container CPU quota: %w", err)
+		// We want the inner container to have the same limits as the outer container
+		// so that processes inside the container know what they're working with.
+		if err := dockerutil.SetContainerQuota(ctx, containerID, cpuQuota); err != nil {
+			blog.Infof("Unable to set quota for inner container: %s", err.Error())
+			blog.Info("This is not a fatal error, but it may cause cgroup-aware applications to misbehave.")
+		}
 	}
 
 	blog.Info("Envbox startup complete!")

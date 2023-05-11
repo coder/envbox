@@ -137,26 +137,61 @@ func BootstrapContainer(ctx context.Context, client DockerClient, conf Bootstrap
 	return nil
 }
 
-// copyCPUQuotaToInnerCGroup writes the contents of the following files to
-// their corresponding locations under cgroupBase:
-// - /sys/fs/cgroup/cpu,cpuacct/cpu.cfs_period_us
-// - /sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us
+// SetContainerQuota writes a quota to its correct location for the inner container.
+// HACK: until https://github.com/nestybox/sysbox/issues/582 is resolved, we need to copy
+// the CPU quota and period from the outer container to the inner container to ensure
+// that applications inside the container know how much CPU they have to work with.
 //
-// HACK: until https://github.com/nestybox/sysbox/issues/582 is resolved, we need to set cfs_quota_us
-// and cfs_period_us inside the container to ensure that applications inside the container know how much
-// CPU they have to work with.
-func SetContainerCPUQuota(ctx context.Context, containerID string, quota, period int) error {
+// For cgroupv2:
+// - /sys/fs/cgroup/<subpath>/init.scope/cpu.max
+//
+// For cgroupv1:
+// - /sys/fs/cgroup/cpu,cpuacct/<subpath>/syscont-cgroup-root/cpu.cfs_quota_us
+// - /sys/fs/cgroup/cpu,cpuacct/<subpath>/syscont-cgroup-root/cpu.cfs_period_us
+func SetContainerQuota(ctx context.Context, containerID string, quota xunix.CPUQuota) error {
+	switch quota.CGroup {
+	case xunix.CGroupV2:
+		return setContainerQuotaCGroupV2(ctx, containerID, quota)
+	case xunix.CGroupV1:
+		return setContainerQuotaCGroupV1(ctx, containerID, quota)
+	default:
+		return xerrors.Errorf("Unknown cgroup %d", quota.CGroup)
+	}
+}
+
+func setContainerQuotaCGroupV2(ctx context.Context, containerID string, quota xunix.CPUQuota) error {
+	var (
+		fs         = xunix.GetFS(ctx)
+		cgroupBase = fmt.Sprintf("/sys/fs/cgroup/docker/%s/init.scope/", containerID)
+	)
+
+	var content string
+	if quota.Quota < 0 {
+		content = fmt.Sprintf("max %d\n", quota.Period)
+	} else {
+		content = fmt.Sprintf("%d %d\n", quota.Quota, quota.Period)
+	}
+
+	err := afero.WriteFile(fs, filepath.Join(cgroupBase, "cpu.max"), []byte(content), 0o644)
+	if err != nil {
+		return xerrors.Errorf("write cpu.max to inner container cgroup: %w", err)
+	}
+
+	return nil
+}
+
+func setContainerQuotaCGroupV1(ctx context.Context, containerID string, quota xunix.CPUQuota) error {
 	var (
 		fs         = xunix.GetFS(ctx)
 		cgroupBase = fmt.Sprintf("/sys/fs/cgroup/cpu,cpuacct/docker/%s/syscont-cgroup-root/", containerID)
 	)
 
-	err := afero.WriteFile(fs, filepath.Join(cgroupBase, "cpu.cfs_period_us"), []byte(strconv.Itoa(period)), 0o644)
+	err := afero.WriteFile(fs, filepath.Join(cgroupBase, "cpu.cfs_period_us"), []byte(strconv.Itoa(quota.Period)), 0o644)
 	if err != nil {
 		return xerrors.Errorf("write cpu.cfs_period_us to inner container cgroup: %w", err)
 	}
 
-	err = afero.WriteFile(fs, filepath.Join(cgroupBase, "cpu.cfs_quota_us"), []byte(strconv.Itoa(quota)), 0o644)
+	err = afero.WriteFile(fs, filepath.Join(cgroupBase, "cpu.cfs_quota_us"), []byte(strconv.Itoa(quota.Quota)), 0o644)
 	if err != nil {
 		return xerrors.Errorf("write cpu.cfs_quota_us to inner container cgroup: %w", err)
 	}
