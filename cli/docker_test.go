@@ -46,8 +46,21 @@ func TestDocker(t *testing.T) {
 			"--agent-token=hi",
 		)
 
+		called := make(chan struct{})
+		execer := clitest.Execer(ctx)
+		execer.AddCommands(&xunixfake.FakeCmd{
+			FakeCmd: &testingexec.FakeCmd{
+				Argv: []string{
+					"sysbox-mgr",
+				},
+			},
+			WaitFn: func() error { close(called); select {} }, //nolint:revive
+		})
+
 		err := cmd.ExecuteContext(ctx)
+		<-called
 		require.NoError(t, err)
+		execer.AssertCommandsCalled(t)
 	})
 
 	// Test that dockerd is configured correctly.
@@ -595,6 +608,34 @@ func TestDocker(t *testing.T) {
 		err := cmd.ExecuteContext(ctx)
 		require.NoError(t, err)
 		require.True(t, called, "container create not called")
+	})
+
+	t.Run("DisableIDMappedMounts", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cmd := clitest.New(t, "docker",
+			"--image=ubuntu",
+			"--username=root",
+			"--agent-token=hi",
+			"--disable-idmapped-mount",
+		)
+
+		called := make(chan struct{})
+		execer := clitest.Execer(ctx)
+		execer.AddCommands(&xunixfake.FakeCmd{
+			FakeCmd: &testingexec.FakeCmd{
+				Argv: []string{
+					"sysbox-mgr",
+					"--disable-idmapped-mount",
+				},
+			},
+			WaitFn: func() error { close(called); select {} }, //nolint:revive
+		})
+
+		err := cmd.ExecuteContext(ctx)
+		<-called
+		require.NoError(t, err)
+		execer.AssertCommandsCalled(t)
 	})
 }
 

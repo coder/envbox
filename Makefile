@@ -35,6 +35,4 @@ fmt/tf:
 
 .PHONY: fmt/md
 fmt/md:
-	# VS Code users should check out
-	# https://github.com/mvdan/gofumpt#visual-studio-code
-	markdownfmt -w ./README.md
+	go run github.com/Kunde21/markdownfmt/v3/cmd/markdownfmt@v3.1.0 -w ./README.md
