@@ -138,6 +138,7 @@ func TestDocker(t *testing.T) {
 
 			expectedEnvs = []string{
 				"CODER_AGENT_TOKEN=hi",
+				"CODER_AGENT_SUBSYSTEM=envbox",
 				"FOO=bar",
 				"CODER_VAR=baz",
 				"bar=123",

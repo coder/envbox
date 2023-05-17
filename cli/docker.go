@@ -781,7 +781,10 @@ func parseMounts(containerMounts string) ([]xunix.Mount, error) {
 // defaultContainerEnvs returns environment variables that should always
 // be passed to the inner container.
 func defaultContainerEnvs(agentToken string) []string {
-	return []string{fmt.Sprintf("%s=%s", EnvAgentToken, agentToken)}
+	return []string{
+		fmt.Sprintf("%s=%s", EnvAgentToken, agentToken),
+		fmt.Sprintf("%s=%s", "CODER_AGENT_SUBSYSTEM", "envbox"),
+	}
 }
 
 // defaultMounts are bind mounts that are always provided to the inner
