@@ -20,6 +20,7 @@ import (
 
 	"cdr.dev/slog"
 	"cdr.dev/slog/sloggers/slogjson"
+	"github.com/coder/coder/agent"
 	"github.com/coder/coder/codersdk/agentsdk"
 	"github.com/coder/envbox/background"
 	"github.com/coder/envbox/buildlog"
@@ -783,7 +784,7 @@ func parseMounts(containerMounts string) ([]xunix.Mount, error) {
 func defaultContainerEnvs(agentToken string) []string {
 	return []string{
 		fmt.Sprintf("%s=%s", EnvAgentToken, agentToken),
-		fmt.Sprintf("%s=%s", "CODER_AGENT_SUBSYSTEM", "envbox"),
+		fmt.Sprintf("%s=%s", agent.EnvCoderAgentSubsystem, "envbox"),
 	}
 }
 

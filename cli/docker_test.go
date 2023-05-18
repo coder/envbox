@@ -22,6 +22,7 @@ import (
 	"k8s.io/mount-utils"
 	testingexec "k8s.io/utils/exec/testing"
 
+	"github.com/coder/coder/agent"
 	"github.com/coder/envbox/cli"
 	"github.com/coder/envbox/cli/clitest"
 	"github.com/coder/envbox/dockerutil"
@@ -138,13 +139,13 @@ func TestDocker(t *testing.T) {
 
 			expectedEnvs = []string{
 				"CODER_AGENT_TOKEN=hi",
-				"CODER_AGENT_SUBSYSTEM=envbox",
 				"FOO=bar",
 				"CODER_VAR=baz",
 				"bar=123",
 				"KUBERNETES_SERVICE_HOST=10.0.0.1",
 				"KUBERNETES_PORT=tcp://10.0.0.1:443",
 				"KUBERNETES_PORT_443_TCP_PORT=443",
+				fmt.Sprintf("%s=envbox", agent.EnvAgentSubsystem),
 			}
 
 			osEnvs = (append([]string{
