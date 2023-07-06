@@ -42,7 +42,7 @@ func (a AuthConfig) Base64() (string, error) {
 	if err != nil {
 		return "", xerrors.Errorf("json marshal: %w", err)
 	}
-	return base64.StdEncoding.EncodeToString(authStr), nil
+	return base64.URLEncoding.EncodeToString(authStr), nil
 }
 
 func ParseAuthConfig(raw string) (AuthConfig, error) {
