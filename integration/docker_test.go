@@ -85,6 +85,7 @@ func TestDocker(t *testing.T) {
 			binds               = integrationtest.DefaultBinds(t, tmpdir)
 			expectedMemoryLimit = "1073741824"
 			expectedCPULimit    = 1
+			expectedHostname    = "testmepls"
 		)
 
 		homeDir := filepath.Join(tmpdir, "home")
@@ -121,6 +122,7 @@ func TestDocker(t *testing.T) {
 				fmt.Sprintf("%s=%s:%s,%s:%s:ro", cli.EnvMounts, "/home/coder", "/home/coder", "/var/secrets", "/var/secrets"),
 				fmt.Sprintf("%s=%s", cli.EnvMemory, expectedMemoryLimit),
 				fmt.Sprintf("%s=%d", cli.EnvCPUs, expectedCPULimit),
+				fmt.Sprintf("%s=%s", cli.EnvInnerHostname, expectedHostname),
 			}
 		)
 
@@ -234,7 +236,7 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "1000", strings.TrimSpace(string(out)))
 
-		// Validate that the bootstrap script ran.
+		// Validate that memory limit is being applied to the inner container.
 		out, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
 			ContainerID: resource.Container.ID,
 			Cmd:         []string{"cat", "/sys/fs/cgroup/memory/memory.limit_in_bytes"},
@@ -242,7 +244,6 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expectedMemoryLimit, strings.TrimSpace(string(out)))
 
-		// Validate that the bootstrap script ran.
 		periodStr, err := integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
 			ContainerID: resource.Container.ID,
 			Cmd:         []string{"cat", "/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_period_us"},
@@ -251,7 +252,6 @@ func TestDocker(t *testing.T) {
 		period, err := strconv.ParseInt(strings.TrimSpace(string(periodStr)), 10, 64)
 		require.NoError(t, err)
 
-		// Validate that the bootstrap script ran.
 		quotaStr, err := integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
 			ContainerID: resource.Container.ID,
 			Cmd:         []string{"cat", "/sys/fs/cgroup/cpu/cpu.cfs_quota_us"},
@@ -260,8 +260,17 @@ func TestDocker(t *testing.T) {
 		quota, err := strconv.ParseInt(strings.TrimSpace(string(quotaStr)), 10, 64)
 		require.NoError(t, err)
 
+		// Validate that the CPU limit is being applied to the inner container.
 		actualLimit := float64(quota) / float64(period)
 		require.Equal(t, expectedCPULimit, int(actualLimit))
+
+		// Validate that the hostname is being set.
+		hostname, err := integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+			ContainerID: resource.Container.ID,
+			Cmd:         []string{"hostname"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, expectedHostname, strings.TrimSpace(string(hostname)))
 	})
 }
 
