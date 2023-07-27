@@ -110,13 +110,13 @@ func IntVarP(flagset *pflag.FlagSet, ptr *int, name string, shorthand string, en
 		return
 	}
 
-	vi64, err := strconv.ParseInt(val, 10, 64)
+	vi64, err := strconv.Atoi(val)
 	if err != nil {
 		flagset.IntVarP(ptr, name, shorthand, def, fmtUsage(usage, env))
 		return
 	}
 
-	flagset.IntVarP(ptr, name, shorthand, int(vi64), fmtUsage(usage, env))
+	flagset.IntVarP(ptr, name, shorthand, vi64, fmtUsage(usage, env))
 }
 
 func Bool(flagset *pflag.FlagSet, name, shorthand, env string, def bool, usage string) {
