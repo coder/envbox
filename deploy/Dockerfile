@@ -12,6 +12,9 @@ LABEL \
 
 # Basic utilities
 ARG DEBIAN_FRONTEND=noninteractive
+# Pin docker to avoid any breaking API changes between the Go client and 
+# the server.
+ARG DOCKER_VERSION="5:24.0.3-1~ubuntu.20.04~focal"
 #   Ignore other repositories, as some require HTTPS
 RUN apt-get update --quiet --option Dir::Etc::SourceParts="" && \
     apt-get upgrade -y && \
@@ -37,8 +40,8 @@ RUN apt-get update --quiet --option Dir::Etc::SourceParts="" && \
     apt-get update --quiet && \
     apt-get install --no-install-recommends --yes --quiet \
       containerd.io \
-      docker-ce \
-      docker-ce-cli && \
+      docker-ce=$DOCKER_VERSION \
+      docker-ce-cli=$DOCKER_VERSION && \
     # Delete package cache to avoid consuming space in layer
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
