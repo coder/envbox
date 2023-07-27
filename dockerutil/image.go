@@ -145,7 +145,7 @@ type ImageMetadata struct {
 }
 
 // GetImageMetadata returns metadata about an image such as the UID/GID of the
-// provided // username and whether it contains an /sbin/init that we should run.
+// provided username and whether it contains an /sbin/init that we should run.
 func GetImageMetadata(ctx context.Context, client DockerClient, image, username string) (ImageMetadata, error) {
 	// Creating a dummy container to inspect the filesystem.
 	created, err := client.ContainerCreate(ctx,
