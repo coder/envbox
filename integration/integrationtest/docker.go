@@ -20,6 +20,7 @@ import (
 
 	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/cli"
+	"github.com/coder/envbox/dockerutil"
 	"github.com/coder/retry"
 )
 
@@ -47,6 +48,7 @@ type CreateDockerCVMConfig struct {
 	Mounts          []string
 	AddFUSE         bool
 	AddTUN          bool
+	CPUs            int
 }
 
 func (c CreateDockerCVMConfig) validate(t *testing.T) {
@@ -85,6 +87,8 @@ func RunEnvbox(t *testing.T, pool *dockertest.Pool, conf *CreateDockerCVMConfig)
 	}, func(host *docker.HostConfig) {
 		host.Binds = conf.Binds
 		host.Privileged = true
+		host.CPUPeriod = int64(dockerutil.DefaultCPUPeriod)
+		host.CPUQuota = int64(conf.CPUs) * int64(dockerutil.DefaultCPUPeriod)
 	})
 	require.NoError(t, err)
 	// t.Cleanup(func() { _ = pool.Purge(resource) })

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -80,8 +81,10 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 
 		var (
-			tmpdir = integrationtest.TmpDir(t)
-			binds  = integrationtest.DefaultBinds(t, tmpdir)
+			tmpdir              = integrationtest.TmpDir(t)
+			binds               = integrationtest.DefaultBinds(t, tmpdir)
+			expectedMemoryLimit = "1073741824"
+			expectedCPULimit    = 1
 		)
 
 		homeDir := filepath.Join(tmpdir, "home")
@@ -116,6 +119,8 @@ func TestDocker(t *testing.T) {
 				"TEST_VAR=hello=world",
 				// Add a mount mapping to the inner container.
 				fmt.Sprintf("%s=%s:%s,%s:%s:ro", cli.EnvMounts, "/home/coder", "/home/coder", "/var/secrets", "/var/secrets"),
+				fmt.Sprintf("%s=%s", cli.EnvMemory, expectedMemoryLimit),
+				fmt.Sprintf("%s=%d", cli.EnvCPUs, expectedCPULimit),
 			}
 		)
 
@@ -141,6 +146,7 @@ func TestDocker(t *testing.T) {
 			AddFUSE:         true,
 			AddTUN:          true,
 			BootstrapScript: bootstrapScript,
+			CPUs:            expectedCPULimit,
 		})
 
 		// Validate that the envs are set correctly.
@@ -227,6 +233,35 @@ func TestDocker(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, "1000", strings.TrimSpace(string(out)))
+
+		// Validate that the bootstrap script ran.
+		out, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+			ContainerID: resource.Container.ID,
+			Cmd:         []string{"cat", "/sys/fs/cgroup/memory/memory.limit_in_bytes"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, expectedMemoryLimit, strings.TrimSpace(string(out)))
+
+		// Validate that the bootstrap script ran.
+		periodStr, err := integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+			ContainerID: resource.Container.ID,
+			Cmd:         []string{"cat", "/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_period_us"},
+		})
+		require.NoError(t, err)
+		period, err := strconv.ParseInt(strings.TrimSpace(string(periodStr)), 10, 64)
+		require.NoError(t, err)
+
+		// Validate that the bootstrap script ran.
+		quotaStr, err := integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+			ContainerID: resource.Container.ID,
+			Cmd:         []string{"cat", "/sys/fs/cgroup/cpu/cpu.cfs_quota_us"},
+		})
+		require.NoError(t, err)
+		quota, err := strconv.ParseInt(strings.TrimSpace(string(quotaStr)), 10, 64)
+		require.NoError(t, err)
+
+		actualLimit := float64(quota) / float64(period)
+		require.Equal(t, expectedCPULimit, int(actualLimit))
 	})
 }
 

@@ -110,7 +110,7 @@ func IntVarP(flagset *pflag.FlagSet, ptr *int, name string, shorthand string, en
 		return
 	}
 
-	vi64, err := strconv.ParseUint(val, 10, 8)
+	vi64, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
 		flagset.IntVarP(ptr, name, shorthand, def, fmtUsage(usage, env))
 		return
