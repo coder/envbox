@@ -30,7 +30,9 @@ The environment variables can be used to configure various aspects of the inner 
 
 ## Coder Template
 
-A [Coder Template](https://coder.com/docs/v2/latest/templates) can be found in the [coder/coder](https://github.com/coder/coder/tree/main/examples/templates/envbox) repo to provide a starting point for customizing an envbox container.
+A [Coder Template](https://github.com/coder/coder/tree/main/examples/templates/envbox) can be found in the [coder/coder](https://github.com/coder/coder) repo to provide a starting point for customizing an envbox container.
+
+To learn more about Coder Templates refer to the [docs](https://coder.com/docs/v2/latest/templates).
 
 ## Development
 
