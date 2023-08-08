@@ -138,7 +138,7 @@ func TestDocker(t *testing.T) {
 
 			expectedEnvs = []string{
 				"CODER_AGENT_TOKEN=hi",
-				"CODER_AGENT_SUBSYSTEM=envbox",
+				"CODER_AGENT_SUBSYSTEM=envbox,exectrace", // sorted
 				"FOO=bar",
 				"CODER_VAR=baz",
 				"bar=123",
@@ -152,6 +152,8 @@ func TestDocker(t *testing.T) {
 				"USA=yay",
 				"HOME=/root",
 				"PATH=/usr/bin:/sbin:/bin",
+				// Envbox should add to this.
+				"CODER_AGENT_SUBSYSTEM=exectrace",
 				// Don't include the wildcards.
 			}, expectedEnvs...))
 		)

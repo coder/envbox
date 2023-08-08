@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -368,7 +369,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		}
 	}
 
-	envs := defaultContainerEnvs(flags.agentToken)
+	envs := defaultContainerEnvs(ctx, flags.agentToken)
 
 	innerEnvsTokens := strings.Split(flags.innerEnvs, ",")
 	envs = append(envs, filterElements(xunix.Environ(ctx), innerEnvsTokens...)...)
@@ -780,10 +781,41 @@ func parseMounts(containerMounts string) ([]xunix.Mount, error) {
 
 // defaultContainerEnvs returns environment variables that should always
 // be passed to the inner container.
-func defaultContainerEnvs(agentToken string) []string {
+func defaultContainerEnvs(ctx context.Context, agentToken string) []string {
+	const agentSubsystemEnv = "CODER_AGENT_SUBSYSTEM"
+	env := xunix.Environ(ctx)
+	existingSubsystem := ""
+	for _, e := range env {
+		if strings.HasPrefix(e, agentSubsystemEnv+"=") {
+			existingSubsystem = strings.TrimPrefix(e, agentSubsystemEnv+"=")
+			break
+		}
+	}
+
+	// We should append to the existing agent subsystem if it exists.
+	agentSubsystem := "envbox"
+	if existingSubsystem != "" {
+		split := strings.Split(existingSubsystem, ",")
+		split = append(split, "envbox")
+
+		tidy := make([]string, 0, len(split))
+		seen := make(map[string]struct{})
+		for _, s := range split {
+			s := strings.TrimSpace(s)
+			if _, ok := seen[s]; s == "" || ok {
+				continue
+			}
+			seen[s] = struct{}{}
+			tidy = append(tidy, s)
+		}
+
+		sort.Strings(tidy)
+		agentSubsystem = strings.Join(tidy, ",")
+	}
+
 	return []string{
 		fmt.Sprintf("%s=%s", EnvAgentToken, agentToken),
-		fmt.Sprintf("%s=%s", "CODER_AGENT_SUBSYSTEM", "envbox"),
+		fmt.Sprintf("%s=%s", "CODER_AGENT_SUBSYSTEM", agentSubsystem),
 	}
 }
 
