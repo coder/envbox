@@ -17,7 +17,7 @@ The environment variables can be used to configure various aspects of the inner 
 | `CODER_AGENT_TOKEN`            | The [Coder Agent](https://coder.com/docs/v2/latest/about/architecture#agents) token to pass to the inner container.                                                                                                                                                                                                                                                                                                                                                             | True     |
 | `CODER_INNER_ENVS`             | The environment variables to pass to the inner container. A wildcard can be used to match a prefix. Ex: `CODER_INNER_ENVS=KUBERNETES_*,MY_ENV,MY_OTHER_ENV`                                                                                                                                                                                                                                                                                                                     | false    |
 | `CODER_INNER_HOSTNAME`         | The hostname to use for the inner container.                                                                                                                                                                                                                                                                                                                                                                                                                                    | false    |
-| `CODER_IMAGE_PULL_SECRET`      | The docker credentials to use when pulling the inner container. The recommended way to do this is to create an [Image Pull Secret](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#registry-secret-existing-credentials) and then reference the secret using an [environment variable](https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#define-container-environment-variables-using-secret-data). | false    |
+| `CODER_IMAGE_PULL_SECRET`      | The docker credentials to use when pulling the inner container. The recommended way to do this is to create an [Image Pull Secret](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#create-a-secret-by-providing-credentials-on-the-command-line) and then reference the secret using an [environment variable](https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#define-container-environment-variables-using-secret-data). See below for example.| false    |
 | `CODER_DOCKER_BRIDGE_CIDR`     | The bridge CIDR to start the Docker daemon with.                                                                                                                                                                                                                                                                                                                                                                                                                                | false    |
 | `CODER_MOUNTS`                 | A list of mounts to mount into the inner container. Mounts default to `rw`. Ex: `CODER_MOUNTS=/home/coder:/home/coder,/var/run/mysecret:/var/run/mysecret:ro`                                                                                                                                                                                                                                                                                                                   | false    |
 | `CODER_USR_LIB_DIR`            | The mountpoint of the host `/usr/lib` directory. Only required when using GPUs.                                                                                                                                                                                                                                                                                                                                                                                                 | false    |
@@ -37,3 +37,29 @@ To learn more about Coder Templates refer to the [docs](https://coder.com/docs/v
 ## Development
 
 It is not possible to develop `envbox` effectively using a containerized environment (includes developing `envbox` using `envbox`). A VM, personal machine, or similar environment is required to run the [integration](./integration/) test suite.
+
+## CODER_IMAGE_PULL_SECRET Kubernetes Example
+If a login is required to pull images from a private repository, create a secret following the instructions from the [Kubernetes Documentation](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#create-a-secret-by-providing-credentials-on-the-command-line) as such:
+
+
+    kubectl -n <coder namespace> create secret docker-registry regcred \
+            --docker-server=<your-registry-server> \
+            --docker-username=<your-name> \
+            --docker-password=<your-pword> \
+            --docker-email=<your-email>
+
+Then reference the secret in your template as such:
+
+
+    env {
+      name = "CODER_IMAGE_PULL_SECRET"
+      value_from {
+        secret_key_ref {
+          name = "regcred"
+          key =  ".dockerconfigjson"
+        }
+      }
+    }
+
+
+
