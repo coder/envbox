@@ -63,3 +63,25 @@ env {
   }
 }
 ```
+
+> **Note:**
+>
+> If you use external tooling to generate the secret, ensure that it is generated with the same fields as `kubectl create secret docker-registry`. You can check this with the following command:
+>
+> ```console
+> kubectl create secret docker-registry example --docker-server=registry.domain.tld --docker-username=username --docker-password=password --dry-run=client --output=json | jq -r '.data[".dockerconfigjson"]' | base64 -d | jq
+> ```
+>
+> Sample output:
+>
+> ```json
+> {
+>   "auths": {
+>     "registry.domain.tld": {
+>       "username": "username",
+>       "password": "password",
+>       "auth": "dXNlcm5hbWU6cGFzc3dvcmQ=" // base64(username:password)
+>     }
+>   }
+> }
+> ```
