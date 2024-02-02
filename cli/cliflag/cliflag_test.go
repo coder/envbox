@@ -111,7 +111,7 @@ func TestCliflag(t *testing.T) {
 	t.Run("UInt8Default", func(t *testing.T) {
 		var ptr uint8
 		flagset, name, shorthand, env, usage := randomFlag()
-		def, _ := cryptorand.Int63n(10)
+		def, _ := cryptorand.Intn(10)
 
 		cliflag.Uint8VarP(flagset, &ptr, name, shorthand, env, uint8(def), usage)
 		got, err := flagset.GetUint8(name)
@@ -124,9 +124,9 @@ func TestCliflag(t *testing.T) {
 	t.Run("UInt8EnvVar", func(t *testing.T) {
 		var ptr uint8
 		flagset, name, shorthand, env, usage := randomFlag()
-		envValue, _ := cryptorand.Int63n(10)
+		envValue, _ := cryptorand.Intn(10)
 		t.Setenv(env, strconv.FormatUint(uint64(envValue), 10))
-		def, _ := cryptorand.Int()
+		def, _ := cryptorand.Intn(10)
 
 		cliflag.Uint8VarP(flagset, &ptr, name, shorthand, env, uint8(def), usage)
 		got, err := flagset.GetUint8(name)
@@ -139,7 +139,7 @@ func TestCliflag(t *testing.T) {
 		flagset, name, shorthand, env, usage := randomFlag()
 		envValue, _ := cryptorand.String(10)
 		t.Setenv(env, envValue)
-		def, _ := cryptorand.Int63n(10)
+		def, _ := cryptorand.Intn(10)
 
 		cliflag.Uint8VarP(flagset, &ptr, name, shorthand, env, uint8(def), usage)
 		got, err := flagset.GetUint8(name)
@@ -150,7 +150,7 @@ func TestCliflag(t *testing.T) {
 	t.Run("IntDefault", func(t *testing.T) {
 		var ptr int
 		flagset, name, shorthand, env, usage := randomFlag()
-		def, _ := cryptorand.Int63n(10)
+		def, _ := cryptorand.Intn(10)
 
 		cliflag.IntVarP(flagset, &ptr, name, shorthand, env, int(def), usage)
 		got, err := flagset.GetInt(name)
@@ -163,9 +163,9 @@ func TestCliflag(t *testing.T) {
 	t.Run("IntEnvVar", func(t *testing.T) {
 		var ptr int
 		flagset, name, shorthand, env, usage := randomFlag()
-		envValue, _ := cryptorand.Int63n(10)
+		envValue, _ := cryptorand.Intn(10)
 		t.Setenv(env, strconv.FormatUint(uint64(envValue), 10))
-		def, _ := cryptorand.Int()
+		def, _ := cryptorand.Intn(10)
 
 		cliflag.IntVarP(flagset, &ptr, name, shorthand, env, def, usage)
 		got, err := flagset.GetInt(name)
@@ -178,7 +178,7 @@ func TestCliflag(t *testing.T) {
 		flagset, name, shorthand, env, usage := randomFlag()
 		envValue, _ := cryptorand.String(10)
 		t.Setenv(env, envValue)
-		def, _ := cryptorand.Int63n(10)
+		def, _ := cryptorand.Intn(10)
 
 		cliflag.IntVarP(flagset, &ptr, name, shorthand, env, int(def), usage)
 		got, err := flagset.GetInt(name)
@@ -189,12 +189,13 @@ func TestCliflag(t *testing.T) {
 	t.Run("BoolDefault", func(t *testing.T) {
 		var ptr bool
 		flagset, name, shorthand, env, usage := randomFlag()
-		def, _ := cryptorand.Bool()
+		def, _ := cryptorand.Intn(1)
+		boolDef := def == 1
 
-		cliflag.BoolVarP(flagset, &ptr, name, shorthand, env, def, usage)
+		cliflag.BoolVarP(flagset, &ptr, name, shorthand, env, boolDef, usage)
 		got, err := flagset.GetBool(name)
 		require.NoError(t, err)
-		require.Equal(t, def, got)
+		require.Equal(t, boolDef, got)
 		require.Contains(t, flagset.FlagUsages(), usage)
 		require.Contains(t, flagset.FlagUsages(), fmt.Sprintf("Consumes $%s", env))
 	})
@@ -202,9 +203,12 @@ func TestCliflag(t *testing.T) {
 	t.Run("BoolEnvVar", func(t *testing.T) {
 		var ptr bool
 		flagset, name, shorthand, env, usage := randomFlag()
-		envValue, _ := cryptorand.Bool()
+		num, _ := cryptorand.Intn(1)
+		envValue := num == 1
 		t.Setenv(env, strconv.FormatBool(envValue))
-		def, _ := cryptorand.Bool()
+		defNum, _ := cryptorand.Intn(1)
+
+		def := defNum == 1
 
 		cliflag.BoolVarP(flagset, &ptr, name, shorthand, env, def, usage)
 		got, err := flagset.GetBool(name)
@@ -217,8 +221,8 @@ func TestCliflag(t *testing.T) {
 		flagset, name, shorthand, env, usage := randomFlag()
 		envValue, _ := cryptorand.String(10)
 		t.Setenv(env, envValue)
-		def, _ := cryptorand.Bool()
-
+		defNum, _ := cryptorand.Intn(1)
+		def := defNum == 1
 		cliflag.BoolVarP(flagset, &ptr, name, shorthand, env, def, usage)
 		got, err := flagset.GetBool(name)
 		require.NoError(t, err)
@@ -228,7 +232,7 @@ func TestCliflag(t *testing.T) {
 	t.Run("DurationDefault", func(t *testing.T) {
 		var ptr time.Duration
 		flagset, name, shorthand, env, usage := randomFlag()
-		def, _ := cryptorand.Duration()
+		def := time.Duration(10 * time.Second)
 
 		cliflag.DurationVarP(flagset, &ptr, name, shorthand, env, def, usage)
 		got, err := flagset.GetDuration(name)
@@ -241,9 +245,9 @@ func TestCliflag(t *testing.T) {
 	t.Run("DurationEnvVar", func(t *testing.T) {
 		var ptr time.Duration
 		flagset, name, shorthand, env, usage := randomFlag()
-		envValue, _ := cryptorand.Duration()
+		envValue := time.Duration(10 * time.Second)
 		t.Setenv(env, envValue.String())
-		def, _ := cryptorand.Duration()
+		def := time.Duration(10 * time.Minute)
 
 		cliflag.DurationVarP(flagset, &ptr, name, shorthand, env, def, usage)
 		got, err := flagset.GetDuration(name)
@@ -256,7 +260,7 @@ func TestCliflag(t *testing.T) {
 		flagset, name, shorthand, env, usage := randomFlag()
 		envValue, _ := cryptorand.String(10)
 		t.Setenv(env, envValue)
-		def, _ := cryptorand.Duration()
+		def := time.Duration(10 * time.Minute)
 
 		cliflag.DurationVarP(flagset, &ptr, name, shorthand, env, def, usage)
 		got, err := flagset.GetDuration(name)
