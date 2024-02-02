@@ -152,10 +152,10 @@ func TestCliflag(t *testing.T) {
 		flagset, name, shorthand, env, usage := randomFlag()
 		def, _ := cryptorand.Intn(10)
 
-		cliflag.IntVarP(flagset, &ptr, name, shorthand, env, int(def), usage)
+		cliflag.IntVarP(flagset, &ptr, name, shorthand, env, def, usage)
 		got, err := flagset.GetInt(name)
 		require.NoError(t, err)
-		require.Equal(t, int(def), got)
+		require.Equal(t, def, got)
 		require.Contains(t, flagset.FlagUsages(), usage)
 		require.Contains(t, flagset.FlagUsages(), fmt.Sprintf("Consumes $%s", env))
 	})
@@ -170,7 +170,7 @@ func TestCliflag(t *testing.T) {
 		cliflag.IntVarP(flagset, &ptr, name, shorthand, env, def, usage)
 		got, err := flagset.GetInt(name)
 		require.NoError(t, err)
-		require.Equal(t, int(envValue), got)
+		require.Equal(t, envValue, got)
 	})
 
 	t.Run("IntFailParse", func(t *testing.T) {
@@ -180,10 +180,10 @@ func TestCliflag(t *testing.T) {
 		t.Setenv(env, envValue)
 		def, _ := cryptorand.Intn(10)
 
-		cliflag.IntVarP(flagset, &ptr, name, shorthand, env, int(def), usage)
+		cliflag.IntVarP(flagset, &ptr, name, shorthand, env, def, usage)
 		got, err := flagset.GetInt(name)
 		require.NoError(t, err)
-		require.Equal(t, int(def), got)
+		require.Equal(t, def, got)
 	})
 
 	t.Run("BoolDefault", func(t *testing.T) {
@@ -232,7 +232,7 @@ func TestCliflag(t *testing.T) {
 	t.Run("DurationDefault", func(t *testing.T) {
 		var ptr time.Duration
 		flagset, name, shorthand, env, usage := randomFlag()
-		def := time.Duration(10 * time.Second)
+		def := 10 * time.Second
 
 		cliflag.DurationVarP(flagset, &ptr, name, shorthand, env, def, usage)
 		got, err := flagset.GetDuration(name)
@@ -245,9 +245,9 @@ func TestCliflag(t *testing.T) {
 	t.Run("DurationEnvVar", func(t *testing.T) {
 		var ptr time.Duration
 		flagset, name, shorthand, env, usage := randomFlag()
-		envValue := time.Duration(10 * time.Second)
+		envValue := 10 * time.Second
 		t.Setenv(env, envValue.String())
-		def := time.Duration(10 * time.Minute)
+		def := 10 * time.Minute
 
 		cliflag.DurationVarP(flagset, &ptr, name, shorthand, env, def, usage)
 		got, err := flagset.GetDuration(name)
@@ -260,7 +260,7 @@ func TestCliflag(t *testing.T) {
 		flagset, name, shorthand, env, usage := randomFlag()
 		envValue, _ := cryptorand.String(10)
 		t.Setenv(env, envValue)
-		def := time.Duration(10 * time.Minute)
+		def := 10 * time.Minute
 
 		cliflag.DurationVarP(flagset, &ptr, name, shorthand, env, def, usage)
 		got, err := flagset.GetDuration(name)
