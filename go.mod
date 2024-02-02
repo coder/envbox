@@ -13,7 +13,7 @@ require (
 	cdr.dev/slog v1.5.4
 	github.com/coder/coder v0.27.3
 	github.com/coder/retry v1.4.0
-	github.com/docker/docker v23.0.3+incompatible
+	github.com/docker/docker v23.0.8+incompatible
 	github.com/opencontainers/image-spec v1.1.0-rc2
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/quasilyte/go-ruleguard/dsl v0.3.22
