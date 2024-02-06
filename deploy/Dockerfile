@@ -67,8 +67,14 @@ RUN useradd coder \
       --add-subuids 100000-165535 \
       --add-subgids 100000-165535
 
+# DEBUG SHIT
+RUN apt update && apt install amazon-ecr-credential-helper && mkdir /root/.docker
+ADD config.json /root/.docker/config.json
+#
+
 # Do this last so hotswapping is fast!
 ARG ENVBOX_BIN=envbox
 COPY $ENVBOX_BIN /
+
 
 CMD ["/envbox"]
