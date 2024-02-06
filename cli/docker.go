@@ -15,6 +15,7 @@ import (
 
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/slices"
 	"golang.org/x/xerrors"
@@ -366,6 +367,26 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		dockerAuth, err = dockerutil.ParseAuthConfig(flags.imagePullSecret)
 		if err != nil {
 			return xerrors.Errorf("parse auth config: %w", err)
+		}
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return xerrors.Errorf("home dir: %w", err)
+	}
+
+	configPath := filepath.Join(home, ".docker/config.json")
+
+	log.Info(ctx, "checking for docker config file", slog.F("path", configPath))
+	if _, err := os.Stat(configPath); err == nil {
+		log.Info(ctx, "detected file", slog.F("image", flags.innerImage))
+		ref, err := name.NewTag(flags.innerImage)
+		if err != nil {
+			return xerrors.Errorf("parse ref: %w", err)
+		}
+		dockerAuth, err = dockerutil.AuthConfigFromPath(configPath, ref.RegistryStr())
+		if err != nil && !xerrors.Is(err, os.ErrNotExist) {
+			return xerrors.Errorf("auth config from file: %w", err)
 		}
 	}
 

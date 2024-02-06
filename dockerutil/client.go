@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"os"
 
+	"github.com/cpuguy83/dockercfg"
 	dockertypes "github.com/docker/docker/api/types"
 	dockerclient "github.com/docker/docker/client"
+
 	"golang.org/x/xerrors"
 )
 
@@ -43,6 +46,39 @@ func (a AuthConfig) Base64() (string, error) {
 		return "", xerrors.Errorf("json marshal: %w", err)
 	}
 	return base64.URLEncoding.EncodeToString(authStr), nil
+}
+
+func AuthConfigFromPath(path string, registry string) (AuthConfig, error) {
+	var config dockercfg.Config
+	err := dockercfg.FromFile(path, &config)
+	if err != nil {
+		return AuthConfig{}, xerrors.Errorf("load config: %w", err)
+	}
+
+	hostname := dockercfg.ResolveRegistryHost(registry)
+
+	if config, ok := config.AuthConfigs[registry]; ok {
+		return AuthConfig(config), nil
+	}
+
+	username, secret, err := config.GetRegistryCredentials(hostname)
+	if err != nil {
+		return AuthConfig{}, xerrors.Errorf("get credentials from helper: %w", err)
+	}
+
+	if secret != "" {
+		if username == "" {
+			return AuthConfig{
+				IdentityToken: secret,
+			}, nil
+		}
+		return AuthConfig{
+			Username: username,
+			Password: secret,
+		}, nil
+	}
+
+	return AuthConfig{}, xerrors.Errorf("no auth config found for registry %s: %w", registry, os.ErrNotExist)
 }
 
 func ParseAuthConfig(raw string) (AuthConfig, error) {

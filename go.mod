@@ -13,7 +13,10 @@ require (
 	cdr.dev/slog v1.5.4
 	github.com/coder/coder v0.27.3
 	github.com/coder/retry v1.4.0
+	github.com/cpuguy83/dockercfg v0.3.1
 	github.com/docker/docker v23.0.3+incompatible
+	github.com/docker/docker-credential-helpers v0.6.4
+	github.com/google/go-containerregistry v0.9.0
 	github.com/opencontainers/image-spec v1.1.0-rc2
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/quasilyte/go-ruleguard/dsl v0.3.22
@@ -121,7 +124,6 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/sys/mountinfo v0.6.2 // indirect
 	github.com/moby/term v0.5.0 // indirect
-	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.15.1 // indirect
 	github.com/open-policy-agent/opa v0.51.0 // indirect
