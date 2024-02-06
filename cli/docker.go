@@ -99,6 +99,7 @@ var (
 	EnvMemory               = "CODER_MEMORY"
 	EnvAddGPU               = "CODER_ADD_GPU"
 	EnvUsrLibDir            = "CODER_USR_LIB_DIR"
+	EnvDockerConfig         = "CODER_DOCKER_CONFIG"
 	EnvDebug                = "CODER_DEBUG"
 	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
 )
@@ -134,6 +135,7 @@ type flags struct {
 	boostrapScript       string
 	containerMounts      string
 	hostUsrLibDir        string
+	dockerConfig         string
 	cpus                 int
 	memory               int
 	disableIDMappedMount bool
@@ -337,6 +339,7 @@ func dockerCmd() *cobra.Command {
 	cliflag.StringVarP(cmd.Flags(), &flags.boostrapScript, "boostrap-script", "", EnvBootstrap, "", "The script to use to bootstrap the container. This should typically install and start the agent.")
 	cliflag.StringVarP(cmd.Flags(), &flags.containerMounts, "mounts", "", EnvMounts, "", "Comma separated list of mounts in the form of '<source>:<target>[:options]' (e.g. /var/lib/docker:/var/lib/docker:ro,/usr/src:/usr/src).")
 	cliflag.StringVarP(cmd.Flags(), &flags.hostUsrLibDir, "usr-lib-dir", "", EnvUsrLibDir, "", "The host /usr/lib mountpoint. Used to detect GPU drivers to mount into inner container.")
+	cliflag.StringVarP(cmd.Flags(), &flags.dockerConfig, "docker-config", "", EnvDockerConfig, "/root/.docker/config.json", "The path to the docker config to consult when pulling an image.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.addTUN, "add-tun", "", EnvAddTun, false, "Add a TUN device to the inner container.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.addFUSE, "add-fuse", "", EnvAddFuse, false, "Add a FUSE device to the inner container.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.addGPU, "add-gpu", "", EnvAddGPU, false, "Add detected GPUs to the inner container.")
@@ -370,21 +373,14 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		}
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return xerrors.Errorf("home dir: %w", err)
-	}
-
-	configPath := filepath.Join(home, ".docker/config.json")
-
-	log.Info(ctx, "checking for docker config file", slog.F("path", configPath))
-	if _, err := os.Stat(configPath); err == nil {
+	log.Info(ctx, "checking for docker config file", slog.F("path", flags.dockerConfig))
+	if _, err := fs.Stat(flags.dockerConfig); err == nil {
 		log.Info(ctx, "detected file", slog.F("image", flags.innerImage))
 		ref, err := name.NewTag(flags.innerImage)
 		if err != nil {
 			return xerrors.Errorf("parse ref: %w", err)
 		}
-		dockerAuth, err = dockerutil.AuthConfigFromPath(configPath, ref.RegistryStr())
+		dockerAuth, err = dockerutil.AuthConfigFromPath(flags.dockerConfig, ref.RegistryStr())
 		if err != nil && !xerrors.Is(err, os.ErrNotExist) {
 			return xerrors.Errorf("auth config from file: %w", err)
 		}
