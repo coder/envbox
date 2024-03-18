@@ -8,12 +8,12 @@ import (
 )
 
 // WaitForDaemon waits for a Docker daemon to startup. It waits a max
-// of 30s before giving up.
+// of 5m before giving up.
 func WaitForDaemon(ctx context.Context, client DockerClient) error {
 	ticker := time.NewTicker(time.Millisecond * 250)
 	defer ticker.Stop()
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
+	ctx, cancel := context.WithTimeout(ctx, time.Minute*5)
 	defer cancel()
 
 	pingCtx, cancel := context.WithTimeout(ctx, time.Second)
