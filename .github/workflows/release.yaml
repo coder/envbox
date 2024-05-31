@@ -79,10 +79,15 @@ jobs:
       - name: Tag Image
         run: docker tag envbox ghcr.io/coder/envbox:${{ github.event.inputs.version }}
 
+      - name: Push Image
+        run: docker push ghcr.io/coder/envbox:${{ github.event.inputs.version }}
+  tag:
+    runs-on: ubuntu-22.04
+    needs: release 
+    steps:
       - name: Tag and Push Commit
         run: |
           git tag -a ${{ github.event.inputs.version }} -m ${{ github.event.inputs.version }}
           git push --tags
 
-      - name: Push Image
-        run: docker push ghcr.io/coder/envbox:${{ github.event.inputs.version }}
+
