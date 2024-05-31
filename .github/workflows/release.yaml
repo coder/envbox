@@ -25,7 +25,17 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        os: ["ubuntu-22.04", "depot-ubuntu-22.04-arm"]
+        include:
+          - os: ubuntu-22.04
+            arch: linux/amd64
+            sha: cfce811006a27305071b1634ca8fe690392f5dcc205612e7b4e5bde411b7701e
+          - os: depot-ubuntu-22.04-arm
+            arch: linux/arm64
+            sha: 4b475e7e7eed79708b2707a67d556a5d3c0bdaef0a1f341311d095d1b4b3e271
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Docker Login
         uses: docker/login-action@v2
@@ -64,7 +74,7 @@ jobs:
           git config --global user.name "Coder CI"
 
       - name: Build Image
-        run: make -j build/image/envbox
+        run: make -j ARCH=${{ matrix.arch }} SYSBOX_SHA=${{ matrix.sha }} build/image/envbox
 
       - name: Tag Image
         run: docker tag envbox ghcr.io/coder/envbox:${{ github.event.inputs.version }}

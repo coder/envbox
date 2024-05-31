@@ -1,5 +1,10 @@
-# Ubuntu 20.04 LTS (Focal Fossa)
-FROM ubuntu:focal
+# Ubuntu 22.04 LTS (Jammy Jellyfish)
+FROM ubuntu:jammy
+
+ARG TARGETARCH
+ARG SYSBOX_SHA="cfce811006a27305071b1634ca8fe690392f5dcc205612e7b4e5bde411b7701e"
+ARG SYSBOX_VERSION="0.6.3"
+ARG SYSBOX_DEB="sysbox-ce_$SYSBOX_VERSION-0.linux_$TARGETARCH.deb"
 
 # Copy configuration files to appropriate locations
 COPY files /
@@ -14,7 +19,7 @@ LABEL \
 ARG DEBIAN_FRONTEND=noninteractive
 # Pin docker to avoid any breaking API changes between the Go client and 
 # the server.
-ARG DOCKER_VERSION="5:24.0.3-1~ubuntu.20.04~focal"
+ARG DOCKER_VERSION="5:24.0.3-1~ubuntu.22.04~jammy"
 #   Ignore other repositories, as some require HTTPS
 RUN apt-get update --quiet --option Dir::Etc::SourceParts="" && \
     apt-get upgrade -y && \
@@ -46,10 +51,10 @@ RUN apt-get update --quiet --option Dir::Etc::SourceParts="" && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN wget https://downloads.nestybox.com/sysbox/releases/v0.6.3/sysbox-ce_0.6.3-0.linux_amd64.deb && \
-  echo "cfce811006a27305071b1634ca8fe690392f5dcc205612e7b4e5bde411b7701e sysbox-ce_0.6.3-0.linux_amd64.deb" | sha256sum --check --status && \
-  apt install -y ./sysbox-ce_0.6.3-0.linux_amd64.deb && \
-  rm ./sysbox-ce_0.6.3-0.linux_amd64.deb && \
+RUN wget https://downloads.nestybox.com/sysbox/releases/v$SYSBOX_VERSION/$SYSBOX_DEB && \
+  echo "$SYSBOX_SHA $SYSBOX_DEB" | sha256sum --check --status && \
+  apt install -y "./$SYSBOX_DEB" && \
+  rm "./$SYSBOX_DEB" && \
   userdel -r sysbox
 
 # This is jank but sysbox adds their own /etc/docker/daemon.json that overwrites ours when it gets installed,
