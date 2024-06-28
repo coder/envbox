@@ -59,9 +59,10 @@ func (j JSONLogger) log(jlog JSONLog) {
 	}
 }
 
-func (j JSONLogger) Close() {
+func (j JSONLogger) Close() error {
 	j.log(JSONLog{
 		Type: JSONLogTypeDone,
 		Time: time.Now(),
 	})
+	return nil
 }

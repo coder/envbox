@@ -3,10 +3,16 @@ package buildlog
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/url"
 	"time"
 
 	"cdr.dev/slog"
-	"github.com/coder/coder/codersdk/agentsdk"
+	"github.com/coder/coder/v2/agent/proto"
+	"github.com/coder/coder/v2/codersdk"
+	"github.com/coder/coder/v2/codersdk/agentsdk"
+	"github.com/google/uuid"
+	"golang.org/x/xerrors"
 )
 
 const (
@@ -22,7 +28,74 @@ type StartupLog struct {
 }
 
 type CoderClient interface {
-	PatchStartupLogs(ctx context.Context, req agentsdk.PatchStartupLogs) error
+	Send(level codersdk.LogLevel, log string)
+	io.Closer
+}
+
+type coderClient struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	source uuid.UUID
+	ls     *agentsdk.LogSender
+	sl     agentsdk.ScriptLogger
+	log    slog.Logger
+}
+
+func (c *coderClient) Send(level codersdk.LogLevel, log string) {
+	err := c.sl.Send(c.ctx, agentsdk.Log{
+		CreatedAt: time.Now(),
+		Output:    log,
+		Level:     level,
+	})
+	if err != nil {
+		c.log.Error(c.ctx, "send build log",
+			slog.F("log", log),
+			slog.Error(err),
+		)
+	}
+}
+
+func (c *coderClient) Close() error {
+	defer c.cancel()
+	c.ls.Flush(c.source)
+	err := c.ls.WaitUntilEmpty(c.ctx)
+	if err != nil {
+		return xerrors.Errorf("wait until empty: %w", err)
+	}
+	return nil
+}
+
+func OpenCoderClient(ctx context.Context, accessURL *url.URL, logger slog.Logger, token string) (CoderClient, error) {
+	client := agentsdk.New(accessURL)
+	client.SetSessionToken(token)
+
+	cctx, cancel := context.WithCancel(ctx)
+	uid := uuid.New()
+	ls := agentsdk.NewLogSender(logger)
+	sl := ls.GetScriptLogger(uid)
+
+	conn, err := client.ConnectRPC(ctx)
+	if err != nil {
+		cancel()
+		return nil, xerrors.Errorf("connect rpc: %w", err)
+	}
+
+	arpc := proto.NewDRPCAgentClient(conn)
+	go func() {
+		err := ls.SendLoop(ctx, arpc)
+		if err != nil {
+			logger.Error(ctx, "send loop", slog.Error(err))
+		}
+	}()
+
+	return &coderClient{
+		ctx:    cctx,
+		cancel: cancel,
+		source: uid,
+		ls:     ls,
+		sl:     sl,
+		log:    logger,
+	}, nil
 }
 
 type CoderLogger struct {
@@ -34,18 +107,12 @@ type CoderLogger struct {
 	err     error
 }
 
-func OpenCoderLogger(ctx context.Context, client CoderClient, log slog.Logger) Logger {
-	ctx, cancel := context.WithCancel(ctx)
-
+func OpenCoderLogger(client CoderClient, log slog.Logger) Logger {
 	coder := &CoderLogger{
-		ctx:     ctx,
-		cancel:  cancel,
 		client:  client,
 		logger:  log,
 		logChan: make(chan string),
 	}
-
-	go coder.processLogs()
 
 	return coder
 }
@@ -55,7 +122,7 @@ func (c *CoderLogger) Infof(format string, a ...any) {
 }
 
 func (c *CoderLogger) Info(output string) {
-	c.log(output)
+	c.log(codersdk.LogLevelInfo, output)
 }
 
 func (c *CoderLogger) Errorf(format string, a ...any) {
@@ -63,14 +130,11 @@ func (c *CoderLogger) Errorf(format string, a ...any) {
 }
 
 func (c *CoderLogger) Error(output string) {
-	c.log("ERROR: " + output)
+	c.log(codersdk.LogLevelError, output)
 }
 
-func (c *CoderLogger) log(output string) {
-	if c.err != nil {
-		return
-	}
-	c.logChan <- output
+func (c *CoderLogger) log(level codersdk.LogLevel, output string) {
+	c.client.Send(level, output)
 }
 
 func (c *CoderLogger) Write(p []byte) (int, error) {
@@ -78,61 +142,6 @@ func (c *CoderLogger) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (c *CoderLogger) Close() {
-	c.cancel()
-}
-
-func (c *CoderLogger) processLogs() {
-	for {
-		var (
-			line string
-			logs = make([]agentsdk.StartupLog, 0, CoderLoggerMaxLogs)
-		)
-
-		select {
-		case line = <-c.logChan:
-			lines := cutString(line, MaxCoderLogSize)
-
-			for _, output := range lines {
-				logs = append(logs, agentsdk.StartupLog{
-					CreatedAt: time.Now(),
-					Output:    output,
-				})
-			}
-
-		case <-c.ctx.Done():
-			close(c.logChan)
-			return
-		}
-
-		// Send the logs in a goroutine so that we can avoid blocking
-		// too long on the channel.
-		cpLogs := logs
-		go func(startupLogs []agentsdk.StartupLog) {
-			err := c.client.PatchStartupLogs(c.ctx, agentsdk.PatchStartupLogs{
-				Logs: startupLogs,
-			})
-			if err != nil {
-				c.logger.Error(c.ctx, "send startup logs", slog.Error(err))
-			}
-		}(cpLogs)
-	}
-}
-
-// cutString cuts a string up into smaller strings that have a len no greater
-// than the provided max size.
-// If the string is less than the max size the return slice has one
-// element with a value of the provided string.
-func cutString(s string, maxSize int) []string {
-	if len(s) <= maxSize {
-		return []string{s}
-	}
-
-	toks := []string{}
-	for len(s) > maxSize {
-		toks = append(toks, s[:maxSize])
-		s = s[maxSize:]
-	}
-
-	return append(toks, s)
+func (c *CoderLogger) Close() error {
+	return c.client.Close()
 }

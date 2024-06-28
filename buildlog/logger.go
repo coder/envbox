@@ -10,7 +10,7 @@ type Logger interface {
 	Infof(format string, a ...any)
 	Error(output string)
 	Errorf(format string, a ...any)
-	Close()
+	Close() error
 	io.Writer
 }
 
@@ -47,10 +47,12 @@ func (m multiLogger) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (m multiLogger) Close() {
+func (m multiLogger) Close() error {
 	for _, log := range m.loggers {
 		log.Close()
 	}
+
+	return nil
 }
 
 type NopLogger struct{}
@@ -60,4 +62,4 @@ func (NopLogger) Infof(string, ...any)      {}
 func (NopLogger) Errorf(string, ...any)     {}
 func (NopLogger) Error(string)              {}
 func (NopLogger) Write([]byte) (int, error) { return 0, nil }
-func (NopLogger) Close()                    {}
+func (NopLogger) Close() error              { return nil }
