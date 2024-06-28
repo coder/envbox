@@ -472,43 +472,13 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		if flags.hostUsrLibDir == "" {
 			return xerrors.Errorf("when using GPUs, %q must be specified", EnvUsrLibDir)
 		}
+
 		// Unmount GPU drivers in /proc as it causes issues when creating any
 		// container in some cases (even the image metadata container).
 		_, err = xunix.TryUnmountProcGPUDrivers(ctx, log)
 		if err != nil {
 			return xerrors.Errorf("unmount /proc GPU drivers: %w", err)
 		}
-
-		devs, binds, err := xunix.GPUs(ctx, log, flags.hostUsrLibDir)
-		if err != nil {
-			return xerrors.Errorf("find gpus: %w", err)
-		}
-
-		for _, dev := range devs {
-			devices = append(devices, container.DeviceMapping{
-				PathOnHost:        dev.Path,
-				PathInContainer:   dev.Path,
-				CgroupPermissions: "rwm",
-			})
-		}
-
-		for _, bind := range binds {
-			// If the bind has a path that points to the host-mounted /usr/lib
-			// directory we need to remap it to /usr/lib inside the container.
-			mountpoint := bind.Path
-			if strings.HasPrefix(mountpoint, flags.hostUsrLibDir) {
-				mountpoint = filepath.Join(
-					"/usr/lib",
-					strings.TrimPrefix(mountpoint, strings.TrimSuffix(flags.hostUsrLibDir, "/")),
-				)
-			}
-			mounts = append(mounts, xunix.Mount{
-				Source:     bind.Path,
-				Mountpoint: mountpoint,
-				ReadOnly:   slices.Contains(bind.Opts, "ro"),
-			})
-		}
-		envs = append(envs, xunix.GPUEnvs(ctx)...)
 	}
 
 	log.Debug(ctx, "fetching image metadata",
@@ -596,6 +566,39 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		if err != nil {
 			return xerrors.Errorf("chown mountpoint %q: %w", m.Source, err)
 		}
+	}
+
+	if flags.addGPU {
+		devs, binds, err := xunix.GPUs(ctx, log, flags.hostUsrLibDir)
+		if err != nil {
+			return xerrors.Errorf("find gpus: %w", err)
+		}
+
+		for _, dev := range devs {
+			devices = append(devices, container.DeviceMapping{
+				PathOnHost:        dev.Path,
+				PathInContainer:   dev.Path,
+				CgroupPermissions: "rwm",
+			})
+		}
+
+		for _, bind := range binds {
+			// If the bind has a path that points to the host-mounted /usr/lib
+			// directory we need to remap it to /usr/lib inside the container.
+			mountpoint := bind.Path
+			if strings.HasPrefix(mountpoint, flags.hostUsrLibDir) {
+				mountpoint = filepath.Join(
+					"/usr/lib",
+					strings.TrimPrefix(mountpoint, strings.TrimSuffix(flags.hostUsrLibDir, "/")),
+				)
+			}
+			mounts = append(mounts, xunix.Mount{
+				Source:     bind.Path,
+				Mountpoint: mountpoint,
+				ReadOnly:   slices.Contains(bind.Opts, "ro"),
+			})
+		}
+		envs = append(envs, xunix.GPUEnvs(ctx)...)
 	}
 
 	blog.Info("Creating workspace...")

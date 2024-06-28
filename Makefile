@@ -1,6 +1,8 @@
 PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
 GO_FILES := $(shell git ls-files '*.go' '*.sum')
 IMAGE_FILES := $(shell find deploy)
+ARCH ?= linux/amd64
+SYSBOX_SHA ?= cfce811006a27305071b1634ca8fe690392f5dcc205612e7b4e5bde411b7701e
 
 .PHONY: clean
 clean:
@@ -15,7 +17,7 @@ build/image/envbox: build/image/envbox/.ctx
 build/image/envbox/.ctx: build/envbox $(IMAGE_FILES)
 	mkdir -p $(@D)
 	cp -r build/envbox deploy/. $(@D)
-	docker build -t envbox $(@D)
+	docker buildx build --build-arg SYSBOX_SHA=$(SYSBOX_SHA) -t envbox --platform $(ARCH) $(@D)
 	touch $@
 
 .PHONY: fmt
