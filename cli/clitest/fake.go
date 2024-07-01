@@ -41,7 +41,7 @@ func NewFakeExecer() *xunixfake.FakeExec {
 func NewFakeDockerClient() dockerutil.DockerClient {
 	client := &dockerfake.MockClient{}
 
-	client.ContainerInspectFn = func(_ context.Context, container string) (dockertypes.ContainerJSON, error) {
+	client.ContainerInspectFn = func(_ context.Context, _ string) (dockertypes.ContainerJSON, error) {
 		return dockertypes.ContainerJSON{
 			ContainerJSONBase: &dockertypes.ContainerJSONBase{
 				GraphDriver: dockertypes.GraphDriverData{
@@ -51,7 +51,7 @@ func NewFakeDockerClient() dockerutil.DockerClient {
 		}, nil
 	}
 
-	client.ContainerExecAttachFn = func(_ context.Context, execID string, config dockertypes.ExecStartCheck) (dockertypes.HijackedResponse, error) {
+	client.ContainerExecAttachFn = func(_ context.Context, _ string, _ dockertypes.ExecStartCheck) (dockertypes.HijackedResponse, error) {
 		return dockertypes.HijackedResponse{
 			Reader: bufio.NewReader(strings.NewReader("root:x:0:0:root:/root:/bin/bash")),
 			Conn:   &net.IPConn{},

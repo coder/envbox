@@ -3,6 +3,8 @@ package buildlog
 import (
 	"fmt"
 	"io"
+
+	"golang.org/x/xerrors"
 )
 
 type Logger interface {
@@ -48,8 +50,18 @@ func (m multiLogger) Write(p []byte) (int, error) {
 }
 
 func (m multiLogger) Close() error {
+	var errs error
 	for _, log := range m.loggers {
-		log.Close()
+		if err := log.Close(); err != nil {
+			if errs == nil {
+				errs = err
+			} else {
+				errs = xerrors.Errorf("%v: %w", errs.Error(), err)
+			}
+		}
+	}
+	if errs != nil {
+		return xerrors.Errorf("close: %w", errs)
 	}
 
 	return nil

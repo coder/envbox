@@ -7,14 +7,15 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/google/uuid"
+	"golang.org/x/xerrors"
+	"storj.io/drpc"
+
 	"cdr.dev/slog"
 	"github.com/coder/coder/v2/agent/proto"
 	"github.com/coder/coder/v2/codersdk"
 	"github.com/coder/coder/v2/codersdk/agentsdk"
 	"github.com/coder/retry"
-	"github.com/google/uuid"
-	"golang.org/x/xerrors"
-	"storj.io/drpc"
 )
 
 const (
@@ -109,7 +110,6 @@ func OpenCoderClient(ctx context.Context, accessURL *url.URL, logger slog.Logger
 
 type CoderLogger struct {
 	ctx    context.Context
-	cancel context.CancelFunc
 	client CoderClient
 	logger slog.Logger
 }

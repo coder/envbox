@@ -634,9 +634,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	blog.Info("Starting up workspace...")
 	err = client.ContainerStart(ctx, containerID, dockertypes.ContainerStartOptions{})
 	if err != nil {
-		if err != nil {
-			return xerrors.Errorf("start container: %w", err)
-		}
+		return xerrors.Errorf("start container: %w", err)
 	}
 
 	log.Debug(ctx, "creating bootstrap directory", slog.F("directory", imgMeta.HomeDir))

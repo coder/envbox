@@ -29,6 +29,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	k8s.io/mount-utils v0.26.2
 	k8s.io/utils v0.0.0-20230406110748-d93618cff8a2
+	storj.io/drpc v0.0.33
 )
 
 require (
@@ -215,6 +216,5 @@ require (
 	inet.af/peercred v0.0.0-20210906144145-0893ea02156a // indirect
 	k8s.io/klog/v2 v2.100.1 // indirect
 	nhooyr.io/websocket v1.8.7 // indirect
-	storj.io/drpc v0.0.33 // indirect
 	tailscale.com v1.46.1 // indirect
 )
