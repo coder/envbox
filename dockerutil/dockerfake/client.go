@@ -22,7 +22,7 @@ var _ dockerutil.DockerClient = MockClient{}
 // MockClient provides overrides for functions that are called in envbox.
 type MockClient struct {
 	ImagePullFn            func(_ context.Context, ref string, options dockertypes.ImagePullOptions) (io.ReadCloser, error)
-	ContainerCreateFn      func(_ context.Context, config *containertypes.Config, hostConfig *containertypes.HostConfig, networkingConfig *networktypes.NetworkingConfig, _ *specs.Platform, containerName string) (containertypes.ContainerCreateCreatedBody, error)
+	ContainerCreateFn      func(_ context.Context, config *containertypes.Config, hostConfig *containertypes.HostConfig, networkingConfig *networktypes.NetworkingConfig, _ *specs.Platform, containerName string) (containertypes.CreateResponse, error)
 	ImagePruneFn           func(_ context.Context, pruneFilter filters.Args) (dockertypes.ImagesPruneReport, error)
 	ContainerStartFn       func(_ context.Context, container string, options dockertypes.ContainerStartOptions) error
 	ContainerExecAttachFn  func(_ context.Context, execID string, config dockertypes.ExecStartCheck) (dockertypes.HijackedResponse, error)
@@ -135,9 +135,9 @@ func (MockClient) ContainerCommit(_ context.Context, _ string, _ dockertypes.Con
 	panic("not implemented")
 }
 
-func (m MockClient) ContainerCreate(ctx context.Context, config *containertypes.Config, hostConfig *containertypes.HostConfig, networkingConfig *networktypes.NetworkingConfig, pspecs *specs.Platform, containerName string) (containertypes.ContainerCreateCreatedBody, error) {
+func (m MockClient) ContainerCreate(ctx context.Context, config *containertypes.Config, hostConfig *containertypes.HostConfig, networkingConfig *networktypes.NetworkingConfig, pspecs *specs.Platform, containerName string) (containertypes.CreateResponse, error) {
 	if m.ContainerCreateFn == nil {
-		return containertypes.ContainerCreateCreatedBody{}, nil
+		return containertypes.CreateResponse{}, nil
 	}
 	return m.ContainerCreateFn(ctx, config, hostConfig, networkingConfig, pspecs, containerName)
 }
@@ -260,7 +260,7 @@ func (MockClient) ContainerUpdate(_ context.Context, _ string, _ containertypes.
 	panic("not implemented")
 }
 
-func (MockClient) ContainerWait(_ context.Context, _ string, _ containertypes.WaitCondition) (<-chan containertypes.ContainerWaitOKBody, <-chan error) {
+func (MockClient) ContainerWait(_ context.Context, _ string, _ containertypes.WaitCondition) (<-chan containertypes.WaitResponse, <-chan error) {
 	panic("not implemented")
 }
 

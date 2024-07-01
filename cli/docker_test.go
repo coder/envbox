@@ -170,12 +170,12 @@ func TestDocker(t *testing.T) {
 
 		client := clitest.DockerClient(t, ctx)
 		var called bool
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				require.ElementsMatch(t, expectedEnvs, config.Env)
 			}
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err := cmd.ExecuteContext(ctx)
@@ -221,13 +221,13 @@ func TestDocker(t *testing.T) {
 		}
 
 		var called bool
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, expectedMounts, hostConfig.Binds)
 			}
 
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err := cmd.ExecuteContext(ctx)
@@ -301,13 +301,13 @@ func TestDocker(t *testing.T) {
 		)
 
 		var called bool
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, expectedDevices, hostConfig.Devices)
 			}
 
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err := cmd.ExecuteContext(ctx)
@@ -366,13 +366,13 @@ func TestDocker(t *testing.T) {
 		}
 
 		var called bool
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, []string{"sleep", "infinity"}, []string(config.Entrypoint))
 			}
 
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err := cmd.ExecuteContext(ctx)
@@ -423,7 +423,7 @@ func TestDocker(t *testing.T) {
 
 		var called bool
 		client := clitest.DockerClient(t, ctx)
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, int64(memory), hostConfig.Memory)
@@ -431,7 +431,7 @@ func TestDocker(t *testing.T) {
 				require.Equal(t, int64(dockerutil.DefaultCPUPeriod), hostConfig.CPUPeriod)
 			}
 
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err := cmd.ExecuteContext(ctx)
@@ -542,7 +542,7 @@ func TestDocker(t *testing.T) {
 
 		var called bool
 		client := clitest.DockerClient(t, ctx)
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				// Test that '/dev' mounts are passed as devices.
@@ -575,7 +575,7 @@ func TestDocker(t *testing.T) {
 				}
 			}
 
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err = cmd.ExecuteContext(ctx)
@@ -599,13 +599,13 @@ func TestDocker(t *testing.T) {
 
 		var called bool
 		client := clitest.DockerClient(t, ctx)
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, "hello-world", config.Hostname)
 			}
 
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err := cmd.ExecuteContext(ctx)
