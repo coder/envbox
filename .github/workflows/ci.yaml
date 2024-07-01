@@ -41,9 +41,9 @@ jobs:
 
       # Check for Go linting errors!
       - name: Lint Go
-        uses: golangci/golangci-lint-action@v3.3.1
+        uses: golangci/golangci-lint-action@v6.0.1
         with:
-          version: v1.51.0
+          version: v1.59.1
           args: "--out-${NO_FUTURE}format colored-line-number"
 
       - name: Lint shell scripts
