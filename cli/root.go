@@ -9,10 +9,8 @@ func Root() *cobra.Command {
 		Use:           "envbox",
 		SilenceErrors: true,
 		SilenceUsage:  true,
-		Args: func(cmd *cobra.Command, args []string) error {
-			return cobra.NoArgs(cmd, args)
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Args:          cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
 		},
 	}

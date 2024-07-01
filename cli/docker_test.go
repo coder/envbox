@@ -170,12 +170,12 @@ func TestDocker(t *testing.T) {
 
 		client := clitest.DockerClient(t, ctx)
 		var called bool
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, _ *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				require.ElementsMatch(t, expectedEnvs, config.Env)
 			}
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err := cmd.ExecuteContext(ctx)
@@ -213,7 +213,7 @@ func TestDocker(t *testing.T) {
 
 		// Set the exec response from inspecting the image to some ID
 		// greater than 0.
-		client.ContainerExecAttachFn = func(_ context.Context, execID string, config dockertypes.ExecStartCheck) (dockertypes.HijackedResponse, error) {
+		client.ContainerExecAttachFn = func(_ context.Context, _ string, _ dockertypes.ExecStartCheck) (dockertypes.HijackedResponse, error) {
 			return dockertypes.HijackedResponse{
 				Reader: bufio.NewReader(strings.NewReader("root:x:1001:1001:root:/root:/bin/bash")),
 				Conn:   &net.IPConn{},
@@ -221,13 +221,13 @@ func TestDocker(t *testing.T) {
 		}
 
 		var called bool
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, _ *container.Config, hostConfig *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, expectedMounts, hostConfig.Binds)
 			}
 
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err := cmd.ExecuteContext(ctx)
@@ -301,13 +301,13 @@ func TestDocker(t *testing.T) {
 		)
 
 		var called bool
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, _ *container.Config, hostConfig *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, expectedDevices, hostConfig.Devices)
 			}
 
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err := cmd.ExecuteContext(ctx)
@@ -346,7 +346,7 @@ func TestDocker(t *testing.T) {
 			statExecID = "hi"
 		)
 
-		client.ContainerExecCreateFn = func(_ context.Context, container string, config dockertypes.ExecConfig) (dockertypes.IDResponse, error) {
+		client.ContainerExecCreateFn = func(_ context.Context, _ string, config dockertypes.ExecConfig) (dockertypes.IDResponse, error) {
 			if config.Cmd[0] == "stat" {
 				return dockertypes.IDResponse{
 					ID: statExecID,
@@ -366,13 +366,13 @@ func TestDocker(t *testing.T) {
 		}
 
 		var called bool
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, _ *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, []string{"sleep", "infinity"}, []string(config.Entrypoint))
 			}
 
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err := cmd.ExecuteContext(ctx)
@@ -394,7 +394,7 @@ func TestDocker(t *testing.T) {
 		authB64 := base64.URLEncoding.EncodeToString(raw)
 
 		client := clitest.DockerClient(t, ctx)
-		client.ImagePullFn = func(_ context.Context, ref string, options dockertypes.ImagePullOptions) (io.ReadCloser, error) {
+		client.ImagePullFn = func(_ context.Context, _ string, options dockertypes.ImagePullOptions) (io.ReadCloser, error) {
 			// Assert that we call the image pull function with the credentials.
 			require.Equal(t, authB64, options.RegistryAuth)
 			return io.NopCloser(bytes.NewReader(nil)), nil
@@ -423,7 +423,7 @@ func TestDocker(t *testing.T) {
 
 		var called bool
 		client := clitest.DockerClient(t, ctx)
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, _ *container.Config, hostConfig *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, int64(memory), hostConfig.Memory)
@@ -431,7 +431,7 @@ func TestDocker(t *testing.T) {
 				require.Equal(t, int64(dockerutil.DefaultCPUPeriod), hostConfig.CPUPeriod)
 			}
 
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err := cmd.ExecuteContext(ctx)
@@ -542,7 +542,7 @@ func TestDocker(t *testing.T) {
 
 		var called bool
 		client := clitest.DockerClient(t, ctx)
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				// Test that '/dev' mounts are passed as devices.
@@ -565,7 +565,7 @@ func TestDocker(t *testing.T) {
 				for _, file := range expectedUsrLibFiles {
 					require.Contains(t, hostConfig.Binds, fmt.Sprintf("%s:%s:ro",
 						file,
-						strings.Replace(file, usrLibMountpoint, "/usr/lib/", -1),
+						strings.ReplaceAll(file, usrLibMountpoint, "/usr/lib/"),
 					))
 				}
 
@@ -575,7 +575,7 @@ func TestDocker(t *testing.T) {
 				}
 			}
 
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err = cmd.ExecuteContext(ctx)
@@ -599,13 +599,13 @@ func TestDocker(t *testing.T) {
 
 		var called bool
 		client := clitest.DockerClient(t, ctx)
-		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.ContainerCreateCreatedBody, error) {
+		client.ContainerCreateFn = func(_ context.Context, config *container.Config, _ *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
 			if containerName == cli.InnerContainerName {
 				called = true
 				require.Equal(t, "hello-world", config.Hostname)
 			}
 
-			return container.ContainerCreateCreatedBody{}, nil
+			return container.CreateResponse{}, nil
 		}
 
 		err := cmd.ExecuteContext(ctx)

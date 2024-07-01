@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 
-	"github.com/coder/coder/cryptorand"
+	"github.com/coder/coder/v2/cryptorand"
 	"github.com/coder/envbox/cli/cliflag"
 )
 

@@ -94,7 +94,7 @@ func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]mount
 	)
 
 	err := afero.Walk(afs, usrLibDir,
-		func(path string, info fs.FileInfo, err error) error {
+		func(path string, _ fs.FileInfo, err error) error {
 			if path == usrLibDir && err != nil {
 				return xerrors.Errorf("stat /usr/lib mountpoint %q: %w", usrLibDir, err)
 			}

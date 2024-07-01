@@ -22,7 +22,6 @@ import (
 
 	"cdr.dev/slog"
 	"cdr.dev/slog/sloggers/slogjson"
-	"github.com/coder/coder/codersdk/agentsdk"
 	"github.com/coder/envbox/background"
 	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/cli/cliflag"
@@ -170,11 +169,13 @@ func dockerCmd() *cobra.Command {
 					return xerrors.Errorf("parse coder URL %q: %w", flags.coderURL, err)
 				}
 
-				agent := agentsdk.New(coderURL)
-				agent.SetSessionToken(flags.agentToken)
+				agent, err := buildlog.OpenCoderClient(ctx, coderURL, log, flags.agentToken)
+				if err != nil {
+					return xerrors.Errorf("open coder client: %w", err)
+				}
 
 				blog = buildlog.MultiLogger(
-					buildlog.OpenCoderLogger(ctx, agent, log),
+					buildlog.OpenCoderLogger(agent, log),
 					blog,
 				)
 			}
@@ -633,9 +634,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	blog.Info("Starting up workspace...")
 	err = client.ContainerStart(ctx, containerID, dockertypes.ContainerStartOptions{})
 	if err != nil {
-		if err != nil {
-			return xerrors.Errorf("start container: %w", err)
-		}
+		return xerrors.Errorf("start container: %w", err)
 	}
 
 	log.Debug(ctx, "creating bootstrap directory", slog.F("directory", imgMeta.HomeDir))
