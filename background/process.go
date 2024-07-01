@@ -233,6 +233,7 @@ func scanIntoLog(ctx context.Context, log slog.Logger, scanner *bufio.Scanner, b
 			logFn = log.Info
 		)
 
+		//nolint:gocritic
 		if strings.Contains(line, "level=debug") {
 			logFn = log.Debug
 		} else if strings.Contains(line, "level=info") {

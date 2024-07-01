@@ -103,7 +103,7 @@ func TmpDir(t *testing.T) string {
 	// We use os.MkdirTemp as oposed to t.TempDir since the envbox container will
 	// chown some of the created directories here to root:root causing the cleanup
 	// function to fail once the test exits.
-	tmpdir, err := os.MkdirTemp("", strings.Replace(t.Name(), "/", "_", -1))
+	tmpdir, err := os.MkdirTemp("", strings.ReplaceAll(t.Name(), "/", "_"))
 	require.NoError(t, err)
 	t.Logf("using tmpdir %s", tmpdir)
 	return tmpdir
