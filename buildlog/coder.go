@@ -11,8 +11,10 @@ import (
 	"github.com/coder/coder/v2/agent/proto"
 	"github.com/coder/coder/v2/codersdk"
 	"github.com/coder/coder/v2/codersdk/agentsdk"
+	"github.com/coder/retry"
 	"github.com/google/uuid"
 	"golang.org/x/xerrors"
+	"storj.io/drpc"
 )
 
 const (
@@ -72,8 +74,17 @@ func OpenCoderClient(ctx context.Context, accessURL *url.URL, logger slog.Logger
 	ls := agentsdk.NewLogSender(logger)
 	sl := ls.GetScriptLogger(uid)
 
-	conn, err := client.ConnectRPC(ctx)
-	if err != nil {
+	var conn drpc.Conn
+	var err error
+	for r := retry.New(10*time.Millisecond, time.Second); r.Wait(ctx); {
+		conn, err = client.ConnectRPC(ctx)
+		if err != nil {
+			logger.Error(ctx, "connect err", slog.Error(err))
+			continue
+		}
+		break
+	}
+	if conn == nil {
 		cancel()
 		return nil, xerrors.Errorf("connect rpc: %w", err)
 	}
