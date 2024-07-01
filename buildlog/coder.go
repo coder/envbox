@@ -28,7 +28,7 @@ type StartupLog struct {
 }
 
 type CoderClient interface {
-	Send(level codersdk.LogLevel, log string)
+	Send(level codersdk.LogLevel, log string) error
 	io.Closer
 }
 
@@ -41,18 +41,16 @@ type coderClient struct {
 	log    slog.Logger
 }
 
-func (c *coderClient) Send(level codersdk.LogLevel, log string) {
+func (c *coderClient) Send(level codersdk.LogLevel, log string) error {
 	err := c.sl.Send(c.ctx, agentsdk.Log{
 		CreatedAt: time.Now(),
 		Output:    log,
 		Level:     level,
 	})
 	if err != nil {
-		c.log.Error(c.ctx, "send build log",
-			slog.F("log", log),
-			slog.Error(err),
-		)
+		return xerrors.Errorf("send build log: %w", err)
 	}
+	return nil
 }
 
 func (c *coderClient) Close() error {
@@ -99,19 +97,16 @@ func OpenCoderClient(ctx context.Context, accessURL *url.URL, logger slog.Logger
 }
 
 type CoderLogger struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	client  CoderClient
-	logger  slog.Logger
-	logChan chan string
-	err     error
+	ctx    context.Context
+	cancel context.CancelFunc
+	client CoderClient
+	logger slog.Logger
 }
 
 func OpenCoderLogger(client CoderClient, log slog.Logger) Logger {
 	coder := &CoderLogger{
-		client:  client,
-		logger:  log,
-		logChan: make(chan string),
+		client: client,
+		logger: log,
 	}
 
 	return coder
@@ -134,7 +129,12 @@ func (c *CoderLogger) Error(output string) {
 }
 
 func (c *CoderLogger) log(level codersdk.LogLevel, output string) {
-	c.client.Send(level, output)
+	if err := c.client.Send(level, output); err != nil {
+		c.logger.Error(c.ctx, "send build log",
+			slog.F("log", output),
+			slog.Error(err),
+		)
+	}
 }
 
 func (c *CoderLogger) Write(p []byte) (int, error) {
