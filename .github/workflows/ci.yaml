@@ -259,8 +259,9 @@ jobs:
       - name: build image
         run: make -j build/image/envbox
 
-      - name: tag image
-        run: docker tag envbox ghcr.io/coder/envbox:latest
-
-      - name: push image
-        run: docker push ghcr.io/coder/envbox:latest
+      - name: Tag and push envbox-preview
+        run: |
+          VERSION=$(./scripts/version.sh)-dev-$(git rev-parse --short HEAD)
+          BASE=ghcr.io/coder/envbox-preview
+          docker tag envbox "${BASE}:${VERSION}"
+          docker push "${BASE}:${VERSION}"
