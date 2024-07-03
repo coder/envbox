@@ -722,11 +722,13 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	go func() {
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+		log.Info(ctx, "waiting for signal")
 		sig := <-sigs
 		sigstr := "TERM"
 		if sig == syscall.SIGINT {
 			sigstr = "INT"
 		}
+		log.Debug(ctx, "received signal", slog.F("signal", sigstr))
 
 		killExec, err := client.ContainerExecCreate(ctx, containerID, dockertypes.ExecConfig{
 			User:         imgMeta.UID,
@@ -746,8 +748,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		}
 
 		err = dockerutil.WaitForExit(ctx, client, bootstrapExec.ID)
+		log.Info(ctx, "exiting envbox", slog.Error(err))
 		if err != nil {
-			log.Error(ctx, "wait for bootstrap to exit", slog.Error(err))
 			os.Exit(1)
 		}
 		os.Exit(0)
