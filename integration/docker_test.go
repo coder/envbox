@@ -303,7 +303,8 @@ func TestDocker(t *testing.T) {
 		})
 		require.Error(t, err)
 
-		err = pool.Client.StopContainer(resource.Container.ID, 10)
+		time.Sleep(time.Second * 5)
+		err = pool.Client.StopContainer(resource.Container.ID, 30)
 		require.NoError(t, err)
 
 		err = resource.Close()
