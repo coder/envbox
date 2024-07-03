@@ -365,7 +365,7 @@ cleanup() {
 }
 
 # Trap SIGINT (Ctrl+C) and SIGTERM signals
-trap 'cleanup' SIGINT SIGTERM
+trap 'cleanup' INT TERM
 
 # Main loop or processing logic (replace with your script's logic)
 while true; do
