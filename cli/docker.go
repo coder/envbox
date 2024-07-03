@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -759,6 +760,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		}
 		os.Exit(0)
 	}()
+	log.Info(ctx, "HELP")
+	time.Sleep(time.Second)
 
 	return nil
 }
