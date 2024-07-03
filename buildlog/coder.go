@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/mod/semver"
 	"golang.org/x/xerrors"
 	"storj.io/drpc"
 
@@ -35,7 +36,36 @@ type CoderClient interface {
 	io.Closer
 }
 
-type coderClient struct {
+type agentClientV1 struct {
+	ctx    context.Context
+	client *agentsdk.Client
+}
+
+func (c *agentClientV1) Send(level codersdk.LogLevel, log string) error {
+	lines := cutString(log, MaxCoderLogSize)
+
+	logs := make([]agentsdk.Log, 0, CoderLoggerMaxLogs)
+	for _, output := range lines {
+		logs = append(logs, agentsdk.Log{
+			CreatedAt: time.Now(),
+			Output:    output,
+			Level:     level,
+		})
+	}
+	err := c.client.PatchLogs(c.ctx, agentsdk.PatchLogs{
+		Logs: logs,
+	})
+	if err != nil {
+		return xerrors.Errorf("send build log: %w", err)
+	}
+	return nil
+}
+
+func (*agentClientV1) Close() error {
+	return nil
+}
+
+type agentClientV2 struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	source uuid.UUID
@@ -44,7 +74,7 @@ type coderClient struct {
 	log    slog.Logger
 }
 
-func (c *coderClient) Send(level codersdk.LogLevel, log string) error {
+func (c *agentClientV2) Send(level codersdk.LogLevel, log string) error {
 	err := c.sl.Send(c.ctx, agentsdk.Log{
 		CreatedAt: time.Now(),
 		Output:    log,
@@ -56,7 +86,7 @@ func (c *coderClient) Send(level codersdk.LogLevel, log string) error {
 	return nil
 }
 
-func (c *coderClient) Close() error {
+func (c *agentClientV2) Close() error {
 	defer c.cancel()
 	c.ls.Flush(c.source)
 	err := c.ls.WaitUntilEmpty(c.ctx)
@@ -66,10 +96,7 @@ func (c *coderClient) Close() error {
 	return nil
 }
 
-func OpenCoderClient(ctx context.Context, accessURL *url.URL, logger slog.Logger, token string) (CoderClient, error) {
-	client := agentsdk.New(accessURL)
-	client.SetSessionToken(token)
-
+func newAgentClientV2(ctx context.Context, logger slog.Logger, client *agentsdk.Client) (CoderClient, error) {
 	cctx, cancel := context.WithCancel(ctx)
 	uid := uuid.New()
 	ls := agentsdk.NewLogSender(logger)
@@ -98,7 +125,7 @@ func OpenCoderClient(ctx context.Context, accessURL *url.URL, logger slog.Logger
 		}
 	}()
 
-	return &coderClient{
+	return &agentClientV2{
 		ctx:    cctx,
 		cancel: cancel,
 		source: uid,
@@ -106,6 +133,25 @@ func OpenCoderClient(ctx context.Context, accessURL *url.URL, logger slog.Logger
 		sl:     sl,
 		log:    logger,
 	}, nil
+}
+
+func OpenCoderClient(ctx context.Context, accessURL *url.URL, logger slog.Logger, token string) (CoderClient, error) {
+	client := agentsdk.New(accessURL)
+	client.SetSessionToken(token)
+
+	resp, err := client.SDK.BuildInfo(ctx)
+	if err != nil {
+		return nil, xerrors.Errorf("build info: %w", err)
+	}
+
+	if semver.Compare(resp.Version, "v2.13.0") <= 0 {
+		return &agentClientV1{
+			ctx:    ctx,
+			client: client,
+		}, nil
+	}
+
+	return newAgentClientV2(ctx, logger, client)
 }
 
 type CoderLogger struct {
@@ -155,4 +201,22 @@ func (c *CoderLogger) Write(p []byte) (int, error) {
 
 func (c *CoderLogger) Close() error {
 	return c.client.Close()
+}
+
+// cutString cuts a string up into smaller strings that have a len no greater
+// than the provided max size.
+// If the string is less than the max size the return slice has one
+// element with a value of the provided string.
+func cutString(s string, maxSize int) []string {
+	if len(s) <= maxSize {
+		return []string{s}
+	}
+
+	toks := []string{}
+	for len(s) > maxSize {
+		toks = append(toks, s[:maxSize])
+		s = s[maxSize:]
+	}
+
+	return append(toks, s)
 }

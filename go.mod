@@ -8,7 +8,7 @@ replace tailscale.com => github.com/coder/tailscale v1.1.1-0.20240530071520-1ac6
 
 require (
 	cdr.dev/slog v1.6.2-0.20240126064726-20367d4aede6
-	github.com/coder/coder/v2 v2.13.0
+	github.com/coder/coder/v2 v2.12.0
 	github.com/coder/retry v1.5.1
 	github.com/cpuguy83/dockercfg v0.3.1
 	github.com/docker/docker v24.0.9+incompatible
@@ -23,6 +23,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/vishvananda/netlink v1.2.1-beta.2
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225
+	golang.org/x/mod v0.18.0
 	golang.org/x/sys v0.21.0
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	k8s.io/mount-utils v0.26.2
@@ -63,6 +64,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.28.4 // indirect
 	github.com/aws/smithy-go v1.20.2 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
+	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/sonic v1.10.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
@@ -191,7 +193,6 @@ require (
 	go4.org/mem v0.0.0-20220726221520-4f986261bf13 // indirect
 	go4.org/netipx v0.0.0-20230728180743-ad4cb58a6516 // indirect
 	golang.org/x/crypto v0.24.0 // indirect
-	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/net v0.26.0 // indirect
 	golang.org/x/oauth2 v0.20.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
