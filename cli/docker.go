@@ -20,6 +20,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/slices"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog"
@@ -719,7 +720,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		return xerrors.Errorf("exec inspect: %w", err)
 	}
 
-	go func() {
+	var eg errgroup.Group
+	eg.Go(func() error {
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 		log.Info(ctx, "waiting for signal")
@@ -737,25 +739,24 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 			AttachStderr: true,
 		})
 		if err != nil {
-			log.Error(ctx, "create kill exec", slog.Error(err))
-			return
+			return xerrors.Errorf("create kill exec: %w", err)
 		}
 
 		err = dockerutil.WaitForExit(ctx, client, killExec.ID)
 		if err != nil {
-			log.Error(ctx, "wait for kill exec to complete", slog.Error(err))
-			return
+			return xerrors.Errorf("wait for kill exec to complete: %w", err)
 		}
 
 		err = dockerutil.WaitForExit(ctx, client, bootstrapExec.ID)
 		log.Info(ctx, "exiting envbox", slog.Error(err))
 		if err != nil {
-			os.Exit(1)
+			return xerrors.Errorf("wait for exit: %w", err)
 		}
-		os.Exit(0)
-	}()
 
-	return nil
+		return nil
+	})
+
+	return eg.Wait()
 }
 
 //nolint:revive

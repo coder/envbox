@@ -309,6 +309,7 @@ func TestDocker(t *testing.T) {
 		err = resource.Close()
 		require.NoError(t, err)
 
+		t.Logf("envbox %q started successfully, recreating...", resource.Container.ID)
 		// Run the envbox container.
 		resource = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
 			Image:           integrationtest.UbuntuImage,
@@ -316,7 +317,6 @@ func TestDocker(t *testing.T) {
 			Binds:           binds,
 			BootstrapScript: sigtrapScript,
 		})
-		t.Logf("envbox %q started successfully, recreating...", resource.Container.ID)
 		_, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
 			ContainerID: resource.Container.ID,
 			Cmd:         []string{"/bin/sh", "-c", "stat /home/coder/foo"},
