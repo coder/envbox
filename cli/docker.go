@@ -276,6 +276,7 @@ func dockerCmd() *cobra.Command {
 				}
 			}()
 
+			fmt.Println("HELLO????")
 			log.Debug(ctx, "waiting for dockerd")
 
 			// We wait for the daemon after spawning the goroutine in case
@@ -751,6 +752,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 				return xerrors.Errorf("wait for exit: %w", err)
 			}
 
+			fmt.Println("WELL WE GOT HERE AT LEAST")
 			return nil
 		}()
 		log.Info(ctx, "exiting envbox", slog.Error(err))
