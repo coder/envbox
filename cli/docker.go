@@ -7,11 +7,15 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -157,10 +161,25 @@ func dockerCmd() *cobra.Command {
 		Short: "Create a docker-based CVM",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			var (
-				ctx                  = cmd.Context()
-				log                  = slog.Make(slogjson.Sink(cmd.ErrOrStderr()), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
-				blog buildlog.Logger = buildlog.JSONLogger{Encoder: json.NewEncoder(os.Stderr)}
+				ctx, cancel                 = context.WithCancel(cmd.Context()) //nolint
+				log                         = slog.Make(slogjson.Sink(cmd.ErrOrStderr()), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
+				blog        buildlog.Logger = buildlog.JSONLogger{Encoder: json.NewEncoder(os.Stderr)}
 			)
+
+			// We technically leak a context here, but it's impact is negligible.
+			signalCtx, signalCancel := context.WithCancel(cmd.Context())
+			sigs := make(chan os.Signal, 1)
+			signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGWINCH)
+
+			// Spawn a goroutine to wait for a signal.
+			go func() {
+				defer signalCancel()
+				log.Info(ctx, "waiting for signal")
+				<-sigs
+				log.Info(ctx, "got signal, canceling context")
+			}()
+
+			cmd.SetContext(ctx)
 
 			if flags.noStartupLogs {
 				log = slog.Make(slogjson.Sink(io.Discard))
@@ -210,11 +229,13 @@ func dockerCmd() *cobra.Command {
 				case err := <-background.New(ctx, log, "sysbox-mgr", sysboxArgs...).Run():
 					blog.Info(sysboxErrMsg)
 					//nolint
-					log.Fatal(ctx, "sysbox-mgr exited", slog.Error(err))
+					log.Critical(ctx, "sysbox-mgr exited", slog.Error(err))
+					panic(err)
 				case err := <-background.New(ctx, log, "sysbox-fs").Run():
 					blog.Info(sysboxErrMsg)
 					//nolint
-					log.Fatal(ctx, "sysbox-fs exited", slog.Error(err))
+					log.Critical(ctx, "sysbox-fs exited", slog.Error(err))
+					panic(err)
 				}
 			}()
 
@@ -316,7 +337,7 @@ func dockerCmd() *cobra.Command {
 				)
 			}
 
-			err = runDockerCVM(ctx, log, client, blog, flags)
+			bootstrapExecID, err := runDockerCVM(ctx, log, client, blog, flags)
 			if err != nil {
 				// It's possible we failed because we ran out of disk while
 				// pulling the image. We should restart the daemon and use
@@ -345,13 +366,52 @@ func dockerCmd() *cobra.Command {
 					}()
 
 					log.Debug(ctx, "reattempting container creation")
-					err = runDockerCVM(ctx, log, client, blog, flags)
+					bootstrapExecID, err = runDockerCVM(ctx, log, client, blog, flags)
 				}
 				if err != nil {
 					blog.Errorf("Failed to run envbox: %v", err)
 					return xerrors.Errorf("run: %w", err)
 				}
 			}
+
+			go func() {
+				defer cancel()
+
+				<-signalCtx.Done()
+				log.Debug(ctx, "ctx canceled, forwarding signal to inner container")
+
+				time.Sleep(time.Second * 10)
+				if bootstrapExecID == "" {
+					log.Debug(ctx, "no bootstrap exec id, skipping")
+					return
+				}
+
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second*90)
+				defer cancel()
+
+				bootstrapPID, err := dockerutil.GetExecPID(ctx, client, bootstrapExecID)
+				if err != nil {
+					log.Error(ctx, "get exec pid", slog.Error(err))
+				}
+
+				log.Debug(ctx, "killing container", slog.F("bootstrap_pid", bootstrapPID))
+
+				// The PID returned is the PID _outside_ the container...
+				out, err := exec.Command("kill", "-TERM", strconv.Itoa(bootstrapPID)).CombinedOutput()
+				if err != nil {
+					log.Error(ctx, "kill bootstrap process", slog.Error(err), slog.F("output", string(out)))
+					return
+				}
+
+				log.Debug(ctx, "sent kill signal waiting for process to exit")
+				err = dockerutil.WaitForExit(ctx, client, bootstrapExecID)
+				if err != nil {
+					log.Error(ctx, "wait for exit", slog.Error(err))
+					return
+				}
+
+				log.Debug(ctx, "bootstrap process successfully exited")
+			}()
 
 			return nil
 		},
@@ -390,25 +450,22 @@ func dockerCmd() *cobra.Command {
 	return cmd
 }
 
-func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client, blog buildlog.Logger, flags flags) error {
+func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client, blog buildlog.Logger, flags flags) (string, error) {
 	fs := xunix.GetFS(ctx)
-
-	// Set our OOM score to something really unfavorable to avoid getting killed
-	// in memory-scarce scenarios.
 	err := xunix.SetOOMScore(ctx, "self", "-1000")
 	if err != nil {
-		return xerrors.Errorf("set oom score: %w", err)
+		return "", xerrors.Errorf("set oom score: %w", err)
 	}
 	ref, err := name.ParseReference(flags.innerImage)
 	if err != nil {
-		return xerrors.Errorf("parse ref: %w", err)
+		return "", xerrors.Errorf("parse ref: %w", err)
 	}
 
 	var dockerAuth dockerutil.AuthConfig
 	if flags.imagePullSecret != "" {
 		dockerAuth, err = dockerutil.AuthConfigFromString(flags.imagePullSecret, ref.Context().RegistryStr())
 		if err != nil {
-			return xerrors.Errorf("parse auth config: %w", err)
+			return "", xerrors.Errorf("parse auth config: %w", err)
 		}
 	}
 
@@ -417,7 +474,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		log.Info(ctx, "detected file", slog.F("image", flags.innerImage))
 		dockerAuth, err = dockerutil.AuthConfigFromPath(flags.dockerConfig, ref.Context().RegistryStr())
 		if err != nil && !xerrors.Is(err, os.ErrNotExist) {
-			return xerrors.Errorf("auth config from file: %w", err)
+			return "", xerrors.Errorf("auth config from file: %w", err)
 		}
 	}
 
@@ -430,7 +487,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	// Add any user-specified mounts to our mounts list.
 	extraMounts, err := parseMounts(flags.containerMounts)
 	if err != nil {
-		return xerrors.Errorf("read mounts: %w", err)
+		return "", xerrors.Errorf("read mounts: %w", err)
 	}
 	mounts = append(mounts, extraMounts...)
 
@@ -442,7 +499,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		blog.Info("Creating TUN device")
 		dev, err := xunix.CreateTUNDevice(ctx, OuterTUNPath)
 		if err != nil {
-			return xerrors.Errorf("creat tun device: %w", err)
+			return "", xerrors.Errorf("creat tun device: %w", err)
 		}
 
 		devices = append(devices, container.DeviceMapping{
@@ -457,7 +514,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		blog.Info("Creating FUSE device")
 		dev, err := xunix.CreateFuseDevice(ctx, OuterFUSEPath)
 		if err != nil {
-			return xerrors.Errorf("create fuse device: %w", err)
+			return "", xerrors.Errorf("create fuse device: %w", err)
 		}
 
 		devices = append(devices, container.DeviceMapping{
@@ -479,7 +536,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		)
 		err = fs.Chown(device.PathOnHost, UserNamespaceOffset, UserNamespaceOffset)
 		if err != nil {
-			return xerrors.Errorf("chown device %q: %w", device.PathOnHost, err)
+			return "", xerrors.Errorf("chown device %q: %w", device.PathOnHost, err)
 		}
 	}
 
@@ -492,7 +549,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		ProgressFn: dockerutil.DefaultLogImagePullFn(blog),
 	})
 	if err != nil {
-		return xerrors.Errorf("pull image: %w", err)
+		return "", xerrors.Errorf("pull image: %w", err)
 	}
 
 	log.Debug(ctx, "remounting /sys")
@@ -500,19 +557,19 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	// After image pull we remount /sys so sysbox can have appropriate perms to create a container.
 	err = xunix.MountFS(ctx, "/sys", "/sys", "", "remount", "rw")
 	if err != nil {
-		return xerrors.Errorf("remount /sys: %w", err)
+		return "", xerrors.Errorf("remount /sys: %w", err)
 	}
 
 	if flags.addGPU {
 		if flags.hostUsrLibDir == "" {
-			return xerrors.Errorf("when using GPUs, %q must be specified", EnvUsrLibDir)
+			return "", xerrors.Errorf("when using GPUs, %q must be specified", EnvUsrLibDir)
 		}
 
 		// Unmount GPU drivers in /proc as it causes issues when creating any
 		// container in some cases (even the image metadata container).
 		_, err = xunix.TryUnmountProcGPUDrivers(ctx, log)
 		if err != nil {
-			return xerrors.Errorf("unmount /proc GPU drivers: %w", err)
+			return "", xerrors.Errorf("unmount /proc GPU drivers: %w", err)
 		}
 	}
 
@@ -528,7 +585,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	// with /sbin/init or something simple like 'sleep infinity'.
 	imgMeta, err := dockerutil.GetImageMetadata(ctx, log, client, flags.innerImage, flags.innerUsername)
 	if err != nil {
-		return xerrors.Errorf("get image metadata: %w", err)
+		return "", xerrors.Errorf("get image metadata: %w", err)
 	}
 
 	blog.Infof("Detected entrypoint user '%s:%s' with home directory %q", imgMeta.UID, imgMeta.UID, imgMeta.HomeDir)
@@ -543,11 +600,11 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 
 	uid, err := strconv.ParseInt(imgMeta.UID, 10, 32)
 	if err != nil {
-		return xerrors.Errorf("parse image uid: %w", err)
+		return "", xerrors.Errorf("parse image uid: %w", err)
 	}
 	gid, err := strconv.ParseInt(imgMeta.GID, 10, 32)
 	if err != nil {
-		return xerrors.Errorf("parse image gid: %w", err)
+		return "", xerrors.Errorf("parse image gid: %w", err)
 	}
 
 	for _, m := range mounts {
@@ -568,13 +625,13 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 			mounter := xunix.Mounter(ctx)
 			err := mounter.Mount("", m.Source, "", []string{"remount,rw"})
 			if err != nil {
-				return xerrors.Errorf("remount: %w", err)
+				return "", xerrors.Errorf("remount: %w", err)
 			}
 		}
 
 		err := fs.Chmod(m.Source, 0o2755)
 		if err != nil {
-			return xerrors.Errorf("chmod mountpoint %q: %w", m.Source, err)
+			return "", xerrors.Errorf("chmod mountpoint %q: %w", m.Source, err)
 		}
 
 		var (
@@ -601,14 +658,14 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		// user.
 		err = fs.Chown(m.Source, shiftedUID, shiftedGID)
 		if err != nil {
-			return xerrors.Errorf("chown mountpoint %q: %w", m.Source, err)
+			return "", xerrors.Errorf("chown mountpoint %q: %w", m.Source, err)
 		}
 	}
 
 	if flags.addGPU {
 		devs, binds, err := xunix.GPUs(ctx, log, flags.hostUsrLibDir)
 		if err != nil {
-			return xerrors.Errorf("find gpus: %w", err)
+			return "", xerrors.Errorf("find gpus: %w", err)
 		}
 
 		for _, dev := range devs {
@@ -679,14 +736,14 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		MemoryLimit: int64(flags.memory),
 	})
 	if err != nil {
-		return xerrors.Errorf("create container: %w", err)
+		return "", xerrors.Errorf("create container: %w", err)
 	}
 
 	blog.Info("Pruning images to free up disk...")
 	// Prune images to avoid taking up any unnecessary disk from the user.
 	_, err = dockerutil.PruneImages(ctx, client)
 	if err != nil {
-		return xerrors.Errorf("prune images: %w", err)
+		return "", xerrors.Errorf("prune images: %w", err)
 	}
 
 	// TODO fix iptables when istio detected.
@@ -694,7 +751,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	blog.Info("Starting up workspace...")
 	err = client.ContainerStart(ctx, containerID, container.StartOptions{})
 	if err != nil {
-		return xerrors.Errorf("start container: %w", err)
+		return "", xerrors.Errorf("start container: %w", err)
 	}
 
 	log.Debug(ctx, "creating bootstrap directory", slog.F("directory", imgMeta.HomeDir))
@@ -714,7 +771,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		Args:        []string{"-p", bootDir},
 	})
 	if err != nil {
-		return xerrors.Errorf("make bootstrap dir: %w", err)
+		return "", xerrors.Errorf("make bootstrap dir: %w", err)
 	}
 
 	cpuQuota, err := xunix.ReadCPUQuota(ctx, log)
@@ -736,34 +793,50 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	}
 
 	blog.Info("Envbox startup complete!")
-
-	// The bootstrap script doesn't return since it execs the agent
-	// meaning that it can get pretty noisy if we were to log by default.
-	// In order to allow users to discern issues getting the bootstrap script
-	// to complete successfully we pipe the output to stdout if
-	// CODER_DEBUG=true.
-	debugWriter := io.Discard
-	if flags.debug {
-		debugWriter = os.Stdout
+	if flags.boostrapScript == "" {
+		return "", nil
 	}
-	// Bootstrap the container if a script has been provided.
 	blog.Infof("Bootstrapping workspace...")
-	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
-		ContainerID: containerID,
-		User:        imgMeta.UID,
-		Script:      flags.boostrapScript,
-		// We set this because the default behavior is to download the agent
-		// to /tmp/coder.XXXX. This causes a race to happen where we finish
-		// downloading the binary but before we can execute systemd remounts
-		// /tmp.
-		Env:       []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
-		StdOutErr: debugWriter,
+
+	bootstrapExec, err := client.ContainerExecCreate(ctx, containerID, container.ExecOptions{
+		User:         imgMeta.UID,
+		Cmd:          []string{"/bin/sh", "-s"},
+		Env:          []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+		Detach:       true,
 	})
 	if err != nil {
-		return xerrors.Errorf("boostrap container: %w", err)
+		return "", xerrors.Errorf("create exec: %w", err)
 	}
 
-	return nil
+	resp, err := client.ContainerExecAttach(ctx, bootstrapExec.ID, container.ExecStartOptions{})
+	if err != nil {
+		return "", xerrors.Errorf("attach exec: %w", err)
+	}
+
+	_, err = io.Copy(resp.Conn, strings.NewReader(flags.boostrapScript))
+	if err != nil {
+		return "", xerrors.Errorf("copy stdin: %w", err)
+	}
+	err = resp.CloseWrite()
+	if err != nil {
+		return "", xerrors.Errorf("close write: %w", err)
+	}
+
+	go func() {
+		defer resp.Close()
+		rd := io.LimitReader(resp.Reader, 1<<10)
+		_, err := io.Copy(blog, rd)
+		if err != nil {
+			log.Error(ctx, "copy bootstrap output", slog.Error(err))
+		}
+	}()
+
+	// We can't just call ExecInspect because there's a race where the cmd
+	// hasn't been assigned a PID yet.
+	return bootstrapExec.ID, nil
 }
 
 //nolint:revive

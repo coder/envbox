@@ -306,6 +306,31 @@ func ExecEnvbox(t *testing.T, pool *dockertest.Pool, conf ExecConfig) ([]byte, e
 	return buf.Bytes(), nil
 }
 
+func StopContainer(t *testing.T, pool *dockertest.Pool, id string, to time.Duration) {
+	t.Helper()
+
+	err := pool.Client.KillContainer(docker.KillContainerOptions{
+		ID:     id,
+		Signal: docker.SIGTERM,
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), to)
+	defer cancel()
+	for r := retry.New(time.Second, time.Second); r.Wait(ctx); {
+		cnt, err := pool.Client.InspectContainer(id)
+		require.NoError(t, err)
+
+		if cnt.State.Running {
+			continue
+		}
+
+		return
+	}
+
+	t.Fatalf("timed out waiting for container %s to stop", id)
+}
+
 // cmdLineEnvs returns args passed to the /envbox command
 // but using their env var alias.
 func cmdLineEnvs(c *CreateDockerCVMConfig) []string {
