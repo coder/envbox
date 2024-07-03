@@ -20,7 +20,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/slices"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog"
@@ -720,43 +719,48 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		return xerrors.Errorf("exec inspect: %w", err)
 	}
 
-	var eg errgroup.Group
-	eg.Go(func() error {
-		sigs := make(chan os.Signal, 1)
-		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-		log.Info(ctx, "waiting for signal")
-		sig := <-sigs
-		sigstr := "TERM"
-		if sig == syscall.SIGINT {
-			sigstr = "INT"
-		}
-		log.Debug(ctx, "received signal", slog.F("signal", sigstr))
+	go func() {
+		err := func() error {
+			sigs := make(chan os.Signal, 1)
+			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+			log.Info(ctx, "waiting for signal")
+			sig := <-sigs
+			sigstr := "TERM"
+			if sig == syscall.SIGINT {
+				sigstr = "INT"
+			}
+			log.Debug(ctx, "received signal", slog.F("signal", sigstr))
 
-		killExec, err := client.ContainerExecCreate(ctx, containerID, dockertypes.ExecConfig{
-			User:         imgMeta.UID,
-			Cmd:          []string{"sh", "-c", fmt.Sprintf("kill -%s %d", sigstr, inspect.Pid)},
-			AttachStdout: true,
-			AttachStderr: true,
-		})
-		if err != nil {
-			return xerrors.Errorf("create kill exec: %w", err)
-		}
+			killExec, err := client.ContainerExecCreate(ctx, containerID, dockertypes.ExecConfig{
+				User:         imgMeta.UID,
+				Cmd:          []string{"sh", "-c", fmt.Sprintf("kill -%s %d", sigstr, inspect.Pid)},
+				AttachStdout: true,
+				AttachStderr: true,
+			})
+			if err != nil {
+				return xerrors.Errorf("create kill exec: %w", err)
+			}
 
-		err = dockerutil.WaitForExit(ctx, client, killExec.ID)
-		if err != nil {
-			return xerrors.Errorf("wait for kill exec to complete: %w", err)
-		}
+			err = dockerutil.WaitForExit(ctx, client, killExec.ID)
+			if err != nil {
+				return xerrors.Errorf("wait for kill exec to complete: %w", err)
+			}
 
-		err = dockerutil.WaitForExit(ctx, client, bootstrapExec.ID)
+			err = dockerutil.WaitForExit(ctx, client, bootstrapExec.ID)
+			if err != nil {
+				return xerrors.Errorf("wait for exit: %w", err)
+			}
+
+			return nil
+		}()
 		log.Info(ctx, "exiting envbox", slog.Error(err))
 		if err != nil {
-			return xerrors.Errorf("wait for exit: %w", err)
+			os.Exit(1)
 		}
+		os.Exit(0)
+	}()
 
-		return nil
-	})
-
-	return eg.Wait()
+	return nil
 }
 
 //nolint:revive
