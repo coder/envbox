@@ -718,11 +718,10 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	if err != nil {
 		return xerrors.Errorf("exec inspect: %w", err)
 	}
-
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		err := func() error {
-			sigs := make(chan os.Signal, 1)
-			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 			log.Info(ctx, "waiting for signal")
 			sig := <-sigs
 			sigstr := "TERM"
