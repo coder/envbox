@@ -272,6 +272,54 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expectedHostname, strings.TrimSpace(string(hostname)))
 	})
+
+	t.Run("HandleSignals", func(t *testing.T) {
+		t.Parallel()
+
+		pool, err := dockertest.NewPool("")
+		require.NoError(t, err)
+
+		var (
+			tmpdir = integrationtest.TmpDir(t)
+			binds  = integrationtest.DefaultBinds(t, tmpdir)
+		)
+		homeDir := filepath.Join(tmpdir, "home")
+		err = os.MkdirAll(homeDir, 0o777)
+		require.NoError(t, err)
+
+		binds = append(binds, bindMount(homeDir, "/home/coder", false))
+
+		// Run the envbox container.
+		resource := integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
+			Image:           integrationtest.UbuntuImage,
+			Username:        "root",
+			Binds:           binds,
+			BootstrapScript: sigtrapScript,
+		})
+
+		_, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+			ContainerID: resource.Container.ID,
+			Cmd:         []string{"/bin/sh", "-c", "stat /home/coder/foo"},
+		})
+		require.Error(t, err)
+
+		err = resource.Close()
+		require.NoError(t, err)
+
+		// Run the envbox container.
+		resource = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
+			Image:           integrationtest.UbuntuImage,
+			Username:        "root",
+			Binds:           binds,
+			BootstrapScript: sigtrapScript,
+		})
+		t.Logf("envbox %q started successfully, recreating...", resource.Container.ID)
+		_, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+			ContainerID: resource.Container.ID,
+			Cmd:         []string{"/bin/sh", "-c", "stat /home/coder/foo"},
+		})
+		require.NoError(t, err)
+	})
 }
 
 func requireSliceNoContains(t *testing.T, ss []string, els ...string) {
@@ -303,3 +351,21 @@ func bindMount(src, dest string, ro bool) string {
 	}
 	return fmt.Sprintf("%s:%s", src, dest)
 }
+
+const sigtrapScript = `#!/bin/bash
+
+# Function to handle cleanup
+cleanup() {
+	touch /home/coder/foo
+    exit 0
+}
+
+# Trap SIGINT (Ctrl+C) and SIGTERM signals
+trap 'cleanup' SIGINT SIGTERM
+
+# Main loop or processing logic (replace with your script's logic)
+while true; do
+    echo "Working..."
+    sleep 1
+done
+`

@@ -7,11 +7,13 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -647,7 +649,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	bootDir := filepath.Join(imgMeta.HomeDir, ".coder")
 
 	blog.Infof("Creating %q directory to host Coder assets...", bootDir)
-	_, err = dockerutil.ExecContainer(ctx, client, dockerutil.ExecConfig{
+	_, _, err = dockerutil.ExecContainer(ctx, client, dockerutil.ExecConfig{
 		ContainerID: containerID,
 		User:        imgMeta.UID,
 		Cmd:         "mkdir",
@@ -677,31 +679,79 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	blog.Info("Envbox startup complete!")
 
-	// The bootstrap script doesn't return since it execs the agent
-	// meaning that it can get pretty noisy if we were to log by default.
-	// In order to allow users to discern issues getting the bootstrap script
-	// to complete successfully we pipe the output to stdout if
-	// CODER_DEBUG=true.
-	debugWriter := io.Discard
-	if flags.debug {
-		debugWriter = os.Stdout
-	}
-	// Bootstrap the container if a script has been provided.
-	blog.Infof("Bootstrapping workspace...")
-	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
-		ContainerID: containerID,
-		User:        imgMeta.UID,
-		Script:      flags.boostrapScript,
-		// We set this because the default behavior is to download the agent
-		// to /tmp/coder.XXXX. This causes a race to happen where we finish
-		// downloading the binary but before we can execute systemd remounts
-		// /tmp.
-		Env:       []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
-		StdOutErr: debugWriter,
+	bootstrapExec, err := client.ContainerExecCreate(ctx, containerID, dockertypes.ExecConfig{
+		User:         imgMeta.UID,
+		Cmd:          []string{"/bin/sh", "-s"},
+		Env:          []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+		Detach:       true,
 	})
 	if err != nil {
-		return xerrors.Errorf("boostrap container: %w", err)
+		return xerrors.Errorf("create exec: %w", err)
 	}
+	resp, err := client.ContainerExecAttach(ctx, bootstrapExec.ID, dockertypes.ExecStartCheck{})
+	if err != nil {
+		return xerrors.Errorf("attach exec: %w", err)
+	}
+
+	_, err = io.Copy(resp.Conn, strings.NewReader(flags.boostrapScript))
+	if err != nil {
+		return xerrors.Errorf("copy stdin: %w", err)
+	}
+	err = resp.CloseWrite()
+	if err != nil {
+		return xerrors.Errorf("close write: %w", err)
+	}
+
+	go func() {
+		defer resp.Close()
+		rd := io.LimitReader(resp.Reader, 1<<10)
+		_, err := io.Copy(blog, rd)
+		if err != nil {
+			log.Error(ctx, "copy bootstrap output", slog.Error(err))
+		}
+	}()
+
+	inspect, err := client.ContainerExecInspect(ctx, bootstrapExec.ID)
+	if err != nil {
+		return xerrors.Errorf("exec inspect: %w", err)
+	}
+
+	go func() {
+		sigs := make(chan os.Signal, 1)
+		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+		sig := <-sigs
+		sigstr := "TERM"
+		if sig == syscall.SIGINT {
+			sigstr = "INT"
+		}
+
+		killExec, err := client.ContainerExecCreate(ctx, containerID, dockertypes.ExecConfig{
+			User:         imgMeta.UID,
+			Cmd:          []string{"sh", "-c", fmt.Sprintf("kill -%s %d", sigstr, inspect.Pid)},
+			AttachStdout: true,
+			AttachStderr: true,
+		})
+		if err != nil {
+			log.Error(ctx, "create kill exec", slog.Error(err))
+			return
+		}
+
+		err = dockerutil.WaitForExit(ctx, client, killExec.ID)
+		if err != nil {
+			log.Error(ctx, "wait for kill exec to complete", slog.Error(err))
+			return
+		}
+
+		err = dockerutil.WaitForExit(ctx, client, bootstrapExec.ID)
+		if err != nil {
+			log.Error(ctx, "wait for bootstrap to exit", slog.Error(err))
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}()
 
 	return nil
 }
