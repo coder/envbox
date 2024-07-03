@@ -144,7 +144,7 @@ func OpenCoderClient(ctx context.Context, accessURL *url.URL, logger slog.Logger
 		return nil, xerrors.Errorf("build info: %w", err)
 	}
 
-	if semver.Compare(resp.Version, "v2.13.0") <= 0 {
+	if semver.Compare(semver.MajorMinor(resp.Version), "v2.13") < 0 {
 		return &agentClientV1{
 			ctx:    ctx,
 			client: client,
@@ -160,8 +160,9 @@ type CoderLogger struct {
 	logger slog.Logger
 }
 
-func OpenCoderLogger(client CoderClient, log slog.Logger) Logger {
+func OpenCoderLogger(ctx context.Context, client CoderClient, log slog.Logger) Logger {
 	coder := &CoderLogger{
+		ctx:    ctx,
 		client: client,
 		logger: log,
 	}

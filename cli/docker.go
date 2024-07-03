@@ -175,7 +175,7 @@ func dockerCmd() *cobra.Command {
 				}
 
 				blog = buildlog.MultiLogger(
-					buildlog.OpenCoderLogger(agent, log),
+					buildlog.OpenCoderLogger(ctx, agent, log),
 					blog,
 				)
 			}
