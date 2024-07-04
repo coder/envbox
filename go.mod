@@ -8,7 +8,7 @@ replace tailscale.com => github.com/coder/tailscale v1.1.1-0.20240530071520-1ac6
 
 require (
 	cdr.dev/slog v1.6.2-0.20240126064726-20367d4aede6
-	github.com/coder/coder/v2 v2.12.0
+	github.com/coder/coder/v2 v2.10.1-0.20240703121105-f6639b788f7b
 	github.com/coder/retry v1.5.1
 	github.com/cpuguy83/dockercfg v0.3.1
 	github.com/docker/docker v24.0.9+incompatible
