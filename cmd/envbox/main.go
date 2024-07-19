@@ -27,12 +27,13 @@ func main() {
 			log.Info(ctx, "running shutdown function")
 			err := fn()
 			if err != nil {
-				log.Error(ctx, "running shutdown function")
+				log.Error(ctx, "shutdown function failed", slog.Error(err))
 				os.Exit(1)
 			}
 		default:
 			log.Info(ctx, "no shutdown function")
 		}
+		log.Info(ctx, "exiting")
 		os.Exit(0)
 	}()
 	_, err := cli.Root(ch).ExecuteC()
