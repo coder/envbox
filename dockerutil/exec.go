@@ -109,7 +109,6 @@ func GetExecPID(ctx context.Context, client DockerClient, execID string) (int, e
 	}
 
 	return 0, ctx.Err()
-
 }
 
 func WaitForExit(ctx context.Context, client DockerClient, execID string) error {

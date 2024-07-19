@@ -678,6 +678,10 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 
 	blog.Info("Envbox startup complete!")
 
+	if flags.boostrapScript == "" {
+		return nil
+	}
+
 	bootstrapExec, err := client.ContainerExecCreate(ctx, containerID, dockertypes.ExecConfig{
 		User:         imgMeta.UID,
 		Cmd:          []string{"/bin/sh", "-s"},
