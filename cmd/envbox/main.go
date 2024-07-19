@@ -3,18 +3,37 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 
 	"github.com/coder/envbox/cli"
 )
 
 func main() {
-	_, err := cli.Root().ExecuteC()
+	ch := make(chan func() error, 1)
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGWINCH)
+	go func() {
+		fmt.Println("waiting for signal")
+		<-sigs
+		fmt.Println("Got signal")
+		select {
+		case fn := <-ch:
+			fmt.Println("running shutdown function")
+			err := fn()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "shutdown function failed: %v", err)
+				os.Exit(1)
+			}
+		default:
+			fmt.Println("no shutdown function")
+		}
+		os.Exit(0)
+	}()
+	_, err := cli.Root(ch).ExecuteC()
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
-
-	// We exit the main thread while keepin all the other procs goin strong.
 	runtime.Goexit()
 }

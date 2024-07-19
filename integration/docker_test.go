@@ -289,10 +289,12 @@ func TestDocker(t *testing.T) {
 
 		binds = append(binds, bindMount(homeDir, "/home/coder", false))
 
+		envs := []string{fmt.Sprintf("%s=%s:%s", cli.EnvMounts, "/home/coder", "/home/coder")}
 		// Run the envbox container.
 		resource := integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
 			Image:           integrationtest.UbuntuImage,
 			Username:        "root",
+			Envs:            envs,
 			Binds:           binds,
 			BootstrapScript: sigtrapScript,
 		})
@@ -303,9 +305,8 @@ func TestDocker(t *testing.T) {
 		})
 		require.Error(t, err)
 
-		time.Sleep(time.Second * 5)
-		err = pool.Client.StopContainer(resource.Container.ID, 30)
-		require.NoError(t, err)
+		// Simulate a shutdown.
+		integrationtest.StopContainer(t, pool, resource.Container.ID, 30*time.Second)
 
 		err = resource.Close()
 		require.NoError(t, err)
@@ -315,6 +316,7 @@ func TestDocker(t *testing.T) {
 		resource = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
 			Image:           integrationtest.UbuntuImage,
 			Username:        "root",
+			Envs:            envs,
 			Binds:           binds,
 			BootstrapScript: sigtrapScript,
 		})
@@ -357,17 +359,13 @@ func bindMount(src, dest string, ro bool) string {
 }
 
 const sigtrapScript = `#!/bin/bash
-
-# Function to handle cleanup
 cleanup() {
-	touch /home/coder/foo
+	echo "HANDLING A SIGNAL!" && touch /home/coder/foo && echo "touched file"
     exit 0
 }
 
-# Trap SIGINT (Ctrl+C) and SIGTERM signals
 trap 'cleanup' INT TERM
 
-# Main loop or processing logic (replace with your script's logic)
 while true; do
     echo "Working..."
     sleep 1

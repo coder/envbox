@@ -95,6 +95,23 @@ func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) 
 	return &buf, inspect.Pid, nil
 }
 
+func GetExecPID(ctx context.Context, client DockerClient, execID string) (int, error) {
+	for r := retry.New(time.Second, time.Second); r.Wait(ctx); {
+		inspect, err := client.ContainerExecInspect(ctx, execID)
+		if err != nil {
+			return 0, xerrors.Errorf("exec inspect: %w", err)
+		}
+
+		if inspect.Pid == 0 {
+			continue
+		}
+		return inspect.Pid, nil
+	}
+
+	return 0, ctx.Err()
+
+}
+
 func WaitForExit(ctx context.Context, client DockerClient, execID string) error {
 	for r := retry.New(time.Second, time.Second); r.Wait(ctx); {
 		inspect, err := client.ContainerExecInspect(ctx, execID)
@@ -112,6 +129,5 @@ func WaitForExit(ctx context.Context, client DockerClient, execID string) error 
 
 		return nil
 	}
-
 	return ctx.Err()
 }

@@ -7,14 +7,12 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"os/signal"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
-	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -148,7 +146,7 @@ type flags struct {
 	ethlink       string
 }
 
-func dockerCmd() *cobra.Command {
+func dockerCmd(ch chan func() error) *cobra.Command {
 	var flags flags
 
 	cmd := &cobra.Command{
@@ -287,7 +285,7 @@ func dockerCmd() *cobra.Command {
 				return xerrors.Errorf("wait for dockerd: %w", err)
 			}
 
-			err = runDockerCVM(ctx, log, client, blog, flags)
+			err = runDockerCVM(ctx, log, client, blog, ch, flags)
 			if err != nil {
 				// It's possible we failed because we ran out of disk while
 				// pulling the image. We should restart the daemon and use
@@ -316,7 +314,7 @@ func dockerCmd() *cobra.Command {
 					}()
 
 					log.Debug(ctx, "reattempting container creation")
-					err = runDockerCVM(ctx, log, client, blog, flags)
+					err = runDockerCVM(ctx, log, client, blog, ch, flags)
 				}
 				if err != nil {
 					blog.Errorf("Failed to run envbox: %v", err)
@@ -359,7 +357,7 @@ func dockerCmd() *cobra.Command {
 	return cmd
 }
 
-func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, blog buildlog.Logger, flags flags) error {
+func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, blog buildlog.Logger, shutdownCh chan func() error, flags flags) error {
 	fs := xunix.GetFS(ctx)
 
 	// Set our OOM score to something really unfavorable to avoid getting killed
@@ -692,6 +690,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	if err != nil {
 		return xerrors.Errorf("create exec: %w", err)
 	}
+
 	resp, err := client.ContainerExecAttach(ctx, bootstrapExec.ID, dockertypes.ExecStartCheck{})
 	if err != nil {
 		return xerrors.Errorf("attach exec: %w", err)
@@ -715,53 +714,31 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		}
 	}()
 
-	inspect, err := client.ContainerExecInspect(ctx, bootstrapExec.ID)
+	// We can't just call ExecInspect because there's a race where the cmd
+	// hasn't been assigned a PID yet.
+	bootstrapPID, err := dockerutil.GetExecPID(ctx, client, bootstrapExec.ID)
 	if err != nil {
 		return xerrors.Errorf("exec inspect: %w", err)
 	}
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		err := func() error {
-			log.Info(ctx, "waiting for signal")
-			sig := <-sigs
-			sigstr := "TERM"
-			if sig == syscall.SIGINT {
-				sigstr = "INT"
-			}
-			log.Debug(ctx, "received signal", slog.F("signal", sigstr))
 
-			killExec, err := client.ContainerExecCreate(ctx, containerID, dockertypes.ExecConfig{
-				User:         imgMeta.UID,
-				Cmd:          []string{"sh", "-c", fmt.Sprintf("kill -%s %d", sigstr, inspect.Pid)},
-				AttachStdout: true,
-				AttachStderr: true,
-			})
-			if err != nil {
-				return xerrors.Errorf("create kill exec: %w", err)
-			}
+	shutdownCh <- func() error {
+		log.Debug(ctx, "killing container", slog.F("bootstrap_pid", bootstrapPID))
 
-			err = dockerutil.WaitForExit(ctx, client, killExec.ID)
-			if err != nil {
-				return xerrors.Errorf("wait for kill exec to complete: %w", err)
-			}
-
-			err = dockerutil.WaitForExit(ctx, client, bootstrapExec.ID)
-			if err != nil {
-				return xerrors.Errorf("wait for exit: %w", err)
-			}
-
-			return nil
-		}()
-		log.Info(ctx, "exiting envbox", slog.Error(err))
-		log.Sync()
+		// The PID returned is the PID _outside_ the container...
+		out, err := exec.Command("kill", "-TERM", strconv.Itoa(bootstrapPID)).CombinedOutput()
 		if err != nil {
-			os.Exit(1)
+			return xerrors.Errorf("kill bootstrap process (%s): %w", out, err)
 		}
-		os.Exit(0)
-	}()
-	log.Info(ctx, "HELP")
-	time.Sleep(time.Second)
+
+		log.Debug(ctx, "sent kill signal waiting for process to exit")
+		err = dockerutil.WaitForExit(ctx, client, bootstrapExec.ID)
+		if err != nil {
+			return xerrors.Errorf("wait for exit: %w", err)
+		}
+
+		log.Debug(ctx, "bootstrap process successfully exited")
+		return nil
+	}
 
 	return nil
 }
