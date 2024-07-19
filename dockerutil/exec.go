@@ -26,7 +26,7 @@ type ExecConfig struct {
 
 // ExecContainer runs a command in a container. It returns the output and any error.
 // If an error occurs during the execution of the command, the output is appended to the error.
-func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) (io.Reader, int, error) {
+func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) (io.Reader, error) {
 	exec, err := client.ContainerExecCreate(ctx, config.ContainerID, dockertypes.ExecConfig{
 		Detach:       config.Detach,
 		Cmd:          append([]string{config.Cmd}, config.Args...),
@@ -37,23 +37,23 @@ func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) 
 		Env:          config.Env,
 	})
 	if err != nil {
-		return nil, 0, xerrors.Errorf("exec create: %w", err)
+		return nil, xerrors.Errorf("exec create: %w", err)
 	}
 
 	resp, err := client.ContainerExecAttach(ctx, exec.ID, dockertypes.ExecStartCheck{})
 	if err != nil {
-		return nil, 0, xerrors.Errorf("attach to exec: %w", err)
+		return nil, xerrors.Errorf("attach to exec: %w", err)
 	}
 	defer resp.Close()
 
 	if config.Stdin != nil {
 		_, err = io.Copy(resp.Conn, config.Stdin)
 		if err != nil {
-			return nil, 0, xerrors.Errorf("copy stdin: %w", err)
+			return nil, xerrors.Errorf("copy stdin: %w", err)
 		}
 		err = resp.CloseWrite()
 		if err != nil {
-			return nil, 0, xerrors.Errorf("close write: %w", err)
+			return nil, xerrors.Errorf("close write: %w", err)
 		}
 	}
 
@@ -75,24 +75,24 @@ func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) 
 
 	_, err = io.Copy(wr, resp.Reader)
 	if err != nil {
-		return nil, 0, xerrors.Errorf("copy cmd output: %w", err)
+		return nil, xerrors.Errorf("copy cmd output: %w", err)
 	}
 	resp.Close()
 
 	inspect, err := client.ContainerExecInspect(ctx, exec.ID)
 	if err != nil {
-		return nil, 0, xerrors.Errorf("exec inspect: %w", err)
+		return nil, xerrors.Errorf("exec inspect: %w", err)
 	}
 
 	if inspect.Running {
-		return nil, 0, xerrors.Errorf("unexpectedly still running")
+		return nil, xerrors.Errorf("unexpectedly still running")
 	}
 
 	if inspect.ExitCode > 0 {
-		return nil, 0, xerrors.Errorf("%s: exit code %d", buf.Bytes(), inspect.ExitCode)
+		return nil, xerrors.Errorf("%s: exit code %d", buf.Bytes(), inspect.ExitCode)
 	}
 
-	return &buf, inspect.Pid, nil
+	return &buf, nil
 }
 
 func GetExecPID(ctx context.Context, client DockerClient, execID string) (int, error) {

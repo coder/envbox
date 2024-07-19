@@ -648,7 +648,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	bootDir := filepath.Join(imgMeta.HomeDir, ".coder")
 
 	blog.Infof("Creating %q directory to host Coder assets...", bootDir)
-	_, _, err = dockerutil.ExecContainer(ctx, client, dockerutil.ExecConfig{
+	_, err = dockerutil.ExecContainer(ctx, client, dockerutil.ExecConfig{
 		ContainerID: containerID,
 		User:        imgMeta.UID,
 		Cmd:         "mkdir",

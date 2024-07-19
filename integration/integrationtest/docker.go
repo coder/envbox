@@ -33,7 +33,7 @@ const (
 	HelloWorldImage = "gcr.io/coder-dev-1/sreya/hello-world"
 	// UbuntuImage is just vanilla ubuntu (80MB) but the user is set to a non-root
 	// user .
-	UbuntuImage = "gcr.io/coder-dev-1/sreya/ubuntu-coder:jon"
+	UbuntuImage = "gcr.io/coder-dev-1/sreya/ubuntu-coder"
 )
 
 // TODO use df to determine if an environment is running in a docker container or not.

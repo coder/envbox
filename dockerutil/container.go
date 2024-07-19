@@ -114,7 +114,7 @@ func BootstrapContainer(ctx context.Context, client DockerClient, conf Bootstrap
 	var err error
 	for r, n := retry.New(time.Second, time.Second*2), 0; r.Wait(ctx) && n < 10; n++ {
 		var out io.Reader
-		out, _, err = ExecContainer(ctx, client, ExecConfig{
+		out, err = ExecContainer(ctx, client, ExecConfig{
 			ContainerID: conf.ContainerID,
 			User:        conf.User,
 			Cmd:         "/bin/sh",

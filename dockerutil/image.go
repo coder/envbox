@@ -191,14 +191,14 @@ func GetImageMetadata(ctx context.Context, client DockerClient, image, username 
 		return ImageMetadata{}, xerrors.Errorf("CVMs do not support NFS volumes")
 	}
 
-	_, _, err = ExecContainer(ctx, client, ExecConfig{
+	_, err = ExecContainer(ctx, client, ExecConfig{
 		ContainerID: inspect.ID,
 		Cmd:         "stat",
 		Args:        []string{"/sbin/init"},
 	})
 	initExists := err == nil
 
-	out, _, err := ExecContainer(ctx, client, ExecConfig{
+	out, err := ExecContainer(ctx, client, ExecConfig{
 		ContainerID: inspect.ID,
 		Cmd:         "getent",
 		Args:        []string{"passwd", username},
