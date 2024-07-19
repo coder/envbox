@@ -677,7 +677,6 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	}
 
 	blog.Info("Envbox startup complete!")
-
 	if flags.boostrapScript == "" {
 		return nil
 	}
@@ -729,6 +728,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		log.Debug(ctx, "killing container", slog.F("bootstrap_pid", bootstrapPID))
 
 		// The PID returned is the PID _outside_ the container...
+		//nolint:gosec
 		out, err := exec.Command("kill", "-TERM", strconv.Itoa(bootstrapPID)).CombinedOutput()
 		if err != nil {
 			return xerrors.Errorf("kill bootstrap process (%s): %w", out, err)

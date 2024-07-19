@@ -1,12 +1,14 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
 
+	"cdr.dev/slog"
+	"cdr.dev/slog/sloggers/slogjson"
 	"github.com/coder/envbox/cli"
 )
 
@@ -15,19 +17,21 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGWINCH)
 	go func() {
-		fmt.Println("waiting for signal")
+		log := slog.Make(slogjson.Sink(os.Stderr))
+		ctx := context.Background()
+		log.Info(ctx, "waiting for signal")
 		<-sigs
-		fmt.Println("Got signal")
+		log.Info(ctx, "got signal")
 		select {
 		case fn := <-ch:
-			fmt.Println("running shutdown function")
+			log.Info(ctx, "running shutdown function")
 			err := fn()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "shutdown function failed: %v", err)
+				log.Error(ctx, "running shutdown function")
 				os.Exit(1)
 			}
 		default:
-			fmt.Println("no shutdown function")
+			log.Info(ctx, "no shutdown function")
 		}
 		os.Exit(0)
 	}()
