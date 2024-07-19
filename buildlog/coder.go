@@ -83,17 +83,25 @@ func (c *agentClientV2) Send(level codersdk.LogLevel, log string) error {
 	if err != nil {
 		return xerrors.Errorf("send build log: %w", err)
 	}
+	err = c.flush()
+	if err != nil {
+		return xerrors.Errorf("flush: %w", err)
+	}
 	return nil
 }
 
-func (c *agentClientV2) Close() error {
-	defer c.cancel()
+func (c *agentClientV2) flush() error {
 	c.ls.Flush(c.source)
 	err := c.ls.WaitUntilEmpty(c.ctx)
 	if err != nil {
 		return xerrors.Errorf("wait until empty: %w", err)
 	}
 	return nil
+}
+
+func (c *agentClientV2) Close() error {
+	defer c.cancel()
+	return c.flush()
 }
 
 func newAgentClientV2(ctx context.Context, logger slog.Logger, client *agentsdk.Client) (CoderClient, error) {
