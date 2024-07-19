@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
@@ -145,7 +146,7 @@ type flags struct {
 	ethlink       string
 }
 
-func dockerCmd() *cobra.Command {
+func dockerCmd(ch chan func() error) *cobra.Command {
 	var flags flags
 
 	cmd := &cobra.Command{
@@ -284,7 +285,7 @@ func dockerCmd() *cobra.Command {
 				return xerrors.Errorf("wait for dockerd: %w", err)
 			}
 
-			err = runDockerCVM(ctx, log, client, blog, flags)
+			err = runDockerCVM(ctx, log, client, blog, ch, flags)
 			if err != nil {
 				// It's possible we failed because we ran out of disk while
 				// pulling the image. We should restart the daemon and use
@@ -313,7 +314,7 @@ func dockerCmd() *cobra.Command {
 					}()
 
 					log.Debug(ctx, "reattempting container creation")
-					err = runDockerCVM(ctx, log, client, blog, flags)
+					err = runDockerCVM(ctx, log, client, blog, ch, flags)
 				}
 				if err != nil {
 					blog.Errorf("Failed to run envbox: %v", err)
@@ -356,7 +357,7 @@ func dockerCmd() *cobra.Command {
 	return cmd
 }
 
-func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, blog buildlog.Logger, flags flags) error {
+func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, blog buildlog.Logger, shutdownCh chan func() error, flags flags) error {
 	fs := xunix.GetFS(ctx)
 
 	// Set our OOM score to something really unfavorable to avoid getting killed
@@ -676,31 +677,71 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	}
 
 	blog.Info("Envbox startup complete!")
-
-	// The bootstrap script doesn't return since it execs the agent
-	// meaning that it can get pretty noisy if we were to log by default.
-	// In order to allow users to discern issues getting the bootstrap script
-	// to complete successfully we pipe the output to stdout if
-	// CODER_DEBUG=true.
-	debugWriter := io.Discard
-	if flags.debug {
-		debugWriter = os.Stdout
+	if flags.boostrapScript == "" {
+		return nil
 	}
-	// Bootstrap the container if a script has been provided.
-	blog.Infof("Bootstrapping workspace...")
-	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
-		ContainerID: containerID,
-		User:        imgMeta.UID,
-		Script:      flags.boostrapScript,
-		// We set this because the default behavior is to download the agent
-		// to /tmp/coder.XXXX. This causes a race to happen where we finish
-		// downloading the binary but before we can execute systemd remounts
-		// /tmp.
-		Env:       []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
-		StdOutErr: debugWriter,
+
+	bootstrapExec, err := client.ContainerExecCreate(ctx, containerID, dockertypes.ExecConfig{
+		User:         imgMeta.UID,
+		Cmd:          []string{"/bin/sh", "-s"},
+		Env:          []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+		Detach:       true,
 	})
 	if err != nil {
-		return xerrors.Errorf("boostrap container: %w", err)
+		return xerrors.Errorf("create exec: %w", err)
+	}
+
+	resp, err := client.ContainerExecAttach(ctx, bootstrapExec.ID, dockertypes.ExecStartCheck{})
+	if err != nil {
+		return xerrors.Errorf("attach exec: %w", err)
+	}
+
+	_, err = io.Copy(resp.Conn, strings.NewReader(flags.boostrapScript))
+	if err != nil {
+		return xerrors.Errorf("copy stdin: %w", err)
+	}
+	err = resp.CloseWrite()
+	if err != nil {
+		return xerrors.Errorf("close write: %w", err)
+	}
+
+	go func() {
+		defer resp.Close()
+		rd := io.LimitReader(resp.Reader, 1<<10)
+		_, err := io.Copy(blog, rd)
+		if err != nil {
+			log.Error(ctx, "copy bootstrap output", slog.Error(err))
+		}
+	}()
+
+	// We can't just call ExecInspect because there's a race where the cmd
+	// hasn't been assigned a PID yet.
+	bootstrapPID, err := dockerutil.GetExecPID(ctx, client, bootstrapExec.ID)
+	if err != nil {
+		return xerrors.Errorf("exec inspect: %w", err)
+	}
+
+	shutdownCh <- func() error {
+		log.Debug(ctx, "killing container", slog.F("bootstrap_pid", bootstrapPID))
+
+		// The PID returned is the PID _outside_ the container...
+		//nolint:gosec
+		out, err := exec.Command("kill", "-TERM", strconv.Itoa(bootstrapPID)).CombinedOutput()
+		if err != nil {
+			return xerrors.Errorf("kill bootstrap process (%s): %w", out, err)
+		}
+
+		log.Debug(ctx, "sent kill signal waiting for process to exit")
+		err = dockerutil.WaitForExit(ctx, client, bootstrapExec.ID)
+		if err != nil {
+			return xerrors.Errorf("wait for exit: %w", err)
+		}
+
+		log.Debug(ctx, "bootstrap process successfully exited")
+		return nil
 	}
 
 	return nil

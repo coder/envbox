@@ -113,7 +113,7 @@ func BootstrapContainer(ctx context.Context, client DockerClient, conf Bootstrap
 
 	var err error
 	for r, n := retry.New(time.Second, time.Second*2), 0; r.Wait(ctx) && n < 10; n++ {
-		var out []byte
+		var out io.Reader
 		out, err = ExecContainer(ctx, client, ExecConfig{
 			ContainerID: conf.ContainerID,
 			User:        conf.User,
@@ -122,9 +122,16 @@ func BootstrapContainer(ctx context.Context, client DockerClient, conf Bootstrap
 			Stdin:       strings.NewReader(conf.Script),
 			Env:         conf.Env,
 			StdOutErr:   conf.StdOutErr,
+			Detach:      conf.Detach,
 		})
 		if err != nil {
-			err = xerrors.Errorf("boostrap container (%s): %w", out, err)
+			output, rerr := io.ReadAll(out)
+			if rerr != nil {
+				err = xerrors.Errorf("read all: %w", err)
+				continue
+			}
+
+			err = xerrors.Errorf("boostrap container (%s): %w", output, err)
 			continue
 		}
 		break
