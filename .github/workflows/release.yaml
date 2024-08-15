@@ -10,7 +10,7 @@ on:
       version:
         description: "release version, also creates a tag e.g. (0.1.0)"
         required: true
-    
+
 permissions:
   actions: read
   checks: none
@@ -85,7 +85,7 @@ jobs:
         run: docker push ghcr.io/coder/envbox:${{ github.event.inputs.version }}-${{ matrix.arch-suffix }}
   manifest:
     runs-on: ubuntu-22.04
-    needs: release 
+    needs: release
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -103,8 +103,14 @@ jobs:
           docker manifest create ghcr.io/coder/envbox:${{ github.event.inputs.version }} \
             --amend ghcr.io/coder/envbox:${{ github.event.inputs.version }}-amd64 \
             --amend ghcr.io/coder/envbox:${{ github.event.inputs.version }}-arm64
+          docker manifest create ghcr.io/coder/envbox:latest \
+            --amend ghcr.io/coder/envbox:${{ github.event.inputs.version }}-amd64 \
+            --amend ghcr.io/coder/envbox:${{ github.event.inputs.version }}-arm64
+
       - name: Push Manifest
-        run: docker manifest push ghcr.io/coder/envbox:${{ github.event.inputs.version }}
+        run: |
+          docker manifest push ghcr.io/coder/envbox:${{ github.event.inputs.version }}
+          docker manifest push ghcr.io/coder/envbox:latest
 
   tag:
     runs-on: ubuntu-22.04
@@ -123,5 +129,3 @@ jobs:
         run: |
           git tag -a ${{ github.event.inputs.version }} -m ${{ github.event.inputs.version }}
           git push --tags
-
-
