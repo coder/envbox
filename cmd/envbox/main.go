@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"runtime"
@@ -17,8 +18,8 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGWINCH)
 	go func() {
-		log := slog.Make(slogjson.Sink(os.Stderr))
 		ctx := context.Background()
+		log := slog.Make(slogjson.Sink(os.Stderr))
 		log.Info(ctx, "waiting for signal")
 		<-sigs
 		log.Info(ctx, "got signal")
@@ -38,6 +39,7 @@ func main() {
 	}()
 	_, err := cli.Root(ch).ExecuteC()
 	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
 	runtime.Goexit()
