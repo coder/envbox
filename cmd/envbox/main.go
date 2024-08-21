@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"syscall"
 
+	"golang.org/x/xerrors"
+
 	"cdr.dev/slog"
 	"cdr.dev/slog/sloggers/slogjson"
 	"github.com/coder/envbox/cli"
@@ -29,6 +31,9 @@ func main() {
 			err := fn()
 			if err != nil {
 				log.Error(ctx, "shutdown function failed", slog.Error(err))
+				if xerrors.Is(err, context.DeadlineExceeded) {
+					os.Exit(cli.ExitCodeShutdownTimeout)
+				}
 				os.Exit(1)
 			}
 		default:
