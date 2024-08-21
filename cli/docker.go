@@ -40,6 +40,10 @@ const (
 	// EnvBoxContainerName is the name of the inner user container.
 	EnvBoxPullImageSecretEnvVar = "CODER_IMAGE_PULL_SECRET" //nolint:gosec
 	EnvBoxContainerName         = "CODER_CVM_CONTAINER_NAME"
+	// We define a custom exit code to distinguish from the generic '1' when envbox exits due to a shutdown timeout.
+	// Docker claims exit codes 125-127 so we start at 150 to
+	// ensure we don't collide.
+	ExitCodeShutdownTimeout = 150
 )
 
 const (
@@ -103,6 +107,7 @@ var (
 	EnvDockerConfig         = "CODER_DOCKER_CONFIG"
 	EnvDebug                = "CODER_DEBUG"
 	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
+	EnvShutdownTimeout      = "CODER_SHUTDOWN_TIMEOUT"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -140,6 +145,7 @@ type flags struct {
 	cpus                 int
 	memory               int
 	disableIDMappedMount bool
+	shutdownTimeout      time.Duration
 
 	// Test flags.
 	noStartupLogs bool
@@ -349,6 +355,7 @@ func dockerCmd(ch chan func() error) *cobra.Command {
 	cliflag.IntVarP(cmd.Flags(), &flags.cpus, "cpus", "", EnvCPUs, 0, "Number of CPUs to allocate inner container. e.g. 2")
 	cliflag.IntVarP(cmd.Flags(), &flags.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.disableIDMappedMount, "disable-idmapped-mount", "", EnvDisableIDMappedMount, false, "Disable idmapped mounts in sysbox. Note that you may need an alternative (e.g. shiftfs).")
+	cliflag.DurationVarP(cmd.Flags(), &flags.shutdownTimeout, "shutdown-timeout", "", EnvShutdownTimeout, time.Minute, "Duration after which envbox will be forcefully terminated.")
 
 	// Test flags.
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")
@@ -728,7 +735,13 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	shutdownCh <- func() error {
 		log.Debug(ctx, "killing container", slog.F("bootstrap_pid", bootstrapPID))
 
-		ctx, cancel := context.WithTimeout(ctx, time.Minute)
+		timeout := time.Minute
+		if flags.shutdownTimeout != time.Minute {
+			timeout = flags.shutdownTimeout
+			log.Debug(ctx, "using custom shutdown timeout", slog.F("timeout", timeout.String()))
+		}
+
+		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		// The PID returned is the PID _outside_ the container...
 		//nolint:gosec
