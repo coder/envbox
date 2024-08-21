@@ -352,7 +352,6 @@ func TestDocker(t *testing.T) {
 		// We expect it to timeout which should result in a special exit code.
 		require.Equal(t, cli.ExitCodeShutdownTimeout, exitCode)
 	})
-
 }
 
 func requireSliceNoContains(t *testing.T, ss []string, els ...string) {
