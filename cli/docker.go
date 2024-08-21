@@ -28,6 +28,7 @@ import (
 	"github.com/coder/envbox/dockerutil"
 	"github.com/coder/envbox/slogkubeterminate"
 	"github.com/coder/envbox/sysboxutil"
+	"github.com/coder/envbox/xhttp"
 	"github.com/coder/envbox/xunix"
 )
 
@@ -101,6 +102,7 @@ var (
 	EnvDockerConfig         = "CODER_DOCKER_CONFIG"
 	EnvDebug                = "CODER_DEBUG"
 	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
+	EnvExtraCertsPath       = "CODER_EXTRA_CERTS_PATH"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -138,6 +140,7 @@ type flags struct {
 	cpus                 int
 	memory               int
 	disableIDMappedMount bool
+	extraCertsPath       string
 
 	// Test flags.
 	noStartupLogs bool
@@ -158,6 +161,11 @@ func dockerCmd() *cobra.Command {
 				blog buildlog.Logger = buildlog.NopLogger{}
 			)
 
+			httpClient, err := xhttp.Client(log, flags.extraCertsPath)
+			if err != nil {
+				return xerrors.Errorf("http client: %w", err)
+			}
+
 			if !flags.noStartupLogs {
 				log = slog.Make(slogjson.Sink(cmd.ErrOrStderr()), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
 				blog = buildlog.JSONLogger{Encoder: json.NewEncoder(os.Stderr)}
@@ -169,7 +177,7 @@ func dockerCmd() *cobra.Command {
 					return xerrors.Errorf("parse coder URL %q: %w", flags.coderURL, err)
 				}
 
-				agent, err := buildlog.OpenCoderClient(ctx, coderURL, log, flags.agentToken)
+				agent, err := buildlog.OpenCoderClient(ctx, log, coderURL, httpClient, flags.agentToken)
 				if err != nil {
 					// Don't fail workspace startup on
 					// an inability to push build logs.
@@ -216,7 +224,7 @@ func dockerCmd() *cobra.Command {
 				log.Debug(ctx, "using custom docker bridge CIDR", slog.F("cidr", cidr))
 			}
 
-			dargs, err := dockerdArgs(flags.ethlink, cidr, false)
+			dargs, err := dockerdArgs(flags.ethlink, cidr, flags.extraCertsPath, false)
 			if err != nil {
 				return xerrors.Errorf("dockerd args: %w", err)
 			}
@@ -249,7 +257,7 @@ func dockerCmd() *cobra.Command {
 				// directory is going to be on top of an overlayfs filesystem
 				// we have to use the vfs storage driver.
 				if xunix.IsNoSpaceErr(err) {
-					args, err = dockerdArgs(flags.ethlink, cidr, true)
+					args, err = dockerdArgs(flags.ethlink, cidr, flags.extraCertsPath, true)
 					if err != nil {
 						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 						//nolint
@@ -296,7 +304,7 @@ func dockerCmd() *cobra.Command {
 				if xunix.IsNoSpaceErr(err) {
 					blog.Info("Insufficient space to start inner container. Restarting dockerd using the vfs driver. Your performance will be degraded. Clean up your home volume and then restart the workspace to improve performance.")
 					log.Debug(ctx, "encountered 'no space left on device' error while starting workspace", slog.Error(err))
-					args, err := dockerdArgs(flags.ethlink, cidr, true)
+					args, err := dockerdArgs(flags.ethlink, cidr, flags.extraCertsPath, true)
 					if err != nil {
 						return xerrors.Errorf("dockerd args for restart: %w", err)
 					}
@@ -349,6 +357,7 @@ func dockerCmd() *cobra.Command {
 	cliflag.IntVarP(cmd.Flags(), &flags.cpus, "cpus", "", EnvCPUs, 0, "Number of CPUs to allocate inner container. e.g. 2")
 	cliflag.IntVarP(cmd.Flags(), &flags.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.disableIDMappedMount, "disable-idmapped-mount", "", EnvDisableIDMappedMount, false, "Disable idmapped mounts in sysbox. Note that you may need an alternative (e.g. shiftfs).")
+	cliflag.StringVarP(cmd.Flags(), &flags.extraCertsPath, "extra-certs-path", "", EnvExtraCertsPath, "", "The path to a directory or file containing extra CA certificates.")
 
 	// Test flags.
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")
@@ -709,7 +718,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 }
 
 //nolint:revive
-func dockerdArgs(link, cidr string, isNoSpace bool) ([]string, error) {
+func dockerdArgs(link, cidr string, caCertsPath string, isNoSpace bool) ([]string, error) {
 	// We need to adjust the MTU for the host otherwise packets will fail delivery.
 	// 1500 is the standard, but certain deployments (like GKE) use custom MTU values.
 	// See: https://www.atlantis-press.com/journals/ijndc/125936177/view#sec-s3.1
@@ -732,6 +741,25 @@ func dockerdArgs(link, cidr string, isNoSpace bool) ([]string, error) {
 		"--userns-remap=coder",
 		"--storage-driver=overlay2",
 		fmt.Sprintf("--bip=%s/%d", dockerBip, prefixLen),
+	}
+
+	if caCertsPath != "" {
+		f, err := os.Stat(caCertsPath)
+		if err != nil {
+			return nil, xerrors.Errorf("open %v: %w", caCertsPath, err)
+		}
+		if f.IsDir() {
+			entries, err := os.ReadDir(caCertsPath)
+			if err != nil {
+				return nil, xerrors.Errorf("read dir %v: %w", caCertsPath, err)
+			}
+			for _, entry := range entries {
+				p := filepath.Join(caCertsPath, entry.Name())
+				args = append(args, fmt.Sprintf("--tlscacert=%s", p))
+			}
+		} else {
+			args = append(args, fmt.Sprintf("--tlscacert=%s", caCertsPath))
+		}
 	}
 
 	if isNoSpace {

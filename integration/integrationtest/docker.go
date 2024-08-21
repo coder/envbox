@@ -63,6 +63,12 @@ func (c CreateDockerCVMConfig) validate(t *testing.T) {
 	}
 }
 
+type CoderdOptions struct {
+	TLSEnable bool
+	TLSCert   string
+	TLSKey    string
+}
+
 // RunEnvbox runs envbox, it returns once the inner container has finished
 // spinning up.
 func RunEnvbox(t *testing.T, pool *dockertest.Pool, conf *CreateDockerCVMConfig) *dockertest.Resource {

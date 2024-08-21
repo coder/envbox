@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -143,9 +144,10 @@ func newAgentClientV2(ctx context.Context, logger slog.Logger, client *agentsdk.
 	}, nil
 }
 
-func OpenCoderClient(ctx context.Context, accessURL *url.URL, logger slog.Logger, token string) (CoderClient, error) {
+func OpenCoderClient(ctx context.Context, logger slog.Logger, accessURL *url.URL, hc *http.Client, token string) (CoderClient, error) {
 	client := agentsdk.New(accessURL)
 	client.SetSessionToken(token)
+	client.SDK.HTTPClient = hc
 
 	resp, err := client.SDK.BuildInfo(ctx)
 	if err != nil {
