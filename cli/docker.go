@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -727,9 +728,11 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	shutdownCh <- func() error {
 		log.Debug(ctx, "killing container", slog.F("bootstrap_pid", bootstrapPID))
 
+		ctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
 		// The PID returned is the PID _outside_ the container...
 		//nolint:gosec
-		out, err := exec.Command("kill", "-TERM", strconv.Itoa(bootstrapPID)).CombinedOutput()
+		out, err := exec.CommandContext(ctx, "kill", "-TERM", strconv.Itoa(bootstrapPID)).CombinedOutput()
 		if err != nil {
 			return xerrors.Errorf("kill bootstrap process (%s): %w", out, err)
 		}
