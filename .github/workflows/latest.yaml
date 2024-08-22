@@ -6,7 +6,6 @@ on:
       tag:
         description: "The tag to point latest to"
         required: true
-        default: main
 
 permissions:
   actions: read
