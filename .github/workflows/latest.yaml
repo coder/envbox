@@ -22,7 +22,6 @@ permissions:
 jobs:
   manifest:
     runs-on: ubuntu-22.04
-    needs: release
     steps:
       - name: Checkout
         uses: actions/checkout@v3
