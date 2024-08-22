@@ -306,10 +306,8 @@ func TestDocker(t *testing.T) {
 		require.Error(t, err)
 
 		// Simulate a shutdown.
-		integrationtest.StopContainer(t, pool, resource.Container.ID, 30*time.Second)
-
-		err = resource.Close()
-		require.NoError(t, err)
+		exitCode := integrationtest.StopContainer(t, pool, resource.Container.ID, 30*time.Second)
+		require.Equal(t, 0, exitCode)
 
 		t.Logf("envbox %q started successfully, recreating...", resource.Container.ID)
 		// Run the envbox container.
@@ -325,6 +323,34 @@ func TestDocker(t *testing.T) {
 			Cmd:         []string{"/bin/sh", "-c", "stat /home/coder/foo"},
 		})
 		require.NoError(t, err)
+	})
+
+	t.Run("ShutdownTimeout", func(t *testing.T) {
+		t.Parallel()
+
+		pool, err := dockertest.NewPool("")
+		require.NoError(t, err)
+
+		var (
+			tmpdir = integrationtest.TmpDir(t)
+			binds  = integrationtest.DefaultBinds(t, tmpdir)
+		)
+
+		envs := []string{fmt.Sprintf("%s=%s", cli.EnvShutdownTimeout, "1s")}
+
+		// Run the envbox container.
+		resource := integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
+			Image:           integrationtest.UbuntuImage,
+			Username:        "root",
+			Envs:            envs,
+			Binds:           binds,
+			BootstrapScript: sigtrapForeverScript,
+		})
+
+		// Simulate a shutdown.
+		exitCode := integrationtest.StopContainer(t, pool, resource.Container.ID, 30*time.Second)
+		// We expect it to timeout which should result in a special exit code.
+		require.Equal(t, cli.ExitCodeShutdownTimeout, exitCode)
 	})
 }
 
@@ -357,6 +383,20 @@ func bindMount(src, dest string, ro bool) string {
 	}
 	return fmt.Sprintf("%s:%s", src, dest)
 }
+
+const sigtrapForeverScript = `#!/bin/bash
+cleanup() {
+	echo "Got a signal, going to sleep!" && sleep infinity
+    exit 0
+}
+
+trap 'cleanup' INT TERM
+
+while true; do
+    echo "Working..."
+    sleep 1
+done
+`
 
 const sigtrapScript = `#!/bin/bash
 cleanup() {

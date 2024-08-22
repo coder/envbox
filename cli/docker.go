@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -39,6 +40,10 @@ const (
 	// EnvBoxContainerName is the name of the inner user container.
 	EnvBoxPullImageSecretEnvVar = "CODER_IMAGE_PULL_SECRET" //nolint:gosec
 	EnvBoxContainerName         = "CODER_CVM_CONTAINER_NAME"
+	// We define a custom exit code to distinguish from the generic '1' when envbox exits due to a shutdown timeout.
+	// Docker claims exit codes 125-127 so we start at 150 to
+	// ensure we don't collide.
+	ExitCodeShutdownTimeout = 150
 )
 
 const (
@@ -77,8 +82,9 @@ const (
 	// with UID/GID 1000 will be mapped to `UserNamespaceOffset` + 1000
 	// on the host. Changing this value will result in improper mappings
 	// on existing containers.
-	UserNamespaceOffset = 100000
-	devDir              = "/dev"
+	UserNamespaceOffset    = 100000
+	devDir                 = "/dev"
+	defaultShutdownTimeout = time.Minute
 )
 
 var (
@@ -102,6 +108,7 @@ var (
 	EnvDockerConfig         = "CODER_DOCKER_CONFIG"
 	EnvDebug                = "CODER_DEBUG"
 	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
+	EnvShutdownTimeout      = "CODER_SHUTDOWN_TIMEOUT"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -139,6 +146,7 @@ type flags struct {
 	cpus                 int
 	memory               int
 	disableIDMappedMount bool
+	shutdownTimeout      time.Duration
 
 	// Test flags.
 	noStartupLogs bool
@@ -350,6 +358,7 @@ func dockerCmd(ch chan func() error) *cobra.Command {
 	cliflag.IntVarP(cmd.Flags(), &flags.cpus, "cpus", "", EnvCPUs, 0, "Number of CPUs to allocate inner container. e.g. 2")
 	cliflag.IntVarP(cmd.Flags(), &flags.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.disableIDMappedMount, "disable-idmapped-mount", "", EnvDisableIDMappedMount, false, "Disable idmapped mounts in sysbox. Note that you may need an alternative (e.g. shiftfs).")
+	cliflag.DurationVarP(cmd.Flags(), &flags.shutdownTimeout, "shutdown-timeout", "", EnvShutdownTimeout, defaultShutdownTimeout, "Duration after which envbox will be forcefully terminated.")
 
 	// Test flags.
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")
@@ -726,18 +735,31 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		return xerrors.Errorf("exec inspect: %w", err)
 	}
 
-	shutdownCh <- func() error {
-		log.Debug(ctx, "killing container", slog.F("bootstrap_pid", bootstrapPID))
+	shutdownCh <- killBootstrapCmd(ctx, log, bootstrapPID, bootstrapExec.ID, client, flags.shutdownTimeout)
 
+	return nil
+}
+
+// KillBootstrapCmd is the command we run when we receive a signal
+// to kill the envbox container.
+func killBootstrapCmd(ctx context.Context, log slog.Logger, pid int, execID string, client dockerutil.DockerClient, timeout time.Duration) func() error {
+	return func() error {
+		log.Debug(ctx, "killing container",
+			slog.F("bootstrap_pid", pid),
+			slog.F("timeout", timeout.String()),
+		)
+
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
 		// The PID returned is the PID _outside_ the container...
 		//nolint:gosec
-		out, err := exec.Command("kill", "-TERM", strconv.Itoa(bootstrapPID)).CombinedOutput()
+		out, err := exec.CommandContext(ctx, "kill", "-TERM", strconv.Itoa(pid)).CombinedOutput()
 		if err != nil {
 			return xerrors.Errorf("kill bootstrap process (%s): %w", out, err)
 		}
 
 		log.Debug(ctx, "sent kill signal waiting for process to exit")
-		err = dockerutil.WaitForExit(ctx, client, bootstrapExec.ID)
+		err = dockerutil.WaitForExit(ctx, client, execID)
 		if err != nil {
 			return xerrors.Errorf("wait for exit: %w", err)
 		}
@@ -745,8 +767,6 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 		log.Debug(ctx, "bootstrap process successfully exited")
 		return nil
 	}
-
-	return nil
 }
 
 //nolint:revive
