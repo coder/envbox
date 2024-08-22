@@ -91,12 +91,7 @@ func RunEnvbox(t *testing.T, pool *dockertest.Pool, conf *CreateDockerCVMConfig)
 		host.CPUQuota = int64(conf.CPUs) * int64(dockerutil.DefaultCPUPeriod)
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() {
-		// Only delete the container if the test passes.
-		if !t.Failed() {
-			resource.Close()
-		}
-	})
+	// t.Cleanup(func() { _ = pool.Purge(resource) })
 
 	waitForCVM(t, pool, resource)
 
@@ -269,7 +264,7 @@ func ExecEnvbox(t *testing.T, pool *dockertest.Pool, conf ExecConfig) ([]byte, e
 	return buf.Bytes(), nil
 }
 
-func StopContainer(t *testing.T, pool *dockertest.Pool, id string, to time.Duration) int {
+func StopContainer(t *testing.T, pool *dockertest.Pool, id string, to time.Duration) {
 	t.Helper()
 
 	err := pool.Client.KillContainer(docker.KillContainerOptions{
@@ -288,11 +283,10 @@ func StopContainer(t *testing.T, pool *dockertest.Pool, id string, to time.Durat
 			continue
 		}
 
-		return cnt.State.ExitCode
+		return
 	}
 
 	t.Fatalf("timed out waiting for container %s to stop", id)
-	return 1
 }
 
 // cmdLineEnvs returns args passed to the /envbox command
