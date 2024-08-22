@@ -1,6 +1,7 @@
 package dockerutil
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -207,7 +208,7 @@ func GetImageMetadata(ctx context.Context, client DockerClient, image, username 
 		return ImageMetadata{}, xerrors.Errorf("get /etc/passwd entry for %s: %w", username, err)
 	}
 
-	users, err := xunix.ParsePasswd(out)
+	users, err := xunix.ParsePasswd(bytes.NewReader(out))
 	if err != nil {
 		return ImageMetadata{}, xerrors.Errorf("parse passwd entry for (%s): %w", out, err)
 	}

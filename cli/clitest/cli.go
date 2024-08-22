@@ -56,7 +56,7 @@ func New(t *testing.T, cmd string, args ...string) (context.Context, *cobra.Comm
 		ctx    = ctx(t, fs, execer, mnt, client)
 	)
 
-	root := cli.Root(nil)
+	root := cli.Root()
 	// This is the one thing that isn't really mocked for the tests.
 	// I cringe at the thought of introducing yet another mock so
 	// let's avoid it for now.

@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func Root(ch chan func() error) *cobra.Command {
+func Root() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "envbox",
 		SilenceErrors: true,
@@ -15,6 +15,6 @@ func Root(ch chan func() error) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(dockerCmd(ch))
+	cmd.AddCommand(dockerCmd())
 	return cmd
 }

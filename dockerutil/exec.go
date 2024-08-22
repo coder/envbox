@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
 	"golang.org/x/xerrors"
 
 	"github.com/coder/envbox/xio"
-	"github.com/coder/retry"
 )
 
 type ExecConfig struct {
@@ -26,9 +24,9 @@ type ExecConfig struct {
 
 // ExecContainer runs a command in a container. It returns the output and any error.
 // If an error occurs during the execution of the command, the output is appended to the error.
-func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) (io.Reader, error) {
+func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) ([]byte, error) {
 	exec, err := client.ContainerExecCreate(ctx, config.ContainerID, dockertypes.ExecConfig{
-		Detach:       config.Detach,
+		Detach:       true,
 		Cmd:          append([]string{config.Cmd}, config.Args...),
 		User:         config.User,
 		AttachStderr: true,
@@ -92,41 +90,5 @@ func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) 
 		return nil, xerrors.Errorf("%s: exit code %d", buf.Bytes(), inspect.ExitCode)
 	}
 
-	return &buf, nil
-}
-
-func GetExecPID(ctx context.Context, client DockerClient, execID string) (int, error) {
-	for r := retry.New(time.Second, time.Second); r.Wait(ctx); {
-		inspect, err := client.ContainerExecInspect(ctx, execID)
-		if err != nil {
-			return 0, xerrors.Errorf("exec inspect: %w", err)
-		}
-
-		if inspect.Pid == 0 {
-			continue
-		}
-		return inspect.Pid, nil
-	}
-
-	return 0, ctx.Err()
-}
-
-func WaitForExit(ctx context.Context, client DockerClient, execID string) error {
-	for r := retry.New(time.Second, time.Second); r.Wait(ctx); {
-		inspect, err := client.ContainerExecInspect(ctx, execID)
-		if err != nil {
-			return xerrors.Errorf("exec inspect: %w", err)
-		}
-
-		if inspect.Running {
-			continue
-		}
-
-		if inspect.ExitCode > 0 {
-			return xerrors.Errorf("exit code %d", inspect.ExitCode)
-		}
-
-		return nil
-	}
-	return ctx.Err()
+	return buf.Bytes(), nil
 }
