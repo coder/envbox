@@ -7,13 +7,11 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -40,10 +38,6 @@ const (
 	// EnvBoxContainerName is the name of the inner user container.
 	EnvBoxPullImageSecretEnvVar = "CODER_IMAGE_PULL_SECRET" //nolint:gosec
 	EnvBoxContainerName         = "CODER_CVM_CONTAINER_NAME"
-	// We define a custom exit code to distinguish from the generic '1' when envbox exits due to a shutdown timeout.
-	// Docker claims exit codes 125-127 so we start at 150 to
-	// ensure we don't collide.
-	ExitCodeShutdownTimeout = 150
 )
 
 const (
@@ -82,9 +76,8 @@ const (
 	// with UID/GID 1000 will be mapped to `UserNamespaceOffset` + 1000
 	// on the host. Changing this value will result in improper mappings
 	// on existing containers.
-	UserNamespaceOffset    = 100000
-	devDir                 = "/dev"
-	defaultShutdownTimeout = time.Minute
+	UserNamespaceOffset = 100000
+	devDir              = "/dev"
 )
 
 var (
@@ -108,7 +101,6 @@ var (
 	EnvDockerConfig         = "CODER_DOCKER_CONFIG"
 	EnvDebug                = "CODER_DEBUG"
 	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
-	EnvShutdownTimeout      = "CODER_SHUTDOWN_TIMEOUT"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -146,7 +138,6 @@ type flags struct {
 	cpus                 int
 	memory               int
 	disableIDMappedMount bool
-	shutdownTimeout      time.Duration
 
 	// Test flags.
 	noStartupLogs bool
@@ -154,7 +145,7 @@ type flags struct {
 	ethlink       string
 }
 
-func dockerCmd(ch chan func() error) *cobra.Command {
+func dockerCmd() *cobra.Command {
 	var flags flags
 
 	cmd := &cobra.Command{
@@ -295,7 +286,7 @@ func dockerCmd(ch chan func() error) *cobra.Command {
 				return xerrors.Errorf("wait for dockerd: %w", err)
 			}
 
-			err = runDockerCVM(ctx, log, client, blog, ch, flags)
+			err = runDockerCVM(ctx, log, client, blog, flags)
 			if err != nil {
 				// It's possible we failed because we ran out of disk while
 				// pulling the image. We should restart the daemon and use
@@ -324,7 +315,7 @@ func dockerCmd(ch chan func() error) *cobra.Command {
 					}()
 
 					log.Debug(ctx, "reattempting container creation")
-					err = runDockerCVM(ctx, log, client, blog, ch, flags)
+					err = runDockerCVM(ctx, log, client, blog, flags)
 				}
 				if err != nil {
 					blog.Errorf("Failed to run envbox: %v", err)
@@ -358,7 +349,6 @@ func dockerCmd(ch chan func() error) *cobra.Command {
 	cliflag.IntVarP(cmd.Flags(), &flags.cpus, "cpus", "", EnvCPUs, 0, "Number of CPUs to allocate inner container. e.g. 2")
 	cliflag.IntVarP(cmd.Flags(), &flags.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.disableIDMappedMount, "disable-idmapped-mount", "", EnvDisableIDMappedMount, false, "Disable idmapped mounts in sysbox. Note that you may need an alternative (e.g. shiftfs).")
-	cliflag.DurationVarP(cmd.Flags(), &flags.shutdownTimeout, "shutdown-timeout", "", EnvShutdownTimeout, defaultShutdownTimeout, "Duration after which envbox will be forcefully terminated.")
 
 	// Test flags.
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")
@@ -368,7 +358,7 @@ func dockerCmd(ch chan func() error) *cobra.Command {
 	return cmd
 }
 
-func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, blog buildlog.Logger, shutdownCh chan func() error, flags flags) error {
+func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, blog buildlog.Logger, flags flags) error {
 	fs := xunix.GetFS(ctx)
 
 	// Set our OOM score to something really unfavorable to avoid getting killed
@@ -688,85 +678,34 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	}
 
 	blog.Info("Envbox startup complete!")
-	if flags.boostrapScript == "" {
-		return nil
-	}
 
-	bootstrapExec, err := client.ContainerExecCreate(ctx, containerID, dockertypes.ExecConfig{
-		User:         imgMeta.UID,
-		Cmd:          []string{"/bin/sh", "-s"},
-		Env:          []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
-		AttachStdin:  true,
-		AttachStdout: true,
-		AttachStderr: true,
-		Detach:       true,
+	// The bootstrap script doesn't return since it execs the agent
+	// meaning that it can get pretty noisy if we were to log by default.
+	// In order to allow users to discern issues getting the bootstrap script
+	// to complete successfully we pipe the output to stdout if
+	// CODER_DEBUG=true.
+	debugWriter := io.Discard
+	if flags.debug {
+		debugWriter = os.Stdout
+	}
+	// Bootstrap the container if a script has been provided.
+	blog.Infof("Bootstrapping workspace...")
+	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
+		ContainerID: containerID,
+		User:        imgMeta.UID,
+		Script:      flags.boostrapScript,
+		// We set this because the default behavior is to download the agent
+		// to /tmp/coder.XXXX. This causes a race to happen where we finish
+		// downloading the binary but before we can execute systemd remounts
+		// /tmp.
+		Env:       []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
+		StdOutErr: debugWriter,
 	})
 	if err != nil {
-		return xerrors.Errorf("create exec: %w", err)
+		return xerrors.Errorf("boostrap container: %w", err)
 	}
-
-	resp, err := client.ContainerExecAttach(ctx, bootstrapExec.ID, dockertypes.ExecStartCheck{})
-	if err != nil {
-		return xerrors.Errorf("attach exec: %w", err)
-	}
-
-	_, err = io.Copy(resp.Conn, strings.NewReader(flags.boostrapScript))
-	if err != nil {
-		return xerrors.Errorf("copy stdin: %w", err)
-	}
-	err = resp.CloseWrite()
-	if err != nil {
-		return xerrors.Errorf("close write: %w", err)
-	}
-
-	go func() {
-		defer resp.Close()
-		rd := io.LimitReader(resp.Reader, 1<<10)
-		_, err := io.Copy(blog, rd)
-		if err != nil {
-			log.Error(ctx, "copy bootstrap output", slog.Error(err))
-		}
-	}()
-
-	// We can't just call ExecInspect because there's a race where the cmd
-	// hasn't been assigned a PID yet.
-	bootstrapPID, err := dockerutil.GetExecPID(ctx, client, bootstrapExec.ID)
-	if err != nil {
-		return xerrors.Errorf("exec inspect: %w", err)
-	}
-
-	shutdownCh <- killBootstrapCmd(ctx, log, bootstrapPID, bootstrapExec.ID, client, flags.shutdownTimeout)
 
 	return nil
-}
-
-// KillBootstrapCmd is the command we run when we receive a signal
-// to kill the envbox container.
-func killBootstrapCmd(ctx context.Context, log slog.Logger, pid int, execID string, client dockerutil.DockerClient, timeout time.Duration) func() error {
-	return func() error {
-		log.Debug(ctx, "killing container",
-			slog.F("bootstrap_pid", pid),
-			slog.F("timeout", timeout.String()),
-		)
-
-		ctx, cancel := context.WithTimeout(ctx, timeout)
-		defer cancel()
-		// The PID returned is the PID _outside_ the container...
-		//nolint:gosec
-		out, err := exec.CommandContext(ctx, "kill", "-TERM", strconv.Itoa(pid)).CombinedOutput()
-		if err != nil {
-			return xerrors.Errorf("kill bootstrap process (%s): %w", out, err)
-		}
-
-		log.Debug(ctx, "sent kill signal waiting for process to exit")
-		err = dockerutil.WaitForExit(ctx, client, execID)
-		if err != nil {
-			return xerrors.Errorf("wait for exit: %w", err)
-		}
-
-		log.Debug(ctx, "bootstrap process successfully exited")
-		return nil
-	}
 }
 
 //nolint:revive

@@ -162,9 +162,7 @@ func (m MockClient) ContainerExecCreate(ctx context.Context, name string, config
 
 func (m MockClient) ContainerExecInspect(ctx context.Context, id string) (dockertypes.ContainerExecInspect, error) {
 	if m.ContainerExecInspectFn == nil {
-		return dockertypes.ContainerExecInspect{
-			Pid: 1,
-		}, nil
+		return dockertypes.ContainerExecInspect{}, nil
 	}
 
 	return m.ContainerExecInspectFn(ctx, id)
