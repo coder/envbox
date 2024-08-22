@@ -42,16 +42,17 @@ const (
 // TODO use df to determine if an environment is running in a docker container or not.
 
 type CreateDockerCVMConfig struct {
-	Image           string
-	Username        string
-	BootstrapScript string
-	InnerEnvFilter  []string
-	Envs            []string
-	Binds           []string
-	Mounts          []string
-	AddFUSE         bool
-	AddTUN          bool
-	CPUs            int
+	Image             string
+	Username          string
+	BootstrapScript   string
+	InnerEnvFilter    []string
+	Envs              []string
+	Binds             []string
+	Mounts            []string
+	AddFUSE           bool
+	AddTUN            bool
+	CPUs              int
+	UseHostNetworking bool
 }
 
 func (c CreateDockerCVMConfig) validate(t *testing.T) {
@@ -98,6 +99,10 @@ func RunEnvbox(t *testing.T, pool *dockertest.Pool, conf *CreateDockerCVMConfig)
 		host.Privileged = true
 		host.CPUPeriod = int64(dockerutil.DefaultCPUPeriod)
 		host.CPUQuota = int64(conf.CPUs) * int64(dockerutil.DefaultCPUPeriod)
+		if conf.UseHostNetworking {
+			host.NetworkMode = "host"
+		}
+		host.ExtraHosts = []string{"host.docker.internal:host-gateway"}
 	})
 	require.NoError(t, err)
 	// t.Cleanup(func() { _ = pool.Purge(resource) })
@@ -425,6 +430,7 @@ func EnvVar(key, value string) string {
 
 }
 
+//nolint:revive
 func BindMount(src, dest string, ro bool) string {
 	if ro {
 		return fmt.Sprintf("%s:%s:%s", src, dest, "ro")

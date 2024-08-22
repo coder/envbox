@@ -16,6 +16,7 @@ require (
 	github.com/docker/docker v24.0.9+incompatible
 	github.com/google/go-containerregistry v0.14.0
 	github.com/google/uuid v1.6.0
+	github.com/jackpal/gateway v1.0.15
 	github.com/opencontainers/image-spec v1.1.0-rc5
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/quasilyte/go-ruleguard/dsl v0.3.22
@@ -222,6 +223,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/sqlc-dev/pqtype v0.3.0 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/swaggo/files/v2 v2.0.0 // indirect
 	github.com/swaggo/http-swagger/v2 v2.0.1 // indirect
 	github.com/swaggo/swag v1.16.2 // indirect

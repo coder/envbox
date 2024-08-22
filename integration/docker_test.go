@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"cdr.dev/slog/sloggers/slogtest"
 	dockertest "github.com/ory/dockertest/v3"
 	"github.com/stretchr/testify/require"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/coder/coder/v2/coderd/database/dbfake"
 	"github.com/coder/envbox/cli"
 	"github.com/coder/envbox/integration/integrationtest"
+	"github.com/coder/envbox/xhttp"
 )
 
 func TestDocker(t *testing.T) {
@@ -286,19 +288,24 @@ func TestDocker(t *testing.T) {
 			cert        = integrationtest.UnsafeTLSCert(t)
 			binds       = integrationtest.DefaultBinds(t, dir)
 			ctx, cancel = context.WithTimeout(context.Background(), time.Minute*5)
+			logger      = slogtest.Make(t, nil)
 		)
 		t.Cleanup(cancel)
 
 		pool, err := dockertest.NewPool("")
 		require.NoError(t, err)
 
+		certDir := filepath.Join(dir, "certs")
+		err = os.MkdirAll(certDir, 0777)
+		require.NoError(t, err)
+		certPath := filepath.Join(certDir, "cert.pem")
+		integrationtest.WriteFile(t, certPath, integrationtest.SelfSignedCert, 0644)
 		client, db := coderdtest.NewWithDatabase(t, &coderdtest.Options{
 			TLSCertificates: []tls.Certificate{*cert},
 		})
-
-		certDir := filepath.Join(dir, "certs")
-		certPath := filepath.Join(dir, "cert.pem")
-		integrationtest.WriteFile(t, certPath, integrationtest.SelfSignedCert, 0644)
+		hc, err := xhttp.Client(logger, certDir)
+		require.NoError(t, err)
+		client.HTTPClient = hc
 
 		bind := integrationtest.BindMount(certDir, "/tmp/certs", true)
 		// Pretend a build happened so that we can push logs.
@@ -316,10 +323,11 @@ func TestDocker(t *testing.T) {
 
 		// Run the envbox container.
 		_ = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
-			Image:    integrationtest.HelloWorldImage,
-			Username: "coder",
-			Envs:     envs,
-			Binds:    append(binds, bind),
+			Image:             integrationtest.HelloWorldImage,
+			Username:          "coder",
+			Envs:              envs,
+			Binds:             append(binds, bind),
+			UseHostNetworking: true,
 		})
 		workspace, err := client.Workspace(ctx, r.Workspace.ID)
 		require.NoError(t, err)
