@@ -180,13 +180,15 @@ func dockerCmd(ch chan func() error) *cobra.Command {
 
 				agent, err := buildlog.OpenCoderClient(ctx, coderURL, log, flags.agentToken)
 				if err != nil {
-					return xerrors.Errorf("open coder client: %w", err)
+					// Don't fail workspace startup on
+					// an inability to push build logs.
+					log.Error(ctx, "failed to instantiate coder build log client, no logs will be pushed", slog.Error(err))
+				} else {
+					blog = buildlog.MultiLogger(
+						buildlog.OpenCoderLogger(ctx, agent, log),
+						blog,
+					)
 				}
-
-				blog = buildlog.MultiLogger(
-					buildlog.OpenCoderLogger(ctx, agent, log),
-					blog,
-				)
 			}
 			defer blog.Close()
 
