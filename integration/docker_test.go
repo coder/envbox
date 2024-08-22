@@ -4,6 +4,8 @@
 package integration_test
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +17,9 @@ import (
 	dockertest "github.com/ory/dockertest/v3"
 	"github.com/stretchr/testify/require"
 
+	"github.com/coder/coder/v2/coderd/coderdtest"
+	"github.com/coder/coder/v2/coderd/database"
+	"github.com/coder/coder/v2/coderd/database/dbfake"
 	"github.com/coder/envbox/cli"
 	"github.com/coder/envbox/integration/integrationtest"
 )
@@ -271,6 +276,71 @@ func TestDocker(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, expectedHostname, strings.TrimSpace(string(hostname)))
+	})
+
+	t.Run("SelfSignedCerts", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			dir         = integrationtest.TmpDir(t)
+			cert        = integrationtest.UnsafeTLSCert(t)
+			binds       = integrationtest.DefaultBinds(t, dir)
+			ctx, cancel = context.WithTimeout(context.Background(), time.Minute*5)
+		)
+		t.Cleanup(cancel)
+
+		pool, err := dockertest.NewPool("")
+		require.NoError(t, err)
+
+		client, db := coderdtest.NewWithDatabase(t, &coderdtest.Options{
+			TLSCertificates: []tls.Certificate{*cert},
+		})
+
+		certDir := filepath.Join(dir, "certs")
+		certPath := filepath.Join(dir, "cert.pem")
+		integrationtest.WriteFile(t, certPath, integrationtest.SelfSignedCert, 0644)
+
+		bind := integrationtest.BindMount(certDir, "/tmp/certs", true)
+		// Pretend a build happened so that we can push logs.
+		user := coderdtest.CreateFirstUser(t, client)
+		r := dbfake.WorkspaceBuild(t, db, database.Workspace{
+			OrganizationID: user.OrganizationID,
+			OwnerID:        user.UserID,
+		}).WithAgent().Do()
+
+		envs := []string{
+			integrationtest.EnvVar(cli.EnvAgentToken, r.AgentToken),
+			integrationtest.EnvVar(cli.EnvAgentURL, client.URL.String()),
+			integrationtest.EnvVar(cli.EnvExtraCertsPath, "/tmp/certs"),
+		}
+
+		// Run the envbox container.
+		_ = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
+			Image:    integrationtest.HelloWorldImage,
+			Username: "coder",
+			Envs:     envs,
+			Binds:    append(binds, bind),
+		})
+		workspace, err := client.Workspace(ctx, r.Workspace.ID)
+		require.NoError(t, err)
+		logs, closer, err := client.WorkspaceAgentLogsAfter(ctx, workspace.LatestBuild.Resources[0].Agents[0].ID, 0, true)
+		require.NoError(t, err)
+		defer closer.Close()
+		completed := false
+		for !completed {
+			select {
+			case <-ctx.Done():
+				t.Fatalf("timed out waiting for build logs")
+			case startuplogs := <-logs:
+				for _, log := range startuplogs {
+					completed = log.Output == "Envbox startup complete!"
+					if completed {
+						break
+					}
+				}
+			}
+		}
+
 	})
 }
 
