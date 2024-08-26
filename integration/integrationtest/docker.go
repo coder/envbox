@@ -4,12 +4,19 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,22 +44,27 @@ const (
 	// UbuntuImage is just vanilla ubuntu (80MB) but the user is set to a non-root
 	// user .
 	UbuntuImage = "gcr.io/coder-dev-1/sreya/ubuntu-coder"
+
+	// RegistryImage is used to assert that we add certs
+	// correctly to the docker daemon when pulling an image
+	// from a registry with a self signed cert.
+	registryImage = "gcr.io/coder-dev-1/sreya/registry"
+	registryTag   = "2.8.3"
 )
 
 // TODO use df to determine if an environment is running in a docker container or not.
 
 type CreateDockerCVMConfig struct {
-	Image             string
-	Username          string
-	BootstrapScript   string
-	InnerEnvFilter    []string
-	Envs              []string
-	Binds             []string
-	Mounts            []string
-	AddFUSE           bool
-	AddTUN            bool
-	CPUs              int
-	UseHostNetworking bool
+	Image           string
+	Username        string
+	BootstrapScript string
+	InnerEnvFilter  []string
+	Envs            []string
+	Binds           []string
+	Mounts          []string
+	AddFUSE         bool
+	AddTUN          bool
+	CPUs            int
 }
 
 func (c CreateDockerCVMConfig) validate(t *testing.T) {
@@ -68,9 +80,10 @@ func (c CreateDockerCVMConfig) validate(t *testing.T) {
 }
 
 type CoderdOptions struct {
-	TLSEnable bool
-	TLSCert   string
-	TLSKey    string
+	TLSEnable    bool
+	TLSCert      string
+	TLSKey       string
+	DefaultImage string
 }
 
 // RunEnvbox runs envbox, it returns once the inner container has finished
@@ -99,9 +112,6 @@ func RunEnvbox(t *testing.T, pool *dockertest.Pool, conf *CreateDockerCVMConfig)
 		host.Privileged = true
 		host.CPUPeriod = int64(dockerutil.DefaultCPUPeriod)
 		host.CPUQuota = int64(conf.CPUs) * int64(dockerutil.DefaultCPUPeriod)
-		if conf.UseHostNetworking {
-			host.NetworkMode = "host"
-		}
 		host.ExtraHosts = []string{"host.docker.internal:host-gateway"}
 	})
 	require.NoError(t, err)
@@ -313,121 +323,16 @@ func envVar(k, v string) string {
 	return fmt.Sprintf("%s=%s", k, v)
 }
 
-func UnsafeTLSCert(t *testing.T) *tls.Certificate {
+func WriteFile(t *testing.T, path, contents string) {
 	t.Helper()
 
-	certBlock, _ := pem.Decode([]byte(SelfSignedCert))
-	require.NotNil(t, certBlock)
-
-	cert, err := x509.ParseCertificate(certBlock.Bytes)
-	require.NoError(t, err)
-
-	keyBlock, _ := pem.Decode([]byte(SelfSignedKey))
-	require.NotNil(t, keyBlock)
-
-	key, err := x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
-	require.NoError(t, err)
-
-	return &tls.Certificate{
-		Certificate: [][]byte{cert.Raw},
-		PrivateKey:  key,
-	}
-}
-
-func WriteFile(t *testing.T, path, contents string, perms os.FileMode) {
-	t.Helper()
-
+	//nolint:gosec
 	err := os.WriteFile(path, []byte(contents), 0644)
 	require.NoError(t, err)
 }
 
-const SelfSignedKey = `-----BEGIN PRIVATE KEY-----
-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
-xD5tMvzZR71+Fyi0l5QFgR0kKksfcQ==
------END PRIVATE KEY-----`
-
-const SelfSignedCert = `-----BEGIN CERTIFICATE-----
-MIIFDzCCAvegAwIBAgIUBbwBOjaGxuQRwFH/xyWH96Q5qRQwDQYJKoZIhvcNAQEL
-BQAwITELMAkGA1UEBhMCVVMxEjAQBgNVBAMMCWxvY2FsaG9zdDAgFw0yNDA4MjIw
-MTMwMzJaGA8yMTI0MDcyOTAxMzAzMlowITELMAkGA1UEBhMCVVMxEjAQBgNVBAMM
-CWxvY2FsaG9zdDCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAKZARm9L
-ntzqvB9WIJZ2sySu3L2qs543KkK2oLa4r/sy2KcdmSxPkKlC0CZqg8aLGbJn3dnz
-0MDsdOfS57+0D2X7/GADqSojrShjysvLY5N7eF9lyFdNxkn5nje4V3WhAkIcWhmi
-UgcB3lPAr/AlI6rQPP8o4PekRVVUFfM9k6OBnlSyW3Sad4+jZuoqvmHEWWNYYoBf
-C0JKbnFkmj86vE7z4++StqYbEg93zscp2kY88FqA1ZfRPJJSUeSqPU8Vlt/Dim69
-9uO+0Z1QVwClphGpsBaoe8TM82GsQcbAGb+mQnofLe2dgW6+BJjT4ufO0iCykiuo
-EnFgN9bL5MylRTw/cK1bKByinAWYWbpMzfA9wRCIsOuo/wUdvOlqhH8BbIZSsQd1
-wPok/CUrA6YXjT/kqiBp8xFbCahVnu/sjVyyZ86ZlWxZGS6HUklISzuqCbqGMGiV
-biW1ZhiQBds8CVc3+u0C4WI6MT2sJA5F1EOw16dVYie05Xrj+/Ejvlup6PgcBoF/
-0Z8jbl8MHZaNtSSzIDWjDOoK6DsSkWmaxi0Jzu7AvWpttWz1ud0DHQFYLec7qnV7
-pMIy81W13DIp471Et1mDnu6QhPS7lTtjXwsrVUrqh2HiULqCmZW2Zy4oI7HPRUWc
-IKEIFQl+3AAZWGITxh0K4JBfm14OeDOtxfrFAgMBAAGjPTA7MBoGA1UdEQQTMBGC
-CWxvY2FsaG9zdIcEfwAAATAdBgNVHQ4EFgQUv86/KL5Qi8xVEnEMXlumAO8FI/Ew
-DQYJKoZIhvcNAQELBQADggIBAD2P/O3KcWlY81DHOr3AA1ZUAi81Y/V/vviakM/p
-sc97iTSmC/xfux0M2HhaW6qJBIESTcWrvSAsKjiOqY/p/1O13bwDJ493psyfmE2W
-CTNUdPPusvQ/LF5HCg9B3glRz2on8fPVyhfI2xhTliQ6jpT0m1C9nFFtki3xsZf8
-0WkMo13wsCrqZ79IJ9GeNXqAM+gFP/skHJQ5JI3hbOlFlCrB9LiMlRiVgW+uoOi+
-wNmioHMGmDBG8TgldJ9hmP/Ed1JmioyBK/wh+SM/c9LS6lBT6d0iRNffYxS36dh0
-Xr5lYn/8gClm33mkVzh4J73byqR0jsuCQD1LgpMR/tbd4n8E/25UFBiO/FGW19NG
-52IRytBLJcTuNN9e3o2YQs0N+tfQxCBIfUep15cUNbAYlNsNPErX6zGoCkhYiMYw
-w/SB6336cErL+7kMp3H9FXaiDvlldJ3+mAbROa2Sz9Re5q0zepynBSflJ8kHDNFi
-CeQi+PSR5stOuz13RTWgygtFXE9gUKCvk2mid/JA/Q8BfD0rcuFr5N5B0AKBrtUu
-RAfefTglzhqADFY9lLfqjsE58i/uhf4FdvxEYWO6/SvDo7WzJe9KGihMMSr9q/ux
-NDEfyem1ELLynf8J7BxqDn6GvKZYaBkZDBskaBovwv5dGWE+rjuekor0mYt64NCa
-tCAG
------END CERTIFICATE-----`
-
 func EnvVar(key, value string) string {
 	return fmt.Sprintf("%s=%s", key, value)
-
 }
 
 //nolint:revive
@@ -436,4 +341,220 @@ func BindMount(src, dest string, ro bool) string {
 		return fmt.Sprintf("%s:%s:%s", src, dest, "ro")
 	}
 	return fmt.Sprintf("%s:%s", src, dest)
+}
+
+func WriteCertificate(t testing.TB, c tls.Certificate, certPath, keyPath string) {
+	require.Len(t, c.Certificate, 1, "expecting 1 certificate")
+	key, err := x509.MarshalPKCS8PrivateKey(c.PrivateKey)
+	require.NoError(t, err)
+
+	cert := c.Certificate[0]
+
+	writePEM(t, keyPath, "PRIVATE KEY", key)
+	writePEM(t, certPath, "CERTIFICATE", cert)
+}
+
+func DockerBridgeIP(t testing.TB) string {
+	t.Helper()
+
+	ifaces, err := net.Interfaces()
+	require.NoError(t, err)
+
+	for _, iface := range ifaces {
+		if iface.Name != "docker0" {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		require.NoError(t, err)
+
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+				if ipnet.IP.To4() != nil {
+					return ipnet.IP.String()
+				}
+			}
+		}
+	}
+
+	t.Fatalf("failed to find docker bridge interface")
+	return ""
+}
+
+func writePEM(t testing.TB, path string, typ string, contents []byte) {
+	t.Helper()
+
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	defer f.Close()
+
+	err = pem.Encode(f, &pem.Block{
+		Type:  typ,
+		Bytes: contents,
+	})
+	require.NoError(t, err)
+}
+
+func GenerateTLSCertificate(t testing.TB, commonName string, ipAddr string) tls.Certificate {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			Organization: []string{"Acme Co"},
+			CommonName:   commonName,
+		},
+		DNSNames:  []string{commonName},
+		NotBefore: time.Now(),
+		NotAfter:  time.Now().Add(time.Hour * 24 * 180),
+
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IPAddresses:           []net.IP{net.ParseIP(ipAddr)},
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	require.NoError(t, err)
+	var certFile bytes.Buffer
+	require.NoError(t, err)
+	_, err = certFile.Write(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes}))
+	require.NoError(t, err)
+	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	require.NoError(t, err)
+	var keyFile bytes.Buffer
+	err = pem.Encode(&keyFile, &pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes})
+	require.NoError(t, err)
+	cert, err := tls.X509KeyPair(certFile.Bytes(), keyFile.Bytes())
+	require.NoError(t, err)
+	return cert
+}
+
+type RegistryConfig struct {
+	HostCertPath string
+	HostKeyPath  string
+	TLSPort      string
+	Image        string
+}
+
+func RunLocalDockerRegistry(t testing.TB, pool *dockertest.Pool, conf RegistryConfig) string {
+	t.Helper()
+
+	const (
+		certPath = "/certs/cert.pem"
+		keyPath  = "/certs/key.pem"
+	)
+	// tlsBindAddr := net.JoinHostPort("0.0.0.0", conf.TLSPort)
+
+	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
+		Repository: registryImage,
+		Tag:        registryTag,
+		Env: []string{
+			envVar("REGISTRY_HTTP_TLS_CERTIFICATE", certPath),
+			envVar("REGISTRY_HTTP_TLS_KEY", keyPath),
+		},
+	}, func(host *docker.HostConfig) {
+		host.Binds = []string{
+			mountBinding(conf.HostCertPath, certPath),
+			mountBinding(conf.HostKeyPath, keyPath),
+		}
+		host.ExtraHosts = []string{"host.docker.internal:host-gateway"}
+		host.PortBindings = map[docker.Port][]docker.PortBinding{
+			"5000/tcp": {{
+				HostIP:   "127.0.0.1",
+				HostPort: conf.TLSPort,
+			}},
+		}
+	})
+	require.NoError(t, err)
+
+	host := net.JoinHostPort("127.0.0.1", conf.TLSPort)
+	url := fmt.Sprintf("https://%s/v2/_catalog", host)
+
+	waitForRegistry(t, pool, resource, url)
+	return pushLocalImage(t, pool, host, conf.Image)
+}
+
+func waitForRegistry(t testing.TB, pool *dockertest.Pool, resource *dockertest.Resource, url string) {
+	t.Helper()
+
+	//nolint:forcetypeassert
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{
+		//nolint:gosec
+		InsecureSkipVerify: true,
+	}
+	client := &http.Client{
+		Transport: transport,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	for r := retry.New(time.Second, time.Second); r.Wait(ctx); {
+		container, err := pool.Client.InspectContainer(resource.Container.ID)
+		require.NoError(t, err)
+		require.True(t, container.State.Running, "%v unexpectedly exited", container.ID)
+
+		//nolint:noctx
+		res, err := client.Get(url)
+		if err != nil {
+			continue
+		}
+		_ = res.Body.Close()
+		if res.StatusCode == http.StatusOK {
+			return
+		}
+	}
+}
+
+func pushLocalImage(t testing.TB, pool *dockertest.Pool, host, remoteImage string) string {
+	t.Helper()
+
+	name := filepath.Base(remoteImage)
+	repoTag := strings.Split(name, ":")
+	tag := "latest"
+	if len(repoTag) == 2 {
+		tag = repoTag[1]
+	}
+
+	tw := &testWriter{
+		t: t,
+	}
+	err := pool.Client.PullImage(docker.PullImageOptions{
+		Repository:   strings.Split(remoteImage, ":")[0],
+		Tag:          tag,
+		OutputStream: tw,
+	}, docker.AuthConfiguration{})
+	require.NoError(t, err)
+
+	err = pool.Client.TagImage(remoteImage, docker.TagImageOptions{
+		Repo: fmt.Sprintf("%s/%s", host, name),
+		Tag:  tag,
+	})
+	require.NoError(t, err)
+
+	t.Logf("name: %s", name)
+	t.Logf("tag: %s", tag)
+	t.Logf("registry: %s", host)
+
+	err = pool.Client.PushImage(docker.PushImageOptions{
+		Name:         name,
+		Tag:          tag,
+		Registry:     host,
+		OutputStream: tw,
+	}, docker.AuthConfiguration{})
+	require.NoError(t, err)
+	return fmt.Sprintf("%s/%s:%s", host, name, tag)
+}
+
+func mountBinding(src, dst string) string {
+	return fmt.Sprintf("%s:%s", src, dst)
+}
+
+type testWriter struct {
+	t testing.TB
+}
+
+func (t *testWriter) Write(b []byte) (int, error) {
+	t.t.Logf("%s", b)
+	return len(b), nil
 }
