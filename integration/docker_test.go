@@ -307,12 +307,12 @@ func TestDocker(t *testing.T) {
 		err = registryListener.Close()
 		require.NoError(t, err)
 
-		registryHost, registryPort, err := net.SplitHostPort(registryListener.Addr().String())
-		require.NoError(t, err)
+		// registryHost, registryPort, err := net.SplitHostPort(registryListener.Addr().String())
+		// require.NoError(t, err)
 
-		t.Logf("registryHost: %s", registryHost)
+		// t.Logf("registryHost: %s", registryHost)
 		coderCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", host)
-		dockerCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", registryHost)
+		// dockerCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", registryHost)
 
 		fakeServer, buildLogCh := fakeCoder(t)
 		s := httptest.NewUnstartedServer(fakeServer)
@@ -330,28 +330,28 @@ func TestDocker(t *testing.T) {
 		integrationtest.WriteCertificate(t, coderCert, coderCertPath, coderKeyPath)
 		bind := integrationtest.BindMount(certDir, "/tmp/certs", true)
 
-		regCertPath := filepath.Join(certDir, "registry_cert.pem")
-		regKeyPath := filepath.Join(certDir, "registry_key.pem")
-		integrationtest.WriteCertificate(t, dockerCert, regCertPath, regKeyPath)
+		// regCertPath := filepath.Join(certDir, "registry_cert.pem")
+		// regKeyPath := filepath.Join(certDir, "registry_key.pem")
+		// integrationtest.WriteCertificate(t, dockerCert, regCertPath, regKeyPath)
 
-		image := integrationtest.RunLocalDockerRegistry(t, pool, integrationtest.RegistryConfig{
-			HostCertPath: regCertPath,
-			HostKeyPath:  regKeyPath,
-			Image:        integrationtest.UbuntuImage,
-			TLSPort:      registryPort,
-		})
+		// image := integrationtest.RunLocalDockerRegistry(t, pool, integrationtest.RegistryConfig{
+		// 	HostCertPath: regCertPath,
+		// 	HostKeyPath:  regKeyPath,
+		// 	Image:        integrationtest.UbuntuImage,
+		// 	TLSPort:      registryPort,
+		// })
 
 		envs := []string{
 			integrationtest.EnvVar(cli.EnvAgentToken, "faketoken"),
-			integrationtest.EnvVar(cli.EnvAgentURL, fmt.Sprintf("https//%s:%s", "host.docker.internal", port)),
-			integrationtest.EnvVar(cli.EnvExtraCertsPath, "/tmp/certs/registry_cert.pem"),
+			integrationtest.EnvVar(cli.EnvAgentURL, fmt.Sprintf("https://%s:%s", "host.docker.internal", port)),
+			integrationtest.EnvVar(cli.EnvExtraCertsPath, "/tmp/certs"),
 		}
 
 		buildLogDone := waitForBuildLog(t, ctx, buildLogCh)
 
 		// Run the envbox container.
 		_ = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
-			Image:    image,
+			Image:    integrationtest.UbuntuImage,
 			Username: "coder",
 			Envs:     envs,
 			Binds:    append(binds, bind),
