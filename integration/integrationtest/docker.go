@@ -108,8 +108,9 @@ func RunEnvbox(t *testing.T, pool *dockertest.Pool, conf *CreateDockerCVMConfig)
 		Tag:        "latest",
 		Entrypoint: []string{"/envbox", "docker"},
 		Env:        conf.Envs,
+		Mounts:     conf.Binds,
 	}, func(host *docker.HostConfig) {
-		host.Binds = conf.Binds
+		// host.Binds = conf.Binds
 		host.Privileged = true
 		host.CPUPeriod = int64(dockerutil.DefaultCPUPeriod)
 		host.CPUQuota = int64(conf.CPUs) * int64(dockerutil.DefaultCPUPeriod)
