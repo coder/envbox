@@ -19,7 +19,7 @@ LABEL \
 ARG DEBIAN_FRONTEND=noninteractive
 # Pin docker to avoid any breaking API changes between the Go client and 
 # the server.
-ARG DOCKER_VERSION="5:24.0.3-1~ubuntu.22.04~jammy"
+ARG DOCKER_VERSION="5:27.1.2-1~ubuntu.22.04~jammy"
 #   Ignore other repositories, as some require HTTPS
 RUN apt-get update --quiet --option Dir::Etc::SourceParts="" && \
     apt-get upgrade -y && \
