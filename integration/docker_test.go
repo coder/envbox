@@ -299,7 +299,7 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 		defer l.Close()
 
-		host, _, err := net.SplitHostPort(l.Addr().String())
+		host, port, err := net.SplitHostPort(l.Addr().String())
 		require.NoError(t, err)
 
 		registryListener, err := net.Listen("tcp", fmt.Sprintf("%s:0", bridgeIP))
@@ -307,9 +307,10 @@ func TestDocker(t *testing.T) {
 		err = registryListener.Close()
 		require.NoError(t, err)
 
-		registryHost, registryPort, err := net.SplitHostPort(l.Addr().String())
+		registryHost, registryPort, err := net.SplitHostPort(registryListener.Addr().String())
 		require.NoError(t, err)
 
+		t.Logf("registryHost: %s", registryHost)
 		coderCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", host)
 		dockerCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", registryHost)
 
@@ -342,8 +343,8 @@ func TestDocker(t *testing.T) {
 
 		envs := []string{
 			integrationtest.EnvVar(cli.EnvAgentToken, "faketoken"),
-			integrationtest.EnvVar(cli.EnvAgentURL, s.URL),
-			integrationtest.EnvVar(cli.EnvExtraCertsPath, "/tmp/certs"),
+			integrationtest.EnvVar(cli.EnvAgentURL, fmt.Sprintf("https//%s:%s", "host.docker.internal", port)),
+			integrationtest.EnvVar(cli.EnvExtraCertsPath, "/tmp/certs/registry_cert.pem"),
 		}
 
 		buildLogDone := waitForBuildLog(t, ctx, buildLogCh)

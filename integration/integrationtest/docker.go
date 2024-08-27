@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -411,6 +412,7 @@ func GenerateTLSCertificate(t testing.TB, commonName string, ipAddr string) tls.
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		IPAddresses:           []net.IP{net.ParseIP(ipAddr)},
+		IsCA:                  true,
 	}
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
@@ -443,7 +445,6 @@ func RunLocalDockerRegistry(t testing.TB, pool *dockertest.Pool, conf RegistryCo
 		certPath = "/certs/cert.pem"
 		keyPath  = "/certs/key.pem"
 	)
-	// tlsBindAddr := net.JoinHostPort("0.0.0.0", conf.TLSPort)
 
 	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: registryImage,
@@ -451,7 +452,9 @@ func RunLocalDockerRegistry(t testing.TB, pool *dockertest.Pool, conf RegistryCo
 		Env: []string{
 			envVar("REGISTRY_HTTP_TLS_CERTIFICATE", certPath),
 			envVar("REGISTRY_HTTP_TLS_KEY", keyPath),
+			envVar("REGISTRY_HTTP_ADDR", "0.0.0.0:443"),
 		},
+		ExposedPorts: []string{"443/tcp"},
 	}, func(host *docker.HostConfig) {
 		host.Binds = []string{
 			mountBinding(conf.HostCertPath, certPath),
@@ -459,15 +462,15 @@ func RunLocalDockerRegistry(t testing.TB, pool *dockertest.Pool, conf RegistryCo
 		}
 		host.ExtraHosts = []string{"host.docker.internal:host-gateway"}
 		host.PortBindings = map[docker.Port][]docker.PortBinding{
-			"5000/tcp": {{
-				HostIP:   "127.0.0.1",
+			"443/tcp": {{
+				HostIP:   "0.0.0.0",
 				HostPort: conf.TLSPort,
 			}},
 		}
 	})
 	require.NoError(t, err)
 
-	host := net.JoinHostPort("127.0.0.1", conf.TLSPort)
+	host := net.JoinHostPort("0.0.0.0", conf.TLSPort)
 	url := fmt.Sprintf("https://%s/v2/_catalog", host)
 
 	waitForRegistry(t, pool, resource, url)
@@ -504,6 +507,7 @@ func waitForRegistry(t testing.TB, pool *dockertest.Pool, resource *dockertest.R
 			return
 		}
 	}
+	require.NoError(t, ctx.Err())
 }
 
 func pushLocalImage(t testing.TB, pool *dockertest.Pool, host, remoteImage string) string {
@@ -526,8 +530,11 @@ func pushLocalImage(t testing.TB, pool *dockertest.Pool, host, remoteImage strin
 	}, docker.AuthConfiguration{})
 	require.NoError(t, err)
 
+	_, port, err := net.SplitHostPort(host)
+	require.NoError(t, err)
+
 	err = pool.Client.TagImage(remoteImage, docker.TagImageOptions{
-		Repo: fmt.Sprintf("%s/%s", host, name),
+		Repo: fmt.Sprintf("%s:%s/%s", "127.0.0.1", port, name),
 		Tag:  tag,
 	})
 	require.NoError(t, err)
@@ -536,14 +543,13 @@ func pushLocalImage(t testing.TB, pool *dockertest.Pool, host, remoteImage strin
 	t.Logf("tag: %s", tag)
 	t.Logf("registry: %s", host)
 
-	err = pool.Client.PushImage(docker.PushImageOptions{
-		Name:         name,
-		Tag:          tag,
-		Registry:     host,
-		OutputStream: tw,
-	}, docker.AuthConfiguration{})
+	image := fmt.Sprintf("%s:%s/%s:%s", "127.0.0.1", port, name, tag)
+	cmd := exec.Command("docker", "push", image)
+	cmd.Stderr = tw
+	cmd.Stdout = tw
+	err = cmd.Run()
 	require.NoError(t, err)
-	return fmt.Sprintf("%s/%s:%s", host, name, tag)
+	return fmt.Sprintf("host.docker.internal:%s/%s:%s", port, name, tag)
 }
 
 func mountBinding(src, dst string) string {
