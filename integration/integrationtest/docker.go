@@ -363,14 +363,6 @@ func EnvVar(key, value string) string {
 	return fmt.Sprintf("%s=%s", key, value)
 }
 
-//nolint:revive
-func BindMount(src, dest string, ro bool) string {
-	if ro {
-		return fmt.Sprintf("%s:%s:%s", src, dest, "ro")
-	}
-	return fmt.Sprintf("%s:%s", src, dest)
-}
-
 func WriteCertificate(t testing.TB, c tls.Certificate, certPath, keyPath string) {
 	require.Len(t, c.Certificate, 1, "expecting 1 certificate")
 	key, err := x509.MarshalPKCS8PrivateKey(c.PrivateKey)
@@ -591,10 +583,11 @@ func (t *testWriter) Write(b []byte) (int, error) {
 	t.t.Logf("%s", b)
 	return len(b), nil
 }
-func HostMount(src, dst string, ro bool) docker.HostMount {
+func BindMount(src, dst string, ro bool) docker.HostMount {
 	return docker.HostMount{
 		Source:   src,
 		Target:   dst,
 		ReadOnly: ro,
+		Type:     "bind",
 	}
 }

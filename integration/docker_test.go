@@ -106,8 +106,8 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 
 		binds = append(binds,
-			integrationtest.HostMount(homeDir, "/home/coder", false),
-			integrationtest.HostMount(secretDir, "/var/secrets", true),
+			integrationtest.BindMount(homeDir, "/home/coder", false),
+			integrationtest.BindMount(secretDir, "/var/secrets", true),
 		)
 
 		var (
@@ -328,7 +328,7 @@ func TestDocker(t *testing.T) {
 		coderCertPath := filepath.Join(certDir, "coder_cert.pem")
 		coderKeyPath := filepath.Join(certDir, "coder_key.pem")
 		integrationtest.WriteCertificate(t, coderCert, coderCertPath, coderKeyPath)
-		certMount := integrationtest.HostMount(certDir, "/tmp/certs", false)
+		certMount := integrationtest.BindMount(certDir, "/tmp/certs", false)
 
 		regCertPath := filepath.Join(certDir, "registry_cert.crt")
 		regKeyPath := filepath.Join(certDir, "registry_key.pem")
@@ -346,7 +346,7 @@ func TestDocker(t *testing.T) {
 		regCAPath := filepath.Join("/etc/docker/certs.d", innerImageHost, "ca.crt")
 		t.Log("regcapath: ", regCAPath)
 
-		registryCAMount := integrationtest.HostMount(regCertPath, regCAPath, false)
+		registryCAMount := integrationtest.BindMount(regCertPath, regCAPath, false)
 
 		envs := []string{
 			integrationtest.EnvVar(cli.EnvAgentToken, "faketoken"),
