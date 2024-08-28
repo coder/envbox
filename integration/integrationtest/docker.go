@@ -462,6 +462,7 @@ func waitForRegistry(t testing.TB, pool *dockertest.Pool, resource *dockertest.R
 func pushLocalImage(t testing.TB, pool *dockertest.Pool, host, remoteImage string) RegistryImage {
 	t.Helper()
 
+	const registryHost = "127.0.0.1"
 	name := filepath.Base(remoteImage)
 	repoTag := strings.Split(name, ":")
 	tag := "latest"
@@ -483,12 +484,14 @@ func pushLocalImage(t testing.TB, pool *dockertest.Pool, host, remoteImage strin
 	require.NoError(t, err)
 
 	err = pool.Client.TagImage(remoteImage, docker.TagImageOptions{
-		Repo: fmt.Sprintf("%s:%s/%s", "127.0.0.1", port, name),
+		Repo: fmt.Sprintf("%s:%s/%s", registryHost, port, name),
 		Tag:  tag,
 	})
 	require.NoError(t, err)
 
-	image := fmt.Sprintf("%s:%s/%s:%s", "127.0.0.1", port, name, tag)
+	// Idk what to tell you but the pool.Client.PushImage
+	// function is bugged or I'm just dumb...
+	image := fmt.Sprintf("%s:%s/%s:%s", registryHost, port, name, tag)
 	cmd := exec.Command("docker", "push", image)
 	cmd.Stderr = tw
 	cmd.Stdout = tw
