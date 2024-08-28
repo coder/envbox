@@ -45,9 +45,9 @@ func TestDocker(t *testing.T) {
 		runEnvbox := func() *dockertest.Resource {
 			// Run the envbox container.
 			resource := integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
-				Image:    integrationtest.DockerdImage,
-				Username: "root",
-				Binds:    binds,
+				Image:       integrationtest.DockerdImage,
+				Username:    "root",
+				OuterMounts: binds,
 			})
 
 			// Wait for the inner container's docker daemon.
@@ -106,8 +106,8 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 
 		binds = append(binds,
-			bindMount(homeDir, "/home/coder", false),
-			bindMount(secretDir, "/var/secrets", true),
+			integrationtest.HostMount(homeDir, "/home/coder", false),
+			integrationtest.HostMount(secretDir, "/var/secrets", true),
 		)
 
 		var (
@@ -152,7 +152,7 @@ func TestDocker(t *testing.T) {
 			Username:        "coder",
 			InnerEnvFilter:  envFilter,
 			Envs:            envs,
-			Binds:           binds,
+			OuterMounts:     binds,
 			AddFUSE:         true,
 			AddTUN:          true,
 			BootstrapScript: bootstrapScript,
@@ -328,7 +328,7 @@ func TestDocker(t *testing.T) {
 		coderCertPath := filepath.Join(certDir, "coder_cert.pem")
 		coderKeyPath := filepath.Join(certDir, "coder_key.pem")
 		integrationtest.WriteCertificate(t, coderCert, coderCertPath, coderKeyPath)
-		bind := integrationtest.BindMount(certDir, "/tmp/certs", false)
+		certMount := integrationtest.HostMount(certDir, "/tmp/certs", false)
 
 		regCertPath := filepath.Join(certDir, "registry_cert.crt")
 		regKeyPath := filepath.Join(certDir, "registry_key.pem")
@@ -346,7 +346,7 @@ func TestDocker(t *testing.T) {
 		regCAPath := filepath.Join("/etc/docker/certs.d", innerImageHost, "ca.crt")
 		t.Log("regcapath: ", regCAPath)
 
-		regCABind := integrationtest.BindMount(regCertPath, regCAPath, false)
+		registryCAMount := integrationtest.HostMount(regCertPath, regCAPath, false)
 
 		envs := []string{
 			integrationtest.EnvVar(cli.EnvAgentToken, "faketoken"),
@@ -359,10 +359,10 @@ func TestDocker(t *testing.T) {
 		t.Logf("image: %s", image)
 		// Run the envbox container.
 		_ = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
-			Image:    image,
-			Username: "coder",
-			Envs:     envs,
-			Binds:    append(binds, bind, regCABind),
+			Image:       image,
+			Username:    "coder",
+			Envs:        envs,
+			OuterMounts: append(binds, certMount, registryCAMount),
 		})
 
 		<-buildLogDone

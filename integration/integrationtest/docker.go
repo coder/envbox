@@ -61,11 +61,12 @@ type CreateDockerCVMConfig struct {
 	BootstrapScript string
 	InnerEnvFilter  []string
 	Envs            []string
-	Binds           []string
-	Mounts          []string
-	AddFUSE         bool
-	AddTUN          bool
-	CPUs            int
+
+	OuterMounts []docker.HostMount
+	InnerMounts []string
+	AddFUSE     bool
+	AddTUN      bool
+	CPUs        int
 }
 
 func (c CreateDockerCVMConfig) validate(t *testing.T) {
@@ -96,9 +97,9 @@ func RunEnvbox(t *testing.T, pool *dockertest.Pool, conf *CreateDockerCVMConfig)
 
 	// If binds aren't passed then we'll just create the minimum amount.
 	// If someone is passing them we'll assume they know what they're doing.
-	if conf.Binds == nil {
+	if conf.OuterMounts == nil {
 		tmpdir := TmpDir(t)
-		conf.Binds = DefaultBinds(t, tmpdir)
+		conf.OuterMounts = DefaultBinds(t, tmpdir)
 	}
 
 	conf.Envs = append(conf.Envs, cmdLineEnvs(conf)...)
@@ -108,9 +109,8 @@ func RunEnvbox(t *testing.T, pool *dockertest.Pool, conf *CreateDockerCVMConfig)
 		Tag:        "latest",
 		Entrypoint: []string{"/envbox", "docker"},
 		Env:        conf.Envs,
-		Mounts:     conf.Binds,
 	}, func(host *docker.HostConfig) {
-		// host.Binds = conf.Binds
+		host.Mounts = conf.OuterMounts
 		host.Privileged = true
 		host.CPUPeriod = int64(dockerutil.DefaultCPUPeriod)
 		host.CPUQuota = int64(conf.CPUs) * int64(dockerutil.DefaultCPUPeriod)
@@ -139,7 +139,7 @@ func TmpDir(t *testing.T) string {
 // envbox successfully. Since envbox will chown some of these directories
 // to root, they cannot be cleaned up post-test, meaning that it may be
 // necesssary to manually clear /tmp from time to time.
-func DefaultBinds(t *testing.T, rootDir string) []string {
+func DefaultBinds(t *testing.T, rootDir string) []docker.HostMount {
 	t.Helper()
 
 	// Create a bunch of mounts for the envbox container. Some proceses
@@ -167,13 +167,39 @@ func DefaultBinds(t *testing.T, rootDir string) []string {
 	err = os.MkdirAll(sysbox, 0o777)
 	require.NoError(t, err)
 
-	return []string{
-		fmt.Sprintf("%s:%s", cntDockerDir, "/var/lib/coder/docker"),
-		fmt.Sprintf("%s:%s", cntDir, "/var/lib/coder/containers"),
-		"/usr/src:/usr/src",
-		"/lib/modules:/lib/modules",
-		fmt.Sprintf("%s:/var/lib/sysbox", sysbox),
-		fmt.Sprintf("%s:/var/lib/docker", dockerDir),
+	return []docker.HostMount{
+		{
+			Source: cntDockerDir,
+			Target: "/var/lib/coder/docker",
+			Type:   "bind",
+		},
+		{
+			Source: cntDir,
+			Target: "/var/lib/coder/containers",
+			Type:   "bind",
+		},
+		{
+			Source:   "/usr/src",
+			Target:   "/usr/src",
+			Type:     "bind",
+			ReadOnly: true,
+		},
+		{
+			Source:   "/lib/modules",
+			Target:   "/lib/modules",
+			Type:     "bind",
+			ReadOnly: true,
+		},
+		{
+			Source: sysbox,
+			Target: "/var/lib/sysbox",
+			Type:   "bind",
+		},
+		{
+			Source: dockerDir,
+			Target: "/var/lib/docker",
+			Type:   "bind",
+		},
 	}
 }
 
@@ -263,7 +289,7 @@ func ExecInnerContainer(t *testing.T, pool *dockertest.Pool, conf ExecConfig) ([
 func ExecEnvbox(t *testing.T, pool *dockertest.Pool, conf ExecConfig) ([]byte, error) {
 	t.Helper()
 
-	exec, err := pool.Client.CreateExec(docker.CreateExecOptions{
+	cmd, err := pool.Client.CreateExec(docker.CreateExecOptions{
 		Cmd:          conf.Cmd,
 		AttachStdout: true,
 		AttachStderr: true,
@@ -273,13 +299,13 @@ func ExecEnvbox(t *testing.T, pool *dockertest.Pool, conf ExecConfig) ([]byte, e
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	err = pool.Client.StartExec(exec.ID, docker.StartExecOptions{
+	err = pool.Client.StartExec(cmd.ID, docker.StartExecOptions{
 		OutputStream: &buf,
 		ErrorStream:  &buf,
 	})
 	require.NoError(t, err)
 
-	insp, err := pool.Client.InspectExec(exec.ID)
+	insp, err := pool.Client.InspectExec(cmd.ID)
 	require.NoError(t, err)
 	require.Equal(t, false, insp.Running)
 
@@ -302,8 +328,8 @@ func cmdLineEnvs(c *CreateDockerCVMConfig) []string {
 		envs = append(envs, envVar(cli.EnvInnerEnvs, strings.Join(c.InnerEnvFilter, ",")))
 	}
 
-	if len(c.Mounts) > 0 {
-		envs = append(envs, envVar(cli.EnvMounts, strings.Join(c.Mounts, ",")))
+	if len(c.InnerMounts) > 0 {
+		envs = append(envs, envVar(cli.EnvMounts, strings.Join(c.InnerMounts, ",")))
 	}
 
 	if c.AddFUSE {
@@ -564,4 +590,11 @@ type testWriter struct {
 func (t *testWriter) Write(b []byte) (int, error) {
 	t.t.Logf("%s", b)
 	return len(b), nil
+}
+func HostMount(src, dst string, ro bool) docker.HostMount {
+	return docker.HostMount{
+		Source:   src,
+		Target:   dst,
+		ReadOnly: ro,
+	}
 }
