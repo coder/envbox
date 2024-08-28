@@ -224,7 +224,7 @@ func dockerCmd() *cobra.Command {
 				log.Debug(ctx, "using custom docker bridge CIDR", slog.F("cidr", cidr))
 			}
 
-			dargs, err := dockerdArgs(flags.ethlink, cidr, flags.extraCertsPath, false)
+			dargs, err := dockerdArgs(flags.ethlink, cidr, false)
 			if err != nil {
 				return xerrors.Errorf("dockerd args: %w", err)
 			}
@@ -257,7 +257,7 @@ func dockerCmd() *cobra.Command {
 				// directory is going to be on top of an overlayfs filesystem
 				// we have to use the vfs storage driver.
 				if xunix.IsNoSpaceErr(err) {
-					args, err = dockerdArgs(flags.ethlink, cidr, flags.extraCertsPath, true)
+					args, err = dockerdArgs(flags.ethlink, cidr, true)
 					if err != nil {
 						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 						//nolint
@@ -304,7 +304,7 @@ func dockerCmd() *cobra.Command {
 				if xunix.IsNoSpaceErr(err) {
 					blog.Info("Insufficient space to start inner container. Restarting dockerd using the vfs driver. Your performance will be degraded. Clean up your home volume and then restart the workspace to improve performance.")
 					log.Debug(ctx, "encountered 'no space left on device' error while starting workspace", slog.Error(err))
-					args, err := dockerdArgs(flags.ethlink, cidr, flags.extraCertsPath, true)
+					args, err := dockerdArgs(flags.ethlink, cidr, true)
 					if err != nil {
 						return xerrors.Errorf("dockerd args for restart: %w", err)
 					}
@@ -718,7 +718,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 }
 
 //nolint:revive
-func dockerdArgs(link, cidr string, caCertsPath string, isNoSpace bool) ([]string, error) {
+func dockerdArgs(link, cidr string, isNoSpace bool) ([]string, error) {
 	// We need to adjust the MTU for the host otherwise packets will fail delivery.
 	// 1500 is the standard, but certain deployments (like GKE) use custom MTU values.
 	// See: https://www.atlantis-press.com/journals/ijndc/125936177/view#sec-s3.1
@@ -741,25 +741,6 @@ func dockerdArgs(link, cidr string, caCertsPath string, isNoSpace bool) ([]strin
 		"--userns-remap=coder",
 		"--storage-driver=overlay2",
 		fmt.Sprintf("--bip=%s/%d", dockerBip, prefixLen),
-	}
-
-	if caCertsPath != "" {
-		f, err := os.Stat(caCertsPath)
-		if err != nil {
-			return nil, xerrors.Errorf("open %v: %w", caCertsPath, err)
-		}
-		if f.IsDir() {
-			entries, err := os.ReadDir(caCertsPath)
-			if err != nil {
-				return nil, xerrors.Errorf("read dir %v: %w", caCertsPath, err)
-			}
-			for _, entry := range entries {
-				p := filepath.Join(caCertsPath, entry.Name())
-				args = append(args, fmt.Sprintf("--tlscacert=%s", p))
-			}
-		} else {
-			args = append(args, fmt.Sprintf("--tlscacert=%s", caCertsPath))
-		}
 	}
 
 	if isNoSpace {

@@ -4,13 +4,8 @@
 package integration_test
 
 import (
-	"context"
-	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"net"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,8 +16,6 @@ import (
 	dockertest "github.com/ory/dockertest/v3"
 	"github.com/stretchr/testify/require"
 
-	"github.com/coder/coder/v2/codersdk"
-	"github.com/coder/coder/v2/codersdk/agentsdk"
 	"github.com/coder/envbox/cli"
 	"github.com/coder/envbox/integration/integrationtest"
 )
@@ -285,87 +278,77 @@ func TestDocker(t *testing.T) {
 		t.Parallel()
 
 		var (
-			dir         = integrationtest.TmpDir(t)
-			binds       = integrationtest.DefaultBinds(t, dir)
-			ctx, cancel = context.WithTimeout(context.Background(), time.Minute*5)
+			dir   = integrationtest.TmpDir(t)
+			binds = integrationtest.DefaultBinds(t, dir)
 		)
-		t.Cleanup(cancel)
 
 		pool, err := dockertest.NewPool("")
 		require.NoError(t, err)
 
+		// Create some listeners for the Docker and Coder
+		// services we'll be running with self signed certs.
 		bridgeIP := integrationtest.DockerBridgeIP(t)
-		l, err := net.Listen("tcp", fmt.Sprintf("%s:0", bridgeIP))
+		coderListener, err := net.Listen("tcp", fmt.Sprintf("%s:0", bridgeIP))
 		require.NoError(t, err)
-		defer l.Close()
-
-		host, port, err := net.SplitHostPort(l.Addr().String())
-		require.NoError(t, err)
+		defer coderListener.Close()
+		coderAddr := tcpAddr(t, coderListener)
 
 		registryListener, err := net.Listen("tcp", fmt.Sprintf("%s:0", bridgeIP))
 		require.NoError(t, err)
 		err = registryListener.Close()
 		require.NoError(t, err)
+		registryAddr := tcpAddr(t, registryListener)
 
-		registryHost, registryPort, err := net.SplitHostPort(registryListener.Addr().String())
-		require.NoError(t, err)
+		coderCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", coderAddr.IP.String())
+		dockerCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", registryAddr.IP.String())
 
-		t.Logf("registryHost: %s", registryHost)
-		coderCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", host)
-		dockerCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", registryHost)
+		// Startup our fake Coder "control-plane".
+		recorder := integrationtest.FakeBuildLogRecorder(t, coderListener, coderCert)
 
-		fakeServer, buildLogCh := fakeCoder(t)
-		s := httptest.NewUnstartedServer(fakeServer)
-		s.Listener = l
-		s.TLS = &tls.Config{
-			Certificates: []tls.Certificate{coderCert},
-		}
-		s.StartTLS()
+		certDir := integrationtest.MkdirAll(t, dir, "certs")
 
-		certDir := filepath.Join(dir, "certs")
-		err = os.MkdirAll(certDir, 0777)
-		require.NoError(t, err)
+		// Write the Coder cert disk.
 		coderCertPath := filepath.Join(certDir, "coder_cert.pem")
 		coderKeyPath := filepath.Join(certDir, "coder_key.pem")
 		integrationtest.WriteCertificate(t, coderCert, coderCertPath, coderKeyPath)
-		certMount := integrationtest.BindMount(certDir, "/tmp/certs", false)
+		coderCertMount := integrationtest.BindMount(certDir, "/tmp/certs", false)
 
+		// Write the Registry cert to disk.
 		regCertPath := filepath.Join(certDir, "registry_cert.crt")
 		regKeyPath := filepath.Join(certDir, "registry_key.pem")
 		integrationtest.WriteCertificate(t, dockerCert, regCertPath, regKeyPath)
 
+		// Start up the docker registry and push an image
+		// to it that we can reference.
 		image := integrationtest.RunLocalDockerRegistry(t, pool, integrationtest.RegistryConfig{
 			HostCertPath: regCertPath,
 			HostKeyPath:  regKeyPath,
 			Image:        integrationtest.UbuntuImage,
-			TLSPort:      registryPort,
+			TLSPort:      strconv.Itoa(registryAddr.Port),
 		})
 
-		innerImageHost := strings.Split(image, "/")[0]
-		t.Logf("innerhost: %s", innerImageHost)
-		regCAPath := filepath.Join("/etc/docker/certs.d", innerImageHost, "ca.crt")
-		t.Log("regcapath: ", regCAPath)
-
+		// Mount the cert into the expected location
+		// for the Envbox Docker daemon.
+		regCAPath := filepath.Join("/etc/docker/certs.d", image.Registry(), "ca.crt")
 		registryCAMount := integrationtest.BindMount(regCertPath, regCAPath, false)
 
 		envs := []string{
 			integrationtest.EnvVar(cli.EnvAgentToken, "faketoken"),
-			integrationtest.EnvVar(cli.EnvAgentURL, fmt.Sprintf("https://%s:%s", "host.docker.internal", port)),
+			integrationtest.EnvVar(cli.EnvAgentURL, fmt.Sprintf("https://%s:%d", "host.docker.internal", coderAddr.Port)),
 			integrationtest.EnvVar(cli.EnvExtraCertsPath, "/tmp/certs"),
 		}
 
-		buildLogDone := waitForBuildLog(t, ctx, buildLogCh)
-
-		t.Logf("image: %s", image)
 		// Run the envbox container.
 		_ = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
-			Image:       image,
+			Image:       image.String(),
 			Username:    "coder",
 			Envs:        envs,
-			OuterMounts: append(binds, certMount, registryCAMount),
+			OuterMounts: append(binds, coderCertMount, registryCAMount),
 		})
 
-		<-buildLogDone
+		// This indicates we've made it all the way to end
+		// of the logs we attempt to push.
+		require.True(t, recorder.ContainsLog("Bootstrapping workspace..."))
 	})
 }
 
@@ -392,70 +375,10 @@ func requireSliceContains(t *testing.T, ss []string, els ...string) {
 	}
 }
 
-func bindMount(src, dest string, ro bool) string {
-	if ro {
-		return fmt.Sprintf("%s:%s:%s", src, dest, "ro")
-	}
-	return fmt.Sprintf("%s:%s", src, dest)
-}
-
-func fakeCoder(t testing.TB) (http.Handler, <-chan string) {
+func tcpAddr(t testing.TB, l net.Listener) *net.TCPAddr {
 	t.Helper()
 
-	logCh := make(chan string)
-	t.Cleanup(func() { close(logCh) })
-
-	mux := http.NewServeMux()
-	mux.Handle("/api/v2/buildinfo", http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			w.WriteHeader(http.StatusOK)
-
-			enc := json.NewEncoder(w)
-			enc.SetEscapeHTML(true)
-
-			// We can't really do much about these errors, it's probably due to a
-			// dropped connection.
-			_ = enc.Encode(&codersdk.BuildInfoResponse{
-				Version: "v1.0.0",
-			})
-		}))
-
-	mux.Handle("/api/v2/workspaceagents/me/logs", http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
-			var logs agentsdk.PatchLogs
-			err := json.NewDecoder(r.Body).Decode(&logs)
-			require.NoError(t, err)
-			w.WriteHeader(http.StatusOK)
-			for _, log := range logs.Logs {
-				logCh <- log.Output
-			}
-		}))
-
-	mux.Handle("/", http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
-			t.Fatalf("unexpected route %v", r.URL.Path)
-		}))
-
-	return mux, logCh
-}
-
-// todo this sucks refactor it.
-func waitForBuildLog(t testing.TB, ctx context.Context, buildLogCh <-chan string) <-chan struct{} {
-	t.Helper()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for {
-			select {
-			case <-ctx.Done():
-				t.Fatalf("timed out waiting for final build log")
-			case log := <-buildLogCh:
-				if log == "Bootstrapping workspace..." {
-					return
-				}
-			}
-		}
-	}()
-	return done
+	tcpAddr, ok := l.Addr().(*net.TCPAddr)
+	require.True(t, ok)
+	return tcpAddr
 }

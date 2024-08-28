@@ -1,0 +1,30 @@
+package integrationtest
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+// TmpDir returns a subdirectory in /tmp that can be used for test files.
+func TmpDir(t *testing.T) string {
+	// We use os.MkdirTemp as oposed to t.TempDir since the envbox container will
+	// chown some of the created directories here to root:root causing the cleanup
+	// function to fail once the test exits.
+	tmpdir, err := os.MkdirTemp("", strings.ReplaceAll(t.Name(), "/", "_"))
+	require.NoError(t, err)
+	t.Logf("using tmpdir %s", tmpdir)
+	return tmpdir
+}
+
+func MkdirAll(t testing.TB, elem ...string) string {
+	t.Helper()
+
+	path := filepath.Join(elem...)
+	err := os.MkdirAll(path, 0777)
+	require.NoError(t, err)
+	return path
+}

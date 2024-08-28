@@ -4,17 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
-	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -122,17 +115,6 @@ func RunEnvbox(t *testing.T, pool *dockertest.Pool, conf *CreateDockerCVMConfig)
 	waitForCVM(t, pool, resource)
 
 	return resource
-}
-
-// TmpDir returns a subdirectory in /tmp that can be used for test files.
-func TmpDir(t *testing.T) string {
-	// We use os.MkdirTemp as oposed to t.TempDir since the envbox container will
-	// chown some of the created directories here to root:root causing the cleanup
-	// function to fail once the test exits.
-	tmpdir, err := os.MkdirTemp("", strings.ReplaceAll(t.Name(), "/", "_"))
-	require.NoError(t, err)
-	t.Logf("using tmpdir %s", tmpdir)
-	return tmpdir
 }
 
 // DefaultBinds returns the minimum amount of mounts necessary to spawn
@@ -320,34 +302,34 @@ func ExecEnvbox(t *testing.T, pool *dockertest.Pool, conf ExecConfig) ([]byte, e
 // but using their env var alias.
 func cmdLineEnvs(c *CreateDockerCVMConfig) []string {
 	envs := []string{
-		envVar(cli.EnvInnerImage, c.Image),
-		envVar(cli.EnvInnerUsername, c.Username),
+		EnvVar(cli.EnvInnerImage, c.Image),
+		EnvVar(cli.EnvInnerUsername, c.Username),
 	}
 
 	if len(c.InnerEnvFilter) > 0 {
-		envs = append(envs, envVar(cli.EnvInnerEnvs, strings.Join(c.InnerEnvFilter, ",")))
+		envs = append(envs, EnvVar(cli.EnvInnerEnvs, strings.Join(c.InnerEnvFilter, ",")))
 	}
 
 	if len(c.InnerMounts) > 0 {
-		envs = append(envs, envVar(cli.EnvMounts, strings.Join(c.InnerMounts, ",")))
+		envs = append(envs, EnvVar(cli.EnvMounts, strings.Join(c.InnerMounts, ",")))
 	}
 
 	if c.AddFUSE {
-		envs = append(envs, envVar(cli.EnvAddFuse, "true"))
+		envs = append(envs, EnvVar(cli.EnvAddFuse, "true"))
 	}
 
 	if c.AddTUN {
-		envs = append(envs, envVar(cli.EnvAddTun, "true"))
+		envs = append(envs, EnvVar(cli.EnvAddTun, "true"))
 	}
 
 	if c.BootstrapScript != "" {
-		envs = append(envs, envVar(cli.EnvBootstrap, c.BootstrapScript))
+		envs = append(envs, EnvVar(cli.EnvBootstrap, c.BootstrapScript))
 	}
 
 	return envs
 }
 
-func envVar(k, v string) string {
+func EnvVar(k, v string) string {
 	return fmt.Sprintf("%s=%s", k, v)
 }
 
@@ -357,21 +339,6 @@ func WriteFile(t *testing.T, path, contents string) {
 	//nolint:gosec
 	err := os.WriteFile(path, []byte(contents), 0644)
 	require.NoError(t, err)
-}
-
-func EnvVar(key, value string) string {
-	return fmt.Sprintf("%s=%s", key, value)
-}
-
-func WriteCertificate(t testing.TB, c tls.Certificate, certPath, keyPath string) {
-	require.Len(t, c.Certificate, 1, "expecting 1 certificate")
-	key, err := x509.MarshalPKCS8PrivateKey(c.PrivateKey)
-	require.NoError(t, err)
-
-	cert := c.Certificate[0]
-
-	writePEM(t, keyPath, "PRIVATE KEY", key)
-	writePEM(t, certPath, "CERTIFICATE", cert)
 }
 
 func DockerBridgeIP(t testing.TB) string {
@@ -400,56 +367,6 @@ func DockerBridgeIP(t testing.TB) string {
 	return ""
 }
 
-func writePEM(t testing.TB, path string, typ string, contents []byte) {
-	t.Helper()
-
-	f, err := os.Create(path)
-	require.NoError(t, err)
-	defer f.Close()
-
-	err = pem.Encode(f, &pem.Block{
-		Type:  typ,
-		Bytes: contents,
-	})
-	require.NoError(t, err)
-}
-
-func GenerateTLSCertificate(t testing.TB, commonName string, ipAddr string) tls.Certificate {
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			Organization: []string{"Acme Co"},
-			CommonName:   commonName,
-		},
-		DNSNames:  []string{commonName},
-		NotBefore: time.Now(),
-		NotAfter:  time.Now().Add(time.Hour * 24 * 180),
-
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-		IPAddresses:           []net.IP{net.ParseIP(ipAddr)},
-		IsCA:                  true,
-	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
-	require.NoError(t, err)
-	var certFile bytes.Buffer
-	require.NoError(t, err)
-	_, err = certFile.Write(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: derBytes}))
-	require.NoError(t, err)
-	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
-	require.NoError(t, err)
-	var keyFile bytes.Buffer
-	err = pem.Encode(&keyFile, &pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes})
-	require.NoError(t, err)
-	cert, err := tls.X509KeyPair(certFile.Bytes(), keyFile.Bytes())
-	require.NoError(t, err)
-	return cert
-}
-
 type RegistryConfig struct {
 	HostCertPath string
 	HostKeyPath  string
@@ -457,7 +374,17 @@ type RegistryConfig struct {
 	Image        string
 }
 
-func RunLocalDockerRegistry(t testing.TB, pool *dockertest.Pool, conf RegistryConfig) string {
+type RegistryImage string
+
+func (r RegistryImage) Registry() string {
+	return strings.Split(string(r), "/")[0]
+}
+
+func (r RegistryImage) String() string {
+	return string(r)
+}
+
+func RunLocalDockerRegistry(t testing.TB, pool *dockertest.Pool, conf RegistryConfig) RegistryImage {
 	t.Helper()
 
 	const (
@@ -469,9 +396,9 @@ func RunLocalDockerRegistry(t testing.TB, pool *dockertest.Pool, conf RegistryCo
 		Repository: registryImage,
 		Tag:        registryTag,
 		Env: []string{
-			envVar("REGISTRY_HTTP_TLS_CERTIFICATE", certPath),
-			envVar("REGISTRY_HTTP_TLS_KEY", keyPath),
-			envVar("REGISTRY_HTTP_ADDR", "0.0.0.0:443"),
+			EnvVar("REGISTRY_HTTP_TLS_CERTIFICATE", certPath),
+			EnvVar("REGISTRY_HTTP_TLS_KEY", keyPath),
+			EnvVar("REGISTRY_HTTP_ADDR", "0.0.0.0:443"),
 		},
 		ExposedPorts: []string{"443/tcp"},
 	}, func(host *docker.HostConfig) {
@@ -502,6 +429,9 @@ func waitForRegistry(t testing.TB, pool *dockertest.Pool, resource *dockertest.R
 	//nolint:forcetypeassert
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{
+		// We're not interested in asserting the validity
+		// of the certificate when pushing the image
+		// since this is setup.
 		//nolint:gosec
 		InsecureSkipVerify: true,
 	}
@@ -529,7 +459,7 @@ func waitForRegistry(t testing.TB, pool *dockertest.Pool, resource *dockertest.R
 	require.NoError(t, ctx.Err())
 }
 
-func pushLocalImage(t testing.TB, pool *dockertest.Pool, host, remoteImage string) string {
+func pushLocalImage(t testing.TB, pool *dockertest.Pool, host, remoteImage string) RegistryImage {
 	t.Helper()
 
 	name := filepath.Base(remoteImage)
@@ -558,17 +488,13 @@ func pushLocalImage(t testing.TB, pool *dockertest.Pool, host, remoteImage strin
 	})
 	require.NoError(t, err)
 
-	t.Logf("name: %s", name)
-	t.Logf("tag: %s", tag)
-	t.Logf("registry: %s", host)
-
 	image := fmt.Sprintf("%s:%s/%s:%s", "127.0.0.1", port, name, tag)
 	cmd := exec.Command("docker", "push", image)
 	cmd.Stderr = tw
 	cmd.Stdout = tw
 	err = cmd.Run()
 	require.NoError(t, err)
-	return fmt.Sprintf("host.docker.internal:%s/%s:%s", port, name, tag)
+	return RegistryImage(fmt.Sprintf("host.docker.internal:%s/%s:%s", port, name, tag))
 }
 
 func mountBinding(src, dst string) string {
