@@ -333,14 +333,6 @@ func EnvVar(k, v string) string {
 	return fmt.Sprintf("%s=%s", k, v)
 }
 
-func WriteFile(t *testing.T, path, contents string) {
-	t.Helper()
-
-	//nolint:gosec
-	err := os.WriteFile(path, []byte(contents), 0644)
-	require.NoError(t, err)
-}
-
 func DockerBridgeIP(t testing.TB) string {
 	t.Helper()
 
@@ -512,6 +504,7 @@ func (t *testWriter) Write(b []byte) (int, error) {
 	t.t.Logf("%s", b)
 	return len(b), nil
 }
+
 func BindMount(src, dst string, ro bool) docker.HostMount {
 	return docker.HostMount{
 		Source:   src,

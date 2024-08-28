@@ -24,7 +24,15 @@ func MkdirAll(t testing.TB, elem ...string) string {
 	t.Helper()
 
 	path := filepath.Join(elem...)
-	err := os.MkdirAll(path, 0777)
+	err := os.MkdirAll(path, 0o777)
 	require.NoError(t, err)
 	return path
+}
+
+func WriteFile(t *testing.T, path, contents string) {
+	t.Helper()
+
+	//nolint:gosec
+	err := os.WriteFile(path, []byte(contents), 0o644)
+	require.NoError(t, err)
 }
