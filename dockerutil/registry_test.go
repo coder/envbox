@@ -26,7 +26,7 @@ func TestWriteCertsForRegistry(t *testing.T) {
 
 		// Create a test certificate file
 		certContent := []byte("test certificate content")
-		err := afero.WriteFile(fs, "/certs/ca.crt", certContent, 0644)
+		err := afero.WriteFile(fs, "/certs/ca.crt", certContent, 0o644)
 		require.NoError(t, err)
 
 		// Run the function
@@ -48,7 +48,7 @@ func TestWriteCertsForRegistry(t *testing.T) {
 		// Create test certificate files
 		certFiles := []string{"ca.crt", "client.cert", "client.key"}
 		for _, file := range certFiles {
-			err := afero.WriteFile(fs, filepath.Join("/certs", file), []byte("content of "+file), 0644)
+			err := afero.WriteFile(fs, filepath.Join("/certs", file), []byte("content of "+file), 0o644)
 			require.NoError(t, err)
 		}
 
@@ -71,17 +71,17 @@ func TestWriteCertsForRegistry(t *testing.T) {
 
 		// Create an existing registry certs directory
 		registryCertsDir := "/etc/docker/certs.d/test.registry.com"
-		err := fs.MkdirAll(registryCertsDir, 0755)
+		err := fs.MkdirAll(registryCertsDir, 0o755)
 		require.NoError(t, err)
 
 		// Create a file in the existing directory
 		existingContent := []byte("existing certificate content")
-		err = afero.WriteFile(fs, filepath.Join(registryCertsDir, "existing.crt"), existingContent, 0644)
+		err = afero.WriteFile(fs, filepath.Join(registryCertsDir, "existing.crt"), existingContent, 0o644)
 		require.NoError(t, err)
 
 		// Create a test certificate file in the source directory
 		certContent := []byte("new certificate content")
-		err = afero.WriteFile(fs, "/certs/ca.crt", certContent, 0644)
+		err = afero.WriteFile(fs, "/certs/ca.crt", certContent, 0o644)
 		require.NoError(t, err)
 
 		// Run the function

@@ -29,7 +29,7 @@ func WriteCertsForRegistry(ctx context.Context, registryName, certsDir string) e
 	}
 
 	// Ensure the registry certs directory exists.
-	err := fs.MkdirAll(registryCertsDir, 0755)
+	err := fs.MkdirAll(registryCertsDir, 0o755)
 	if err != nil {
 		return xerrors.Errorf("create registry certs directory: %w", err)
 	}
