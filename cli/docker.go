@@ -28,6 +28,7 @@ import (
 	"github.com/coder/envbox/dockerutil"
 	"github.com/coder/envbox/slogkubeterminate"
 	"github.com/coder/envbox/sysboxutil"
+	"github.com/coder/envbox/xhttp"
 	"github.com/coder/envbox/xunix"
 )
 
@@ -101,6 +102,7 @@ var (
 	EnvDockerConfig         = "CODER_DOCKER_CONFIG"
 	EnvDebug                = "CODER_DEBUG"
 	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
+	EnvExtraCertsPath       = "CODER_EXTRA_CERTS_PATH"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -138,6 +140,7 @@ type flags struct {
 	cpus                 int
 	memory               int
 	disableIDMappedMount bool
+	extraCertsPath       string
 
 	// Test flags.
 	noStartupLogs bool
@@ -158,6 +161,11 @@ func dockerCmd() *cobra.Command {
 				blog buildlog.Logger = buildlog.NopLogger{}
 			)
 
+			httpClient, err := xhttp.Client(log, flags.extraCertsPath)
+			if err != nil {
+				return xerrors.Errorf("http client: %w", err)
+			}
+
 			if !flags.noStartupLogs {
 				log = slog.Make(slogjson.Sink(cmd.ErrOrStderr()), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
 				blog = buildlog.JSONLogger{Encoder: json.NewEncoder(os.Stderr)}
@@ -169,7 +177,7 @@ func dockerCmd() *cobra.Command {
 					return xerrors.Errorf("parse coder URL %q: %w", flags.coderURL, err)
 				}
 
-				agent, err := buildlog.OpenCoderClient(ctx, coderURL, log, flags.agentToken)
+				agent, err := buildlog.OpenCoderClient(ctx, log, coderURL, httpClient, flags.agentToken)
 				if err != nil {
 					// Don't fail workspace startup on
 					// an inability to push build logs.
@@ -349,6 +357,7 @@ func dockerCmd() *cobra.Command {
 	cliflag.IntVarP(cmd.Flags(), &flags.cpus, "cpus", "", EnvCPUs, 0, "Number of CPUs to allocate inner container. e.g. 2")
 	cliflag.IntVarP(cmd.Flags(), &flags.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.disableIDMappedMount, "disable-idmapped-mount", "", EnvDisableIDMappedMount, false, "Disable idmapped mounts in sysbox. Note that you may need an alternative (e.g. shiftfs).")
+	cliflag.StringVarP(cmd.Flags(), &flags.extraCertsPath, "extra-certs-path", "", EnvExtraCertsPath, "", "The path to a directory or file containing extra CA certificates.")
 
 	// Test flags.
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")

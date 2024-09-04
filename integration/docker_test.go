@@ -5,6 +5,7 @@ package integration_test
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -37,9 +38,9 @@ func TestDocker(t *testing.T) {
 		runEnvbox := func() *dockertest.Resource {
 			// Run the envbox container.
 			resource := integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
-				Image:    integrationtest.DockerdImage,
-				Username: "root",
-				Binds:    binds,
+				Image:       integrationtest.DockerdImage,
+				Username:    "root",
+				OuterMounts: binds,
 			})
 
 			// Wait for the inner container's docker daemon.
@@ -98,8 +99,8 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 
 		binds = append(binds,
-			bindMount(homeDir, "/home/coder", false),
-			bindMount(secretDir, "/var/secrets", true),
+			integrationtest.BindMount(homeDir, "/home/coder", false),
+			integrationtest.BindMount(secretDir, "/var/secrets", true),
 		)
 
 		var (
@@ -144,7 +145,7 @@ func TestDocker(t *testing.T) {
 			Username:        "coder",
 			InnerEnvFilter:  envFilter,
 			Envs:            envs,
-			Binds:           binds,
+			OuterMounts:     binds,
 			AddFUSE:         true,
 			AddTUN:          true,
 			BootstrapScript: bootstrapScript,
@@ -272,6 +273,83 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expectedHostname, strings.TrimSpace(string(hostname)))
 	})
+
+	t.Run("SelfSignedCerts", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			dir   = integrationtest.TmpDir(t)
+			binds = integrationtest.DefaultBinds(t, dir)
+		)
+
+		pool, err := dockertest.NewPool("")
+		require.NoError(t, err)
+
+		// Create some listeners for the Docker and Coder
+		// services we'll be running with self signed certs.
+		bridgeIP := integrationtest.DockerBridgeIP(t)
+		coderListener, err := net.Listen("tcp", fmt.Sprintf("%s:0", bridgeIP))
+		require.NoError(t, err)
+		defer coderListener.Close()
+		coderAddr := tcpAddr(t, coderListener)
+
+		registryListener, err := net.Listen("tcp", fmt.Sprintf("%s:0", bridgeIP))
+		require.NoError(t, err)
+		err = registryListener.Close()
+		require.NoError(t, err)
+		registryAddr := tcpAddr(t, registryListener)
+
+		coderCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", coderAddr.IP.String())
+		dockerCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", registryAddr.IP.String())
+
+		// Startup our fake Coder "control-plane".
+		recorder := integrationtest.FakeBuildLogRecorder(t, coderListener, coderCert)
+
+		certDir := integrationtest.MkdirAll(t, dir, "certs")
+
+		// Write the Coder cert disk.
+		coderCertPath := filepath.Join(certDir, "coder_cert.pem")
+		coderKeyPath := filepath.Join(certDir, "coder_key.pem")
+		integrationtest.WriteCertificate(t, coderCert, coderCertPath, coderKeyPath)
+		coderCertMount := integrationtest.BindMount(certDir, "/tmp/certs", false)
+
+		// Write the Registry cert to disk.
+		regCertPath := filepath.Join(certDir, "registry_cert.crt")
+		regKeyPath := filepath.Join(certDir, "registry_key.pem")
+		integrationtest.WriteCertificate(t, dockerCert, regCertPath, regKeyPath)
+
+		// Start up the docker registry and push an image
+		// to it that we can reference.
+		image := integrationtest.RunLocalDockerRegistry(t, pool, integrationtest.RegistryConfig{
+			HostCertPath: regCertPath,
+			HostKeyPath:  regKeyPath,
+			Image:        integrationtest.UbuntuImage,
+			TLSPort:      strconv.Itoa(registryAddr.Port),
+		})
+
+		// Mount the cert into the expected location
+		// for the Envbox Docker daemon.
+		regCAPath := filepath.Join("/etc/docker/certs.d", image.Registry(), "ca.crt")
+		registryCAMount := integrationtest.BindMount(regCertPath, regCAPath, false)
+
+		envs := []string{
+			integrationtest.EnvVar(cli.EnvAgentToken, "faketoken"),
+			integrationtest.EnvVar(cli.EnvAgentURL, fmt.Sprintf("https://%s:%d", "host.docker.internal", coderAddr.Port)),
+			integrationtest.EnvVar(cli.EnvExtraCertsPath, "/tmp/certs"),
+		}
+
+		// Run the envbox container.
+		_ = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
+			Image:       image.String(),
+			Username:    "coder",
+			Envs:        envs,
+			OuterMounts: append(binds, coderCertMount, registryCAMount),
+		})
+
+		// This indicates we've made it all the way to end
+		// of the logs we attempt to push.
+		require.True(t, recorder.ContainsLog("Bootstrapping workspace..."))
+	})
 }
 
 func requireSliceNoContains(t *testing.T, ss []string, els ...string) {
@@ -297,9 +375,10 @@ func requireSliceContains(t *testing.T, ss []string, els ...string) {
 	}
 }
 
-func bindMount(src, dest string, ro bool) string {
-	if ro {
-		return fmt.Sprintf("%s:%s:%s", src, dest, "ro")
-	}
-	return fmt.Sprintf("%s:%s", src, dest)
+func tcpAddr(t testing.TB, l net.Listener) *net.TCPAddr {
+	t.Helper()
+
+	tcpAddr, ok := l.Addr().(*net.TCPAddr)
+	require.True(t, ok)
+	return tcpAddr
 }
