@@ -18,6 +18,8 @@ func Client(log slog.Logger, extraCertsPath string) (*http.Client, error) {
 		return &http.Client{}, nil
 	}
 
+	log = log.With(slog.F("root_path", extraCertsPath))
+	log.Debug(context.Background(), "adding certs to default pool")
 	pool, err := certPool(log, extraCertsPath)
 	if err != nil {
 		return nil, xerrors.Errorf("cert pool: %w", err)
@@ -47,26 +49,25 @@ func certPool(log slog.Logger, certsPath string) (*x509.CertPool, error) {
 		return nil, xerrors.Errorf("stat %v: %w", certsPath, err)
 	}
 
-	if fi.IsDir() {
-		entries, err := os.ReadDir(certsPath)
+	if !fi.IsDir() {
+		err = addCert(log, pool, certsPath)
 		if err != nil {
-			return nil, xerrors.Errorf("read dir %v: %w", certsPath, err)
+			return nil, xerrors.Errorf("add cert: %w", err)
 		}
-
-		for _, entry := range entries {
-			path := filepath.Join(certsPath, entry.Name())
-			err = addCert(log, pool, path)
-			if err != nil {
-				return nil, xerrors.Errorf("add cert: %w", err)
-			}
-		}
-
 		return pool, nil
 	}
 
-	err = addCert(log, pool, certsPath)
+	entries, err := os.ReadDir(certsPath)
 	if err != nil {
-		return nil, xerrors.Errorf("add cert: %w", err)
+		return nil, xerrors.Errorf("read dir %v: %w", certsPath, err)
+	}
+
+	for _, entry := range entries {
+		path := filepath.Join(certsPath, entry.Name())
+		err = addCert(log, pool, path)
+		if err != nil {
+			return nil, xerrors.Errorf("add cert: %w", err)
+		}
 	}
 
 	return pool, nil
@@ -82,5 +83,6 @@ func addCert(log slog.Logger, pool *x509.CertPool, path string) error {
 		log.Error(context.Background(), "failed to append cert",
 			slog.F("filepath", path))
 	}
+	log.Debug(context.Background(), "added cert", slog.F("path", path))
 	return nil
 }
