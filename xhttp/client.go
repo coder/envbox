@@ -82,7 +82,8 @@ func addCert(log slog.Logger, pool *x509.CertPool, path string) error {
 	if !pool.AppendCertsFromPEM(b) {
 		log.Error(context.Background(), "failed to append cert",
 			slog.F("filepath", path))
+	} else {
+		log.Debug(context.Background(), "added cert", slog.F("path", path))
 	}
-	log.Debug(context.Background(), "added cert", slog.F("path", path))
 	return nil
 }
