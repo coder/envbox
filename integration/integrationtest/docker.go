@@ -56,7 +56,6 @@ type CreateDockerCVMConfig struct {
 	Envs            []string
 
 	OuterMounts []docker.HostMount
-	InnerMounts []string
 	AddFUSE     bool
 	AddTUN      bool
 	CPUs        int
@@ -308,10 +307,6 @@ func cmdLineEnvs(c *CreateDockerCVMConfig) []string {
 
 	if len(c.InnerEnvFilter) > 0 {
 		envs = append(envs, EnvVar(cli.EnvInnerEnvs, strings.Join(c.InnerEnvFilter, ",")))
-	}
-
-	if len(c.InnerMounts) > 0 {
-		envs = append(envs, EnvVar(cli.EnvMounts, strings.Join(c.InnerMounts, ",")))
 	}
 
 	if c.AddFUSE {
