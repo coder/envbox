@@ -31,6 +31,12 @@ func (b *BuildLogRecorder) ContainsLog(l string) bool {
 	return false
 }
 
+func (b *BuildLogRecorder) Len() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.logs)
+}
+
 func (b *BuildLogRecorder) append(log string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

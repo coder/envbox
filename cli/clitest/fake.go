@@ -8,20 +8,12 @@ import (
 	"strings"
 
 	dockertypes "github.com/docker/docker/api/types"
-	"github.com/spf13/afero"
 	testingexec "k8s.io/utils/exec/testing"
 
 	"github.com/coder/envbox/dockerutil"
 	"github.com/coder/envbox/dockerutil/dockerfake"
 	"github.com/coder/envbox/xunix/xunixfake"
 )
-
-func NewMemFS() *xunixfake.MemFS {
-	return &xunixfake.MemFS{
-		MemMapFs: &afero.MemMapFs{},
-		Owner:    map[string]xunixfake.FileOwner{},
-	}
-}
 
 func NewFakeExecer() *xunixfake.FakeExec {
 	return &xunixfake.FakeExec{
