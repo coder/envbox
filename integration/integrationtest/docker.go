@@ -111,7 +111,7 @@ func RunEnvbox(t *testing.T, pool *dockertest.Pool, conf *CreateDockerCVMConfig)
 	})
 
 	success := waitForCVM(t, pool, resource)
-	require.Equal(t, success, !conf.ExpectFailure, "expected success=%v but detected %v", !conf.ExpectFailure, success)
+	require.Equal(t, !conf.ExpectFailure, success, "expected success=%v but detected %v", !conf.ExpectFailure, success)
 
 	return resource
 }
