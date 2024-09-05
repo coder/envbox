@@ -55,10 +55,11 @@ type CreateDockerCVMConfig struct {
 	InnerEnvFilter  []string
 	Envs            []string
 
-	OuterMounts []docker.HostMount
-	AddFUSE     bool
-	AddTUN      bool
-	CPUs        int
+	OuterMounts   []docker.HostMount
+	AddFUSE       bool
+	AddTUN        bool
+	CPUs          int
+	ExpectFailure bool
 }
 
 func (c CreateDockerCVMConfig) validate(t *testing.T) {
@@ -71,13 +72,6 @@ func (c CreateDockerCVMConfig) validate(t *testing.T) {
 	if c.Username == "" {
 		t.Fatalf("a username must be provided")
 	}
-}
-
-type CoderdOptions struct {
-	TLSEnable    bool
-	TLSCert      string
-	TLSKey       string
-	DefaultImage string
 }
 
 // RunEnvbox runs envbox, it returns once the inner container has finished
@@ -109,9 +103,15 @@ func RunEnvbox(t *testing.T, pool *dockertest.Pool, conf *CreateDockerCVMConfig)
 		host.ExtraHosts = []string{"host.docker.internal:host-gateway"}
 	})
 	require.NoError(t, err)
-	// t.Cleanup(func() { _ = pool.Purge(resource) })
 
-	waitForCVM(t, pool, resource)
+	t.Cleanup(func() {
+		if !t.Failed() {
+			_ = pool.Purge(resource)
+		}
+	})
+
+	success := waitForCVM(t, pool, resource)
+	require.Equal(t, !conf.ExpectFailure, success, "expected success=%v but detected %v", !conf.ExpectFailure, success)
 
 	return resource
 }
@@ -203,13 +203,13 @@ func WaitForCVMDocker(t *testing.T, pool *dockertest.Pool, resource *dockertest.
 }
 
 // waitForCVM waits for the inner container to spin up.
-func waitForCVM(t *testing.T, pool *dockertest.Pool, resource *dockertest.Resource) {
+func waitForCVM(t *testing.T, pool *dockertest.Pool, resource *dockertest.Resource) bool {
 	t.Helper()
 
 	rd, wr := io.Pipe()
 	defer rd.Close()
 	defer wr.Close()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 	go func() {
 		defer wr.Close()
@@ -245,11 +245,13 @@ func waitForCVM(t *testing.T, pool *dockertest.Pool, resource *dockertest.Resour
 		}
 
 		if blog.Type == buildlog.JSONLogTypeError {
-			t.Fatalf("envbox failed (%s)", blog.Output)
+			t.Logf("envbox failed (%s)", blog.Output)
+			return false
 		}
 	}
 	require.NoError(t, scanner.Err())
 	require.True(t, finished, "unexpected logger exit")
+	return true
 }
 
 type ExecConfig struct {
@@ -402,6 +404,12 @@ func RunLocalDockerRegistry(t testing.TB, pool *dockertest.Pool, conf RegistryCo
 		}
 	})
 	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		if !t.Failed() {
+			_ = pool.Purge(resource)
+		}
+	})
 
 	host := net.JoinHostPort("0.0.0.0", conf.TLSPort)
 	url := fmt.Sprintf("https://%s/v2/_catalog", host)

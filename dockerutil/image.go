@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
@@ -65,6 +66,14 @@ func PullImage(ctx context.Context, config *PullImageConfig) error {
 	}
 
 	err = pullImageFn()
+	// We should bail early if we're going to fail due to a
+	// certificate error. We can't xerrors.As here since this is
+	// returned from the daemon so the client is reporting
+	// essentially an unwrapped error.
+	if isTLSVerificationErr(err) {
+		return err
+	}
+
 	if err == nil {
 		return nil
 	}
@@ -252,4 +261,8 @@ func DefaultLogImagePullFn(log buildlog.Logger) func(ImagePullEvent) error {
 
 		return nil
 	}
+}
+
+func isTLSVerificationErr(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "tls: failed to verify certificate: x509: certificate signed by unknown authority")
 }

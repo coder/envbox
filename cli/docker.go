@@ -157,18 +157,18 @@ func dockerCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			var (
 				ctx                  = cmd.Context()
-				log                  = slog.Make(slogjson.Sink(io.Discard))
-				blog buildlog.Logger = buildlog.NopLogger{}
+				log                  = slog.Make(slogjson.Sink(cmd.ErrOrStderr()), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
+				blog buildlog.Logger = buildlog.JSONLogger{Encoder: json.NewEncoder(os.Stderr)}
 			)
+
+			if flags.noStartupLogs {
+				log = slog.Make(slogjson.Sink(io.Discard))
+				blog = buildlog.NopLogger{}
+			}
 
 			httpClient, err := xhttp.Client(log, flags.extraCertsPath)
 			if err != nil {
 				return xerrors.Errorf("http client: %w", err)
-			}
-
-			if !flags.noStartupLogs {
-				log = slog.Make(slogjson.Sink(cmd.ErrOrStderr()), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
-				blog = buildlog.JSONLogger{Encoder: json.NewEncoder(os.Stderr)}
 			}
 
 			if !flags.noStartupLogs && flags.agentToken != "" && flags.coderURL != "" {
@@ -197,7 +197,6 @@ func dockerCmd() *cobra.Command {
 				}
 			}(&err)
 
-			blog.Info("Waiting for dockerd to startup...")
 			sysboxArgs := []string{}
 			if flags.disableIDMappedMount {
 				sysboxArgs = append(sysboxArgs, "--disable-idmapped-mount")
@@ -231,6 +230,7 @@ func dockerCmd() *cobra.Command {
 
 			log.Debug(ctx, "starting dockerd", slog.F("args", args))
 
+			blog.Info("Waiting for sysbox processes to startup...")
 			dockerd := background.New(ctx, log, "dockerd", dargs...)
 			err = dockerd.Start()
 			if err != nil {
@@ -289,9 +289,30 @@ func dockerCmd() *cobra.Command {
 			// We wait for the daemon after spawning the goroutine in case
 			// startup causes the daemon to encounter encounter a 'no space left
 			// on device' error.
+			blog.Info("Waiting for dockerd to startup...")
 			err = dockerutil.WaitForDaemon(ctx, client)
 			if err != nil {
 				return xerrors.Errorf("wait for dockerd: %w", err)
+			}
+
+			if flags.extraCertsPath != "" {
+				// Parse the registry from the inner image
+				registry, err := name.ParseReference(flags.innerImage)
+				if err != nil {
+					return xerrors.Errorf("invalid image: %w", err)
+				}
+				registryName := registry.Context().RegistryStr()
+
+				// Write certificates for the registry
+				err = dockerutil.WriteCertsForRegistry(ctx, registryName, flags.extraCertsPath)
+				if err != nil {
+					return xerrors.Errorf("write certs for registry: %w", err)
+				}
+
+				blog.Infof("Successfully copied certificates from %q to %q", flags.extraCertsPath, filepath.Join("/etc/docker/certs.d", registryName))
+				log.Debug(ctx, "wrote certificates for registry", slog.F("registry", registryName),
+					slog.F("extra_certs_path", flags.extraCertsPath),
+				)
 			}
 
 			err = runDockerCVM(ctx, log, client, blog, flags)

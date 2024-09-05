@@ -49,7 +49,7 @@ func New(t *testing.T, cmd string, args ...string) (context.Context, *cobra.Comm
 
 	var (
 		execer = NewFakeExecer()
-		fs     = NewMemFS()
+		fs     = xunixfake.NewMemFS()
 		mnt    = &mount.FakeMounter{}
 		client = NewFakeDockerClient()
 		iface  = GetNetLink(t)
