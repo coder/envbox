@@ -114,11 +114,12 @@ func newAgentClientV2(ctx context.Context, logger slog.Logger, client *agentsdk.
 	var conn drpc.Conn
 	var err error
 	for r := retry.New(10*time.Millisecond, time.Second); r.Wait(ctx); {
-		conn, err = client.ConnectRPC(ctx)
+		c, err := client.ConnectRPC20(ctx)
 		if err != nil {
 			logger.Error(ctx, "connect err", slog.Error(err))
 			continue
 		}
+		conn = c.DRPCConn()
 		break
 	}
 	if conn == nil {
@@ -154,7 +155,7 @@ func OpenCoderClient(ctx context.Context, logger slog.Logger, accessURL *url.URL
 		return nil, xerrors.Errorf("build info: %w", err)
 	}
 
-	if semver.Compare(semver.MajorMinor(resp.Version), "v2.13") < 0 {
+	if semver.Compare(semver.MajorMinor(resp.Version), "v2.9") < 0 {
 		return &agentClientV1{
 			ctx:    ctx,
 			client: client,
