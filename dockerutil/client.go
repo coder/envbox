@@ -48,20 +48,30 @@ func (a AuthConfig) Base64() (string, error) {
 	return base64.URLEncoding.EncodeToString(authStr), nil
 }
 
-func AuthConfigFromPath(path string, registry string) (AuthConfig, error) {
+func AuthConfigFromPath(path string, reg string) (AuthConfig, error) {
 	var config dockercfg.Config
 	err := dockercfg.FromFile(path, &config)
 	if err != nil {
 		return AuthConfig{}, xerrors.Errorf("load config: %w", err)
 	}
 
+	return parseConfig(config, reg)
+}
+
+func AuthConfigFromString(raw string, reg string) (AuthConfig, error) {
+	var cfg dockercfg.Config
+	err := json.Unmarshal([]byte(raw), &cfg)
+	if err != nil {
+		return AuthConfig{}, xerrors.Errorf("parse config: %w", err)
+	}
+	return parseConfig(cfg, reg)
+}
+
+func parseConfig(cfg dockercfg.Config, registry string) (AuthConfig, error) {
+
 	hostname := dockercfg.ResolveRegistryHost(registry)
 
-	if config, ok := config.AuthConfigs[registry]; ok {
-		return AuthConfig(config), nil
-	}
-
-	username, secret, err := config.GetRegistryCredentials(hostname)
+	username, secret, err := cfg.GetRegistryCredentials(hostname)
 	if err != nil {
 		return AuthConfig{}, xerrors.Errorf("get credentials from helper: %w", err)
 	}
@@ -79,23 +89,5 @@ func AuthConfigFromPath(path string, registry string) (AuthConfig, error) {
 	}
 
 	return AuthConfig{}, xerrors.Errorf("no auth config found for registry %s: %w", registry, os.ErrNotExist)
-}
 
-func ParseAuthConfig(raw string) (AuthConfig, error) {
-	type dockerConfig struct {
-		AuthConfigs map[string]dockertypes.AuthConfig `json:"auths"`
-	}
-
-	var conf dockerConfig
-	if err := json.Unmarshal([]byte(raw), &conf); err != nil {
-		return AuthConfig{}, xerrors.Errorf("parse docker auth config secret: %w", err)
-	}
-	if len(conf.AuthConfigs) != 1 {
-		return AuthConfig{}, xerrors.Errorf("number of image pull auth configs not equal to 1 (%d)", len(conf.AuthConfigs))
-	}
-	for _, regConfig := range conf.AuthConfigs {
-		return AuthConfig(regConfig), nil
-	}
-
-	return AuthConfig{}, xerrors.New("no auth configs parsed.")
 }
