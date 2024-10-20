@@ -68,7 +68,6 @@ func AuthConfigFromString(raw string, reg string) (AuthConfig, error) {
 }
 
 func parseConfig(cfg dockercfg.Config, registry string) (AuthConfig, error) {
-
 	hostname := dockercfg.ResolveRegistryHost(registry)
 
 	username, secret, err := cfg.GetRegistryCredentials(hostname)
