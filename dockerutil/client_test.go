@@ -3,14 +3,15 @@ package dockerutil_test
 import (
 	"testing"
 
-	"github.com/coder/envbox/dockerutil"
 	"github.com/stretchr/testify/require"
+
+	"github.com/coder/envbox/dockerutil"
 )
 
 func TestAuthConfigFromString(t *testing.T) {
 	t.Parallel()
 
-	creds := `{ "auths": { "docker.registry.test": { "auth": "Zm9vQGJhci5jb206YWJjMTIzCg==" } } }`
+	creds := `{ "auths": { "docker.registry.test": { "auth": "Zm9vQGJhci5jb206YWJjMTIz" } } }`
 	expectedUsername := "foo@bar.com"
 	expectedPassword := "abc123"
 
