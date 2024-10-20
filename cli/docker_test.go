@@ -384,13 +384,13 @@ func TestDocker(t *testing.T) {
 		t.Parallel()
 
 		ctx, cmd := clitest.New(t, "docker",
-			"--image=ubuntu",
+			"--image=us.gcr.io/ubuntu",
 			"--username=root",
 			"--agent-token=hi",
 			fmt.Sprintf("--image-secret=%s", rawDockerAuth),
 		)
 
-		raw := []byte(`{"username":"_json_key","password":"{\"type\": \"service_account\", \"project_id\": \"some-test\", \"private_key_id\": \"blahblah\", \"private_key\": \"-----BEGIN PRIVATE KEY-----mykey-----END PRIVATE KEY-----\", \"client_email\": \"test@test.iam.gserviceaccount.com\", \"client_id\": \"123\", \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\", \"token_uri\": \"https://oauth2.googleapis.com/token\", \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\", \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/test.iam.gserviceaccount.com\" }","auth":"X2pzb25fa2V5OnsKCgkidHlwZSI6ICJzZXJ2aWNlX2FjY291bnQiLAoJInByb2plY3RfaWQiOiAic29tZS10ZXN0IiwKCSJwcml2YXRlX2tleV9pZCI6ICJibGFoYmxhaCIsCgkicHJpdmF0ZV9rZXkiOiAiLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCm15a2V5LS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLQoiLAoJImNsaWVudF9lbWFpbCI6ICJ0ZXN0QHRlc3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLAoJImNsaWVudF9pZCI6ICIxMjMiLAoJImF1dGhfdXJpIjogImh0dHBzOi8vYWNjb3VudHMuZ29vZ2xlLmNvbS9vL29hdXRoMi9hdXRoIiwKCSJ0b2tlbl91cmkiOiAiaHR0cHM6Ly9vYXV0aDIuZ29vZ2xlYXBpcy5jb20vdG9rZW4iLAoJImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6ICJodHRwczovL3d3dy5nb29nbGVhcGlzLmNvbS9vYXV0aDIvdjEvY2VydHMiLAoJImNsaWVudF94NTA5X2NlcnRfdXJsIjogImh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL3JvYm90L3YxL21ldGFkYXRhL3g1MDkvdGVzdC5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIKfQo=","email":"test@test.iam.gserviceaccount.com"}`)
+		raw := []byte(`{"username":"_json_key","password":"{\"type\": \"service_account\", \"project_id\": \"some-test\", \"private_key_id\": \"blahblah\", \"private_key\": \"-----BEGIN PRIVATE KEY-----mykey-----END PRIVATE KEY-----\", \"client_email\": \"test@test.iam.gserviceaccount.com\", \"client_id\": \"123\", \"auth_uri\": \"https://accounts.google.com/o/oauth2/auth\", \"token_uri\": \"https://oauth2.googleapis.com/token\", \"auth_provider_x509_cert_url\": \"https://www.googleapis.com/oauth2/v1/certs\", \"client_x509_cert_url\": \"https://www.googleapis.com/robot/v1/metadata/x509/test.iam.gserviceaccount.com\" }"}`)
 		authB64 := base64.URLEncoding.EncodeToString(raw)
 
 		client := clitest.DockerClient(t, ctx)

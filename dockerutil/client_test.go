@@ -11,6 +11,7 @@ import (
 func TestAuthConfigFromString(t *testing.T) {
 	t.Parallel()
 
+	//nolint:gosec // this is a test
 	creds := `{ "auths": { "docker.registry.test": { "auth": "Zm9vQGJhci5jb206YWJjMTIz" } } }`
 	expectedUsername := "foo@bar.com"
 	expectedPassword := "abc123"

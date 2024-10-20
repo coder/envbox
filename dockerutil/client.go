@@ -89,5 +89,4 @@ func parseConfig(cfg dockercfg.Config, registry string) (AuthConfig, error) {
 	}
 
 	return AuthConfig{}, xerrors.Errorf("no auth config found for registry %s: %w", registry, os.ErrNotExist)
-
 }
