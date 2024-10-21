@@ -63,6 +63,98 @@ func TestDocker(t *testing.T) {
 		execer.AssertCommandsCalled(t)
 	})
 
+	t.Run("Images", func(t *testing.T) {
+		t.Parallel()
+
+		type testcase struct {
+			name    string
+			image   string
+			success bool
+		}
+
+		testcases := []testcase{
+			{
+				name:    "Repository",
+				image:   "ubuntu",
+				success: true,
+			},
+			{
+				name:    "RepositoryPath",
+				image:   "ubuntu/ubuntu",
+				success: true,
+			},
+
+			{
+				name:    "RepositoryLatest",
+				image:   "ubuntu:latest",
+				success: true,
+			},
+			{
+				name:    "RepositoryTag",
+				image:   "ubuntu:24.04",
+				success: true,
+			},
+			{
+				name:    "RepositoryPathTag",
+				image:   "ubuntu/ubuntu:18.04",
+				success: true,
+			},
+			{
+				name:    "RegistryRepository",
+				image:   "gcr.io/ubuntu",
+				success: true,
+			},
+			{
+				name:    "RegistryRepositoryTag",
+				image:   "gcr.io/ubuntu:24.04",
+				success: true,
+			},
+		}
+
+		for _, tc := range testcases {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				ctx, cmd := clitest.New(t, "docker",
+					"--image="+tc.image,
+					"--username=root",
+					"--agent-token=hi",
+				)
+
+				called := make(chan struct{})
+				execer := clitest.Execer(ctx)
+				client := clitest.DockerClient(t, ctx)
+				execer.AddCommands(&xunixfake.FakeCmd{
+					FakeCmd: &testingexec.FakeCmd{
+						Argv: []string{
+							"sysbox-mgr",
+						},
+					},
+					WaitFn: func() error { close(called); select {} }, //nolint:revive
+				})
+
+				var created bool
+				client.ContainerCreateFn = func(_ context.Context, conf *container.Config, _ *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, _ string) (container.CreateResponse, error) {
+					created = true
+					require.Equal(t, tc.image, conf.Image)
+					return container.CreateResponse{}, nil
+				}
+
+				err := cmd.ExecuteContext(ctx)
+				if !tc.success {
+					require.Error(t, err)
+					return
+				}
+
+				<-called
+				require.NoError(t, err)
+				require.True(t, created, "container create fn not called")
+				execer.AssertCommandsCalled(t)
+			})
+		}
+	})
+
 	// Test that dockerd is configured correctly.
 	t.Run("DockerdConfigured", func(t *testing.T) {
 		t.Parallel()
