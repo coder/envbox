@@ -397,10 +397,14 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	if err != nil {
 		return xerrors.Errorf("set oom score: %w", err)
 	}
+	ref, err := name.NewTag(flags.innerImage)
+	if err != nil {
+		return xerrors.Errorf("parse ref: %w", err)
+	}
 
 	var dockerAuth dockerutil.AuthConfig
 	if flags.imagePullSecret != "" {
-		dockerAuth, err = dockerutil.ParseAuthConfig(flags.imagePullSecret)
+		dockerAuth, err = dockerutil.AuthConfigFromString(flags.imagePullSecret, ref.RegistryStr())
 		if err != nil {
 			return xerrors.Errorf("parse auth config: %w", err)
 		}
@@ -409,10 +413,6 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	log.Info(ctx, "checking for docker config file", slog.F("path", flags.dockerConfig))
 	if _, err := fs.Stat(flags.dockerConfig); err == nil {
 		log.Info(ctx, "detected file", slog.F("image", flags.innerImage))
-		ref, err := name.NewTag(flags.innerImage)
-		if err != nil {
-			return xerrors.Errorf("parse ref: %w", err)
-		}
 		dockerAuth, err = dockerutil.AuthConfigFromPath(flags.dockerConfig, ref.RegistryStr())
 		if err != nil && !xerrors.Is(err, os.ErrNotExist) {
 			return xerrors.Errorf("auth config from file: %w", err)
