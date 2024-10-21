@@ -4,6 +4,7 @@
 package integration_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/envbox/cli"
+	"github.com/coder/envbox/dockerutil"
 	"github.com/coder/envbox/integration/integrationtest"
 )
 
@@ -318,6 +320,9 @@ func TestDocker(t *testing.T) {
 		regKeyPath := filepath.Join(certDir, "registry_key.pem")
 		integrationtest.WriteCertificate(t, dockerCert, regCertPath, regKeyPath)
 
+		username := "coder"
+		password := "helloworld"
+
 		// Start up the docker registry and push an image
 		// to it that we can reference.
 		image := integrationtest.RunLocalDockerRegistry(t, pool, integrationtest.RegistryConfig{
@@ -325,12 +330,29 @@ func TestDocker(t *testing.T) {
 			HostKeyPath:  regKeyPath,
 			Image:        integrationtest.UbuntuImage,
 			TLSPort:      strconv.Itoa(registryAddr.Port),
+			PasswordDir:  dir,
+			Username:     username,
+			Password:     password,
 		})
+
+		type authConfigs struct {
+			Auths map[string]dockerutil.AuthConfig `json:"auths"`
+		}
+
+		auths := authConfigs{
+			Auths: map[string]dockerutil.AuthConfig{
+				image.Registry(): {Username: username, Password: password},
+			},
+		}
+
+		authStr, err := json.Marshal(auths)
+		require.NoError(t, err)
 
 		envs := []string{
 			integrationtest.EnvVar(cli.EnvAgentToken, "faketoken"),
 			integrationtest.EnvVar(cli.EnvAgentURL, fmt.Sprintf("https://%s:%d", "host.docker.internal", coderAddr.Port)),
 			integrationtest.EnvVar(cli.EnvExtraCertsPath, "/tmp/certs"),
+			integrationtest.EnvVar(cli.EnvBoxPullImageSecretEnvVar, string(authStr)),
 		}
 
 		// Run the envbox container.

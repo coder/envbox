@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/xerrors"
 
 	"github.com/coder/envbox/buildlog"
@@ -361,6 +363,10 @@ type RegistryConfig struct {
 	HostKeyPath  string
 	TLSPort      string
 	Image        string
+	Username     string
+	Password     string
+	// PasswordDir is the directory under which the htpasswd file is written.
+	PasswordDir string
 }
 
 type RegistryImage string
@@ -373,28 +379,50 @@ func (r RegistryImage) String() string {
 	return string(r)
 }
 
-func RunLocalDockerRegistry(t testing.TB, pool *dockertest.Pool, conf RegistryConfig) RegistryImage {
+func RunLocalDockerRegistry(t *testing.T, pool *dockertest.Pool, conf RegistryConfig) RegistryImage {
 	t.Helper()
 
 	const (
 		certPath = "/certs/cert.pem"
 		keyPath  = "/certs/key.pem"
+		authPath = "/auth/htpasswd"
 	)
 
-	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
-		Repository: registryImage,
-		Tag:        registryTag,
-		Env: []string{
+	var (
+		envs = []string{
+			EnvVar("REGISTRY_HTTP_ADDR", "0.0.0.0:443"),
+		}
+		binds []string
+	)
+
+	if conf.HostCertPath != "" && conf.HostKeyPath != "" {
+		envs = append(envs,
 			EnvVar("REGISTRY_HTTP_TLS_CERTIFICATE", certPath),
 			EnvVar("REGISTRY_HTTP_TLS_KEY", keyPath),
-			EnvVar("REGISTRY_HTTP_ADDR", "0.0.0.0:443"),
-		},
-		ExposedPorts: []string{"443/tcp"},
-	}, func(host *docker.HostConfig) {
-		host.Binds = []string{
+		)
+		binds = append(binds,
 			mountBinding(conf.HostCertPath, certPath),
 			mountBinding(conf.HostKeyPath, keyPath),
-		}
+		)
+	}
+
+	if conf.PasswordDir != "" {
+		authFile := GenerateRegistryAuth(t, conf.PasswordDir, conf.Username, conf.Password)
+		envs = append(envs,
+			EnvVar("REGISTRY_AUTH", "htpasswd"),
+			EnvVar("REGISTRY_AUTH_HTPASSWD_REALM", "Test Registry"),
+			EnvVar("REGISTRY_AUTH_HTPASSWD_PATH", authPath),
+		)
+		binds = append(binds, mountBinding(authFile, authPath))
+	}
+
+	resource, err := pool.RunWithOptions(&dockertest.RunOptions{
+		Repository:   registryImage,
+		Tag:          registryTag,
+		Env:          envs,
+		ExposedPorts: []string{"443/tcp"},
+	}, func(host *docker.HostConfig) {
+		host.Binds = binds
 		host.ExtraHosts = []string{"host.docker.internal:host-gateway"}
 		host.PortBindings = map[docker.Port][]docker.PortBinding{
 			"443/tcp": {{
@@ -415,7 +443,13 @@ func RunLocalDockerRegistry(t testing.TB, pool *dockertest.Pool, conf RegistryCo
 	url := fmt.Sprintf("https://%s/v2/_catalog", host)
 
 	waitForRegistry(t, pool, resource, url)
-	return pushLocalImage(t, pool, host, conf.Image)
+	return pushLocalImage(t, pool, pushOptions{
+		Host:        host,
+		RemoteImage: conf.Image,
+		Username:    conf.Username,
+		Password:    conf.Password,
+		ConfigDir:   conf.PasswordDir,
+	})
 }
 
 func waitForRegistry(t testing.TB, pool *dockertest.Pool, resource *dockertest.Resource, url string) {
@@ -447,18 +481,26 @@ func waitForRegistry(t testing.TB, pool *dockertest.Pool, resource *dockertest.R
 			continue
 		}
 		_ = res.Body.Close()
-		if res.StatusCode == http.StatusOK {
+		if res.StatusCode == http.StatusOK || res.StatusCode == http.StatusUnauthorized {
 			return
 		}
 	}
 	require.NoError(t, ctx.Err())
 }
 
-func pushLocalImage(t testing.TB, pool *dockertest.Pool, host, remoteImage string) RegistryImage {
+type pushOptions struct {
+	Host        string
+	RemoteImage string
+	Username    string
+	Password    string
+	ConfigDir   string
+}
+
+func pushLocalImage(t *testing.T, pool *dockertest.Pool, opts pushOptions) RegistryImage {
 	t.Helper()
 
 	const registryHost = "127.0.0.1"
-	name := filepath.Base(remoteImage)
+	name := filepath.Base(opts.RemoteImage)
 	repoTag := strings.Split(name, ":")
 	tag := "latest"
 	if len(repoTag) == 2 {
@@ -469,25 +511,45 @@ func pushLocalImage(t testing.TB, pool *dockertest.Pool, host, remoteImage strin
 		t: t,
 	}
 	err := pool.Client.PullImage(docker.PullImageOptions{
-		Repository:   strings.Split(remoteImage, ":")[0],
+		Repository:   strings.Split(opts.RemoteImage, ":")[0],
 		Tag:          tag,
 		OutputStream: tw,
 	}, docker.AuthConfiguration{})
 	require.NoError(t, err)
 
-	_, port, err := net.SplitHostPort(host)
+	_, port, err := net.SplitHostPort(opts.Host)
 	require.NoError(t, err)
 
-	err = pool.Client.TagImage(remoteImage, docker.TagImageOptions{
+	err = pool.Client.TagImage(opts.RemoteImage, docker.TagImageOptions{
 		Repo: fmt.Sprintf("%s:%s/%s", registryHost, port, name),
 		Tag:  tag,
 	})
 	require.NoError(t, err)
 
+	type config struct {
+		Auths map[string]dockerutil.AuthConfig `json:"auths"`
+	}
+
+	auth := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", opts.Username, opts.Password)))
+
+	cfg := config{
+		Auths: map[string]dockerutil.AuthConfig{
+			net.JoinHostPort(registryHost, port): {
+				Username: opts.Username,
+				Password: opts.Password,
+				Auth:     auth,
+			},
+		},
+	}
+	b, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	configPath := filepath.Join(opts.ConfigDir, "config.json")
+	WriteFile(t, configPath, string(b))
+
 	// Idk what to tell you but the pool.Client.PushImage
 	// function is bugged or I'm just dumb...
 	image := fmt.Sprintf("%s:%s/%s:%s", registryHost, port, name, tag)
-	cmd := exec.Command("docker", "push", image)
+	cmd := exec.Command("docker", "--config", opts.ConfigDir, "push", image)
 	cmd.Stderr = tw
 	cmd.Stdout = tw
 	err = cmd.Run()
@@ -515,4 +577,16 @@ func BindMount(src, dst string, ro bool) docker.HostMount {
 		ReadOnly: ro,
 		Type:     "bind",
 	}
+}
+
+func GenerateRegistryAuth(t *testing.T, directory, username, password string) string {
+	t.Helper()
+
+	p, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	require.NoError(t, err)
+
+	authFile := filepath.Join(directory, "credentials")
+	WriteFile(t, authFile, fmt.Sprintf("%s:%s", username, string(p)))
+
+	return authFile
 }
