@@ -2,7 +2,7 @@ PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
 GO_FILES := $(shell git ls-files '*.go' '*.sum')
 IMAGE_FILES := $(shell find deploy)
 ARCH ?= linux/amd64
-SYSBOX_SHA ?= cfce811006a27305071b1634ca8fe690392f5dcc205612e7b4e5bde411b7701e
+SYSBOX_SHA ?= f02ffb48eae99d6c884c9aa0378070cc716d028f58e87deec5ae00a41b706fe8
 
 .PHONY: clean
 clean:
