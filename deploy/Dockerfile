@@ -2,7 +2,10 @@
 FROM ubuntu:jammy
 
 ARG TARGETARCH
-ARG SYSBOX_SHA="f02ffb48eae99d6c884c9aa0378070cc716d028f58e87deec5ae00a41b706fe8"
+# This should be updated in the Makefile whenever the version is changed. 
+# We don't hardcode it here because we have to be able to build both
+# amd and arm
+ARG SYSBOX_SHA
 ARG SYSBOX_VERSION="0.6.5"
 ARG SYSBOX_DEB="sysbox-ce_$SYSBOX_VERSION-0.linux_$TARGETARCH.deb"
 
