@@ -2,8 +2,8 @@
 FROM ubuntu:jammy
 
 ARG TARGETARCH
-ARG SYSBOX_SHA="cfce811006a27305071b1634ca8fe690392f5dcc205612e7b4e5bde411b7701e"
-ARG SYSBOX_VERSION="0.6.3"
+ARG SYSBOX_SHA="f02ffb48eae99d6c884c9aa0378070cc716d028f58e87deec5ae00a41b706fe8"
+ARG SYSBOX_VERSION="0.6.5"
 ARG SYSBOX_DEB="sysbox-ce_$SYSBOX_VERSION-0.linux_$TARGETARCH.deb"
 
 # Copy configuration files to appropriate locations
