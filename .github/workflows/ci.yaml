@@ -190,7 +190,7 @@ jobs:
         run: make -j build/image/envbox
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@8bd2f9fbda2109502356ff8a6a89da55b1ead252
+        uses: aquasecurity/trivy-action@0.29.0
         with:
           image-ref: envbox:latest
           format: sarif
