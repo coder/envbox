@@ -28,6 +28,7 @@ import (
 	"github.com/coder/envbox/dockerutil"
 	"github.com/coder/envbox/slogkubeterminate"
 	"github.com/coder/envbox/sysboxutil"
+	"github.com/coder/envbox/xhttp"
 	"github.com/coder/envbox/xunix"
 )
 
@@ -101,6 +102,7 @@ var (
 	EnvDockerConfig         = "CODER_DOCKER_CONFIG"
 	EnvDebug                = "CODER_DEBUG"
 	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
+	EnvExtraCertsPath       = "CODER_EXTRA_CERTS_PATH"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -138,6 +140,7 @@ type flags struct {
 	cpus                 int
 	memory               int
 	disableIDMappedMount bool
+	extraCertsPath       string
 
 	// Test flags.
 	noStartupLogs bool
@@ -154,13 +157,18 @@ func dockerCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			var (
 				ctx                  = cmd.Context()
-				log                  = slog.Make(slogjson.Sink(io.Discard))
-				blog buildlog.Logger = buildlog.NopLogger{}
+				log                  = slog.Make(slogjson.Sink(cmd.ErrOrStderr()), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
+				blog buildlog.Logger = buildlog.JSONLogger{Encoder: json.NewEncoder(os.Stderr)}
 			)
 
-			if !flags.noStartupLogs {
-				log = slog.Make(slogjson.Sink(cmd.ErrOrStderr()), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
-				blog = buildlog.JSONLogger{Encoder: json.NewEncoder(os.Stderr)}
+			if flags.noStartupLogs {
+				log = slog.Make(slogjson.Sink(io.Discard))
+				blog = buildlog.NopLogger{}
+			}
+
+			httpClient, err := xhttp.Client(log, flags.extraCertsPath)
+			if err != nil {
+				return xerrors.Errorf("http client: %w", err)
 			}
 
 			if !flags.noStartupLogs && flags.agentToken != "" && flags.coderURL != "" {
@@ -169,7 +177,7 @@ func dockerCmd() *cobra.Command {
 					return xerrors.Errorf("parse coder URL %q: %w", flags.coderURL, err)
 				}
 
-				agent, err := buildlog.OpenCoderClient(ctx, coderURL, log, flags.agentToken)
+				agent, err := buildlog.OpenCoderClient(ctx, log, coderURL, httpClient, flags.agentToken)
 				if err != nil {
 					// Don't fail workspace startup on
 					// an inability to push build logs.
@@ -189,7 +197,6 @@ func dockerCmd() *cobra.Command {
 				}
 			}(&err)
 
-			blog.Info("Waiting for dockerd to startup...")
 			sysboxArgs := []string{}
 			if flags.disableIDMappedMount {
 				sysboxArgs = append(sysboxArgs, "--disable-idmapped-mount")
@@ -223,6 +230,7 @@ func dockerCmd() *cobra.Command {
 
 			log.Debug(ctx, "starting dockerd", slog.F("args", args))
 
+			blog.Info("Waiting for sysbox processes to startup...")
 			dockerd := background.New(ctx, log, "dockerd", dargs...)
 			err = dockerd.Start()
 			if err != nil {
@@ -281,9 +289,30 @@ func dockerCmd() *cobra.Command {
 			// We wait for the daemon after spawning the goroutine in case
 			// startup causes the daemon to encounter encounter a 'no space left
 			// on device' error.
+			blog.Info("Waiting for dockerd to startup...")
 			err = dockerutil.WaitForDaemon(ctx, client)
 			if err != nil {
 				return xerrors.Errorf("wait for dockerd: %w", err)
+			}
+
+			if flags.extraCertsPath != "" {
+				// Parse the registry from the inner image
+				registry, err := name.ParseReference(flags.innerImage)
+				if err != nil {
+					return xerrors.Errorf("invalid image: %w", err)
+				}
+				registryName := registry.Context().RegistryStr()
+
+				// Write certificates for the registry
+				err = dockerutil.WriteCertsForRegistry(ctx, registryName, flags.extraCertsPath)
+				if err != nil {
+					return xerrors.Errorf("write certs for registry: %w", err)
+				}
+
+				blog.Infof("Successfully copied certificates from %q to %q", flags.extraCertsPath, filepath.Join("/etc/docker/certs.d", registryName))
+				log.Debug(ctx, "wrote certificates for registry", slog.F("registry", registryName),
+					slog.F("extra_certs_path", flags.extraCertsPath),
+				)
 			}
 
 			err = runDockerCVM(ctx, log, client, blog, flags)
@@ -349,6 +378,7 @@ func dockerCmd() *cobra.Command {
 	cliflag.IntVarP(cmd.Flags(), &flags.cpus, "cpus", "", EnvCPUs, 0, "Number of CPUs to allocate inner container. e.g. 2")
 	cliflag.IntVarP(cmd.Flags(), &flags.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.disableIDMappedMount, "disable-idmapped-mount", "", EnvDisableIDMappedMount, false, "Disable idmapped mounts in sysbox. Note that you may need an alternative (e.g. shiftfs).")
+	cliflag.StringVarP(cmd.Flags(), &flags.extraCertsPath, "extra-certs-path", "", EnvExtraCertsPath, "", "The path to a directory or file containing extra CA certificates.")
 
 	// Test flags.
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")
@@ -367,10 +397,14 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	if err != nil {
 		return xerrors.Errorf("set oom score: %w", err)
 	}
+	ref, err := name.NewTag(flags.innerImage)
+	if err != nil {
+		return xerrors.Errorf("parse ref: %w", err)
+	}
 
 	var dockerAuth dockerutil.AuthConfig
 	if flags.imagePullSecret != "" {
-		dockerAuth, err = dockerutil.ParseAuthConfig(flags.imagePullSecret)
+		dockerAuth, err = dockerutil.AuthConfigFromString(flags.imagePullSecret, ref.RegistryStr())
 		if err != nil {
 			return xerrors.Errorf("parse auth config: %w", err)
 		}
@@ -379,10 +413,6 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	log.Info(ctx, "checking for docker config file", slog.F("path", flags.dockerConfig))
 	if _, err := fs.Stat(flags.dockerConfig); err == nil {
 		log.Info(ctx, "detected file", slog.F("image", flags.innerImage))
-		ref, err := name.NewTag(flags.innerImage)
-		if err != nil {
-			return xerrors.Errorf("parse ref: %w", err)
-		}
 		dockerAuth, err = dockerutil.AuthConfigFromPath(flags.dockerConfig, ref.RegistryStr())
 		if err != nil && !xerrors.Is(err, os.ErrNotExist) {
 			return xerrors.Errorf("auth config from file: %w", err)

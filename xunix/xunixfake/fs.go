@@ -14,6 +14,13 @@ type FileOwner struct {
 	GID int
 }
 
+func NewMemFS() *MemFS {
+	return &MemFS{
+		MemMapFs: &afero.MemMapFs{},
+		Owner:    map[string]FileOwner{},
+	}
+}
+
 type MemFS struct {
 	*afero.MemMapFs
 	Owner map[string]FileOwner
