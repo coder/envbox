@@ -124,3 +124,11 @@ jobs:
         run: |
           git tag -a ${{ github.event.inputs.version }} -m ${{ github.event.inputs.version }}
           git push --tags
+      - name: Create Release
+        run: |
+          version=${{ github.event.inputs.version }}
+          if [[ $version == *-rc* ]]; then
+            gh release create "$version" -t "$version" --generate-notes --prerelease --latest=false --verify-tag
+          else
+            gh release create $version -t $version --generate-notes --verify-tag
+          fi
