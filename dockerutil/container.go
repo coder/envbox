@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
-	dockerclient "github.com/docker/docker/client"
 	"github.com/spf13/afero"
 	"golang.org/x/xerrors"
 
@@ -24,12 +23,6 @@ const (
 	// Default CPU period for containers.
 	DefaultCPUPeriod uint64 = 1e5
 )
-
-type DockerClient interface {
-	dockerclient.SystemAPIClient
-	dockerclient.ContainerAPIClient
-	dockerclient.ImageAPIClient
-}
 
 type ContainerConfig struct {
 	Log        slog.Logger

@@ -13,6 +13,12 @@ import (
 	"golang.org/x/xerrors"
 )
 
+type DockerClient interface {
+	dockerclient.SystemAPIClient
+	dockerclient.ContainerAPIClient
+	dockerclient.ImageAPIClient
+}
+
 type clientKey struct{}
 
 // WithClient sets the provided DockerClient on the context.
