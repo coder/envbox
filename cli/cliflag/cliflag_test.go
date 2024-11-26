@@ -113,9 +113,11 @@ func TestCliflag(t *testing.T) {
 		flagset, name, shorthand, env, usage := randomFlag()
 		def, _ := cryptorand.Intn(10)
 
+		//nolint:gosec
 		cliflag.Uint8VarP(flagset, &ptr, name, shorthand, env, uint8(def), usage)
 		got, err := flagset.GetUint8(name)
 		require.NoError(t, err)
+		//nolint:gosec
 		require.Equal(t, uint8(def), got)
 		require.Contains(t, flagset.FlagUsages(), usage)
 		require.Contains(t, flagset.FlagUsages(), fmt.Sprintf("Consumes $%s", env))
@@ -125,12 +127,14 @@ func TestCliflag(t *testing.T) {
 		var ptr uint8
 		flagset, name, shorthand, env, usage := randomFlag()
 		envValue, _ := cryptorand.Intn(10)
+		//nolint:gosec
 		t.Setenv(env, strconv.FormatUint(uint64(envValue), 10))
 		def, _ := cryptorand.Intn(10)
 
 		cliflag.Uint8VarP(flagset, &ptr, name, shorthand, env, uint8(def), usage)
 		got, err := flagset.GetUint8(name)
 		require.NoError(t, err)
+		//nolint:gosec
 		require.Equal(t, uint8(envValue), got)
 	})
 
@@ -141,9 +145,11 @@ func TestCliflag(t *testing.T) {
 		t.Setenv(env, envValue)
 		def, _ := cryptorand.Intn(10)
 
+		//nolint:gosec
 		cliflag.Uint8VarP(flagset, &ptr, name, shorthand, env, uint8(def), usage)
 		got, err := flagset.GetUint8(name)
 		require.NoError(t, err)
+		//nolint:gosec
 		require.Equal(t, uint8(def), got)
 	})
 
@@ -164,6 +170,7 @@ func TestCliflag(t *testing.T) {
 		var ptr int
 		flagset, name, shorthand, env, usage := randomFlag()
 		envValue, _ := cryptorand.Intn(10)
+		//nolint:gosec
 		t.Setenv(env, strconv.FormatUint(uint64(envValue), 10))
 		def, _ := cryptorand.Intn(10)
 
