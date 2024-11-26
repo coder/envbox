@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/image"
 	"golang.org/x/xerrors"
 
 	"github.com/coder/envbox/buildlog"
@@ -51,7 +51,7 @@ func PullImage(ctx context.Context, config *PullImageConfig) error {
 
 	pullImageFn := func() error {
 		var rd io.ReadCloser
-		rd, err = config.Client.ImagePull(ctx, config.Image, image.PullOptions{
+		rd, err = config.Client.ImagePull(ctx, config.Image, dockertypes.ImagePullOptions{
 			RegistryAuth: authStr,
 		})
 		if err != nil {
@@ -106,12 +106,12 @@ func PullImage(ctx context.Context, config *PullImageConfig) error {
 }
 
 // PruneImage runs a simple 'docker prune'.
-func PruneImages(ctx context.Context, client DockerClient) (image.PruneReport, error) {
+func PruneImages(ctx context.Context, client DockerClient) (dockertypes.ImagesPruneReport, error) {
 	report, err := client.ImagesPrune(ctx,
 		filters.NewArgs(filters.Arg("dangling", "false")),
 	)
 	if err != nil {
-		return image.PruneReport{}, xerrors.Errorf("images prune: %w", err)
+		return dockertypes.ImagesPruneReport{}, xerrors.Errorf("images prune: %w", err)
 	}
 
 	return report, nil
@@ -176,12 +176,12 @@ func GetImageMetadata(ctx context.Context, client DockerClient, image, username 
 
 	defer func() {
 		// We wanna remove this, but it's not a huge deal if it fails.
-		_ = client.ContainerRemove(ctx, created.ID, container.RemoveOptions{
+		_ = client.ContainerRemove(ctx, created.ID, dockertypes.ContainerRemoveOptions{
 			Force: true,
 		})
 	}()
 
-	err = client.ContainerStart(ctx, created.ID, container.StartOptions{})
+	err = client.ContainerStart(ctx, created.ID, dockertypes.ContainerStartOptions{})
 	if err != nil {
 		return ImageMetadata{}, xerrors.Errorf("start container: %w", err)
 	}
