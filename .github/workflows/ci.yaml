@@ -189,6 +189,11 @@ jobs:
       - name: build image
         run: make -j build/image/envbox
 
+      # We don't want to run Trivy on pull requests.
+      - name: Exit if not on main
+        if: github.ref != 'refs/heads/main'
+        run: exit 0
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.29.0
         with:
@@ -215,11 +220,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v2
-        with:
-          languages: go
-
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
@@ -235,6 +235,11 @@ jobs:
         with:
           path: ${{ steps.go-cache-paths.outputs.GOMODCACHE }}
           key: ${{ runner.os }}-release-go-mod-${{ hashFiles('**/go.sum') }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: go
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v2
