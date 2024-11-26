@@ -220,11 +220,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v2
-        with:
-          languages: go
-
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
@@ -240,6 +235,11 @@ jobs:
         with:
           path: ${{ steps.go-cache-paths.outputs.GOMODCACHE }}
           key: ${{ runner.os }}-release-go-mod-${{ hashFiles('**/go.sum') }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: go
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v2
