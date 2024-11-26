@@ -156,11 +156,11 @@ type ImageMetadata struct {
 
 // GetImageMetadata returns metadata about an image such as the UID/GID of the
 // provided username and whether it contains an /sbin/init that we should run.
-func GetImageMetadata(ctx context.Context, client Client, image, username string) (ImageMetadata, error) {
+func GetImageMetadata(ctx context.Context, client Client, img, username string) (ImageMetadata, error) {
 	// Creating a dummy container to inspect the filesystem.
 	created, err := client.ContainerCreate(ctx,
 		&container.Config{
-			Image: image,
+			Image: img,
 			Entrypoint: []string{
 				"sleep",
 			},

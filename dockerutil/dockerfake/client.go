@@ -5,7 +5,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/docker/docker/api/types"
 	dockertypes "github.com/docker/docker/api/types"
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
@@ -200,7 +199,7 @@ func (MockClient) ContainerKill(_ context.Context, _ string, _ string) error {
 	panic("not implemented")
 }
 
-func (MockClient) ContainerList(_ context.Context, _ containertypes.ListOptions) ([]types.Container, error) {
+func (MockClient) ContainerList(_ context.Context, _ containertypes.ListOptions) ([]dockertypes.Container, error) {
 	panic("not implemented")
 }
 

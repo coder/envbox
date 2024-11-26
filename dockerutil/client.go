@@ -73,8 +73,8 @@ func AuthConfigFromString(raw string, reg string) (AuthConfig, error) {
 	return parseConfig(cfg, reg)
 }
 
-func parseConfig(cfg dockercfg.Config, registry string) (AuthConfig, error) {
-	hostname := dockercfg.ResolveRegistryHost(registry)
+func parseConfig(cfg dockercfg.Config, reg string) (AuthConfig, error) {
+	hostname := dockercfg.ResolveRegistryHost(reg)
 
 	username, secret, err := cfg.GetRegistryCredentials(hostname)
 	if err != nil {
@@ -93,5 +93,5 @@ func parseConfig(cfg dockercfg.Config, registry string) (AuthConfig, error) {
 		}, nil
 	}
 
-	return AuthConfig{}, xerrors.Errorf("no auth config found for registry %s: %w", registry, os.ErrNotExist)
+	return AuthConfig{}, xerrors.Errorf("no auth config found for registry %s: %w", reg, os.ErrNotExist)
 }
