@@ -24,7 +24,7 @@ type ExecConfig struct {
 
 // ExecContainer runs a command in a container. It returns the output and any error.
 // If an error occurs during the execution of the command, the output is appended to the error.
-func ExecContainer(ctx context.Context, client DockerClient, config ExecConfig) ([]byte, error) {
+func ExecContainer(ctx context.Context, client Client, config ExecConfig) ([]byte, error) {
 	exec, err := client.ContainerExecCreate(ctx, config.ContainerID, dockertypes.ExecConfig{
 		Detach:       true,
 		Cmd:          append([]string{config.Cmd}, config.Args...),

@@ -19,7 +19,7 @@ import (
 	"github.com/coder/envbox/dockerutil"
 )
 
-var _ dockerutil.DockerClient = MockClient{}
+var _ dockerutil.Client = MockClient{}
 
 // MockClient provides overrides for functions that are called in envbox.
 type MockClient struct {

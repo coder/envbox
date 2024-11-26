@@ -35,7 +35,7 @@ func Mounter(ctx context.Context) *mount.FakeMounter {
 func DockerClient(t *testing.T, ctx context.Context) *dockerfake.MockClient {
 	t.Helper()
 
-	client, err := dockerutil.Client(ctx)
+	client, err := dockerutil.ExtractClient(ctx)
 	require.NoError(t, err)
 	//nolint we should panic if this isn't the case.
 	return client.(*dockerfake.MockClient)
@@ -71,7 +71,7 @@ func New(t *testing.T, cmd string, args ...string) (context.Context, *cobra.Comm
 	return ctx, root
 }
 
-func ctx(t *testing.T, fs xunix.FS, ex xunix.Execer, mnt mount.Interface, client dockerutil.DockerClient) context.Context {
+func ctx(t *testing.T, fs xunix.FS, ex xunix.Execer, mnt mount.Interface, client dockerutil.Client) context.Context {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)

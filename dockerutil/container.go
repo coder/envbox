@@ -41,7 +41,7 @@ type ContainerConfig struct {
 }
 
 // CreateContainer creates a sysbox-runc container.
-func CreateContainer(ctx context.Context, client DockerClient, conf *ContainerConfig) (string, error) {
+func CreateContainer(ctx context.Context, client Client, conf *ContainerConfig) (string, error) {
 	host := &container.HostConfig{
 		Runtime:    runtime,
 		AutoRemove: true,
@@ -99,7 +99,7 @@ type BootstrapConfig struct {
 
 // BoostrapContainer runs a script inside the container as the provided user.
 // If conf.Script is empty then it is a noop.
-func BootstrapContainer(ctx context.Context, client DockerClient, conf BootstrapConfig) error {
+func BootstrapContainer(ctx context.Context, client Client, conf BootstrapConfig) error {
 	if conf.Script == "" {
 		return nil
 	}

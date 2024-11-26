@@ -243,7 +243,7 @@ func dockerCmd() *cobra.Command {
 				return xerrors.Errorf("wait for sysbox-mgr: %w", err)
 			}
 
-			client, err := dockerutil.Client(ctx)
+			client, err := dockerutil.ExtractClient(ctx)
 			if err != nil {
 				return xerrors.Errorf("new docker client: %w", err)
 			}
@@ -387,7 +387,7 @@ func dockerCmd() *cobra.Command {
 	return cmd
 }
 
-func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.DockerClient, blog buildlog.Logger, flags flags) error {
+func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client, blog buildlog.Logger, flags flags) error {
 	fs := xunix.GetFS(ctx)
 
 	// Set our OOM score to something really unfavorable to avoid getting killed

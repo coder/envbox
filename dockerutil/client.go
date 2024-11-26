@@ -13,7 +13,7 @@ import (
 	"golang.org/x/xerrors"
 )
 
-type DockerClient interface {
+type Client interface {
 	dockerclient.SystemAPIClient
 	dockerclient.ContainerAPIClient
 	dockerclient.ImageAPIClient
@@ -23,13 +23,13 @@ type clientKey struct{}
 
 // WithClient sets the provided DockerClient on the context.
 // It should only be used for tests.
-func WithClient(ctx context.Context, client DockerClient) context.Context {
+func WithClient(ctx context.Context, client Client) context.Context {
 	return context.WithValue(ctx, clientKey{}, client)
 }
 
-// Client returns the DockerClient set on the context. If one can't be
+// ExtractClient returns the DockerClient set on the context. If one can't be
 // found a default client is returned.
-func Client(ctx context.Context) (DockerClient, error) {
+func ExtractClient(ctx context.Context) (Client, error) {
 	client := ctx.Value(clientKey{})
 	if client == nil {
 		client, err := dockerclient.NewClientWithOpts(dockerclient.FromEnv)
@@ -41,7 +41,7 @@ func Client(ctx context.Context) (DockerClient, error) {
 	}
 
 	//nolint we should panic if this isn't the case.
-	return client.(DockerClient), nil
+	return client.(Client), nil
 }
 
 type AuthConfig registry.AuthConfig
