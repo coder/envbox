@@ -110,6 +110,8 @@ jobs:
   tag:
     runs-on: ubuntu-22.04
     needs: manifest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
