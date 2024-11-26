@@ -15,6 +15,7 @@ import (
 
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/spf13/afero"
@@ -486,7 +487,7 @@ func TestDocker(t *testing.T) {
 		authB64 := base64.URLEncoding.EncodeToString(raw)
 
 		client := clitest.DockerClient(t, ctx)
-		client.ImagePullFn = func(_ context.Context, _ string, options dockertypes.ImagePullOptions) (io.ReadCloser, error) {
+		client.ImagePullFn = func(_ context.Context, _ string, options image.PullOptions) (io.ReadCloser, error) {
 			// Assert that we call the image pull function with the credentials.
 			require.Equal(t, authB64, options.RegistryAuth)
 			return io.NopCloser(bytes.NewReader(nil)), nil

@@ -12,6 +12,7 @@ import (
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	"golang.org/x/xerrors"
 
 	"github.com/coder/envbox/buildlog"
@@ -51,7 +52,7 @@ func PullImage(ctx context.Context, config *PullImageConfig) error {
 
 	pullImageFn := func() error {
 		var rd io.ReadCloser
-		rd, err = config.Client.ImagePull(ctx, config.Image, dockertypes.ImagePullOptions{
+		rd, err = config.Client.ImagePull(ctx, config.Image, image.PullOptions{
 			RegistryAuth: authStr,
 		})
 		if err != nil {
@@ -176,12 +177,12 @@ func GetImageMetadata(ctx context.Context, client DockerClient, image, username 
 
 	defer func() {
 		// We wanna remove this, but it's not a huge deal if it fails.
-		_ = client.ContainerRemove(ctx, created.ID, dockertypes.ContainerRemoveOptions{
+		_ = client.ContainerRemove(ctx, created.ID, container.RemoveOptions{
 			Force: true,
 		})
 	}()
 
-	err = client.ContainerStart(ctx, created.ID, dockertypes.ContainerStartOptions{})
+	err = client.ContainerStart(ctx, created.ID, container.StartOptions{})
 	if err != nil {
 		return ImageMetadata{}, xerrors.Errorf("start container: %w", err)
 	}
