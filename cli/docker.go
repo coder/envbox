@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 
-	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/spf13/cobra"
@@ -664,7 +663,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Docker
 	// TODO fix iptables when istio detected.
 
 	blog.Info("Starting up workspace...")
-	err = client.ContainerStart(ctx, containerID, dockertypes.ContainerStartOptions{})
+	err = client.ContainerStart(ctx, containerID, container.StartOptions{})
 	if err != nil {
 		return xerrors.Errorf("start container: %w", err)
 	}

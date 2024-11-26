@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/cpuguy83/dockercfg"
-	dockertypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/registry"
 	dockerclient "github.com/docker/docker/client"
 
 	"golang.org/x/xerrors"
@@ -38,7 +38,7 @@ func Client(ctx context.Context) (DockerClient, error) {
 	return client.(DockerClient), nil
 }
 
-type AuthConfig dockertypes.AuthConfig
+type AuthConfig registry.AuthConfig
 
 func (a AuthConfig) Base64() (string, error) {
 	authStr, err := json.Marshal(a)
