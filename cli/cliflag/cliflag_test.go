@@ -135,6 +135,7 @@ func TestCliflag(t *testing.T) {
 		cliflag.Uint8VarP(flagset, &ptr, name, shorthand, env, uint8(def), usage)
 		got, err := flagset.GetUint8(name)
 		require.NoError(t, err)
+		//nolint:gosec
 		require.Equal(t, uint8(envValue), got)
 	})
 
