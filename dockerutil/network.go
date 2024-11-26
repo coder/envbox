@@ -36,6 +36,7 @@ func mustNextIPv4(ip net.IP, inc int) net.IP {
 	v += uint32(ip4[1]) << 16
 	v += uint32(ip4[2]) << 8
 	v += uint32(ip4[3])
+	//nolint:gosec
 	v += uint32(inc)
 	v3 := byte(v & 0xFF)
 	v2 := byte((v >> 8) & 0xFF)

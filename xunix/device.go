@@ -109,6 +109,7 @@ func createDevice(ctx context.Context, conf deviceConfig) error {
 		return xerrors.Errorf("ensure parent dir: %w", err)
 	}
 
+	//nolint:gosec
 	err = fs.Mknod(conf.path, conf.ftype|conf.mode, int(conf.dev))
 	if err != nil {
 		return xerrors.Errorf("mknod %s c %d %d: %w", conf.path, conf.major, conf.minor, err)
