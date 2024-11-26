@@ -191,6 +191,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.29.0
+        if: github.ref == 'refs/heads/main'
         with:
           image-ref: envbox:latest
           format: sarif
@@ -199,12 +200,14 @@ jobs:
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v2
+        if: github.ref == 'refs/heads/main'
         with:
           sarif_file: trivy-results.sarif
           category: "Trivy"
 
       - name: Upload Trivy scan results as an artifact
         uses: actions/upload-artifact@v3
+        if: github.ref == 'refs/heads/main'
         with:
           name: trivy
           path: trivy-results.sarif
