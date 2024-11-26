@@ -30,7 +30,7 @@ func NewFakeExecer() *xunixfake.FakeExec {
 	}
 }
 
-func NewFakeDockerClient() dockerutil.DockerClient {
+func NewFakeDockerClient() dockerutil.Client {
 	client := &dockerfake.MockClient{}
 
 	client.ContainerInspectFn = func(_ context.Context, _ string) (dockertypes.ContainerJSON, error) {

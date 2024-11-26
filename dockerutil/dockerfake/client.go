@@ -12,25 +12,26 @@ import (
 	"github.com/docker/docker/api/types/image"
 	networktypes "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/registry"
+	"github.com/docker/docker/api/types/system"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/coder/envbox/dockerutil"
 )
 
-var _ dockerutil.DockerClient = MockClient{}
+var _ dockerutil.Client = MockClient{}
 
 // MockClient provides overrides for functions that are called in envbox.
 type MockClient struct {
-	ImagePullFn            func(_ context.Context, ref string, options dockertypes.ImagePullOptions) (io.ReadCloser, error)
+	ImagePullFn            func(_ context.Context, ref string, options image.PullOptions) (io.ReadCloser, error)
 	ContainerCreateFn      func(_ context.Context, config *containertypes.Config, hostConfig *containertypes.HostConfig, networkingConfig *networktypes.NetworkingConfig, _ *specs.Platform, containerName string) (containertypes.CreateResponse, error)
 	ImagePruneFn           func(_ context.Context, pruneFilter filters.Args) (dockertypes.ImagesPruneReport, error)
-	ContainerStartFn       func(_ context.Context, container string, options dockertypes.ContainerStartOptions) error
+	ContainerStartFn       func(_ context.Context, container string, options containertypes.StartOptions) error
 	ContainerExecAttachFn  func(_ context.Context, execID string, config dockertypes.ExecStartCheck) (dockertypes.HijackedResponse, error)
 	ContainerExecCreateFn  func(_ context.Context, container string, config dockertypes.ExecConfig) (dockertypes.IDResponse, error)
 	ContainerExecStartFn   func(_ context.Context, execID string, config dockertypes.ExecStartCheck) error
 	ContainerExecInspectFn func(_ context.Context, execID string) (dockertypes.ContainerExecInspect, error)
 	ContainerInspectFn     func(_ context.Context, container string) (dockertypes.ContainerJSON, error)
-	ContainerRemoveFn      func(_ context.Context, container string, options dockertypes.ContainerRemoveOptions) error
+	ContainerRemoveFn      func(_ context.Context, container string, options containertypes.RemoveOptions) error
 	PingFn                 func(_ context.Context) (dockertypes.Ping, error)
 }
 
@@ -46,7 +47,7 @@ func (MockClient) BuildCancel(_ context.Context, _ string) error {
 	panic("not implemented")
 }
 
-func (MockClient) ImageCreate(_ context.Context, _ string, _ dockertypes.ImageCreateOptions) (io.ReadCloser, error) {
+func (MockClient) ImageCreate(_ context.Context, _ string, _ image.CreateOptions) (io.ReadCloser, error) {
 	panic("not implemented")
 }
 
@@ -54,7 +55,7 @@ func (MockClient) ImageHistory(_ context.Context, _ string) ([]image.HistoryResp
 	panic("not implemented")
 }
 
-func (MockClient) ImageImport(_ context.Context, _ dockertypes.ImageImportSource, _ string, _ dockertypes.ImageImportOptions) (io.ReadCloser, error) {
+func (MockClient) ImageImport(_ context.Context, _ image.ImportSource, _ string, _ image.ImportOptions) (io.ReadCloser, error) {
 	panic("not implemented")
 }
 
@@ -62,7 +63,7 @@ func (MockClient) ImageInspectWithRaw(_ context.Context, _ string) (dockertypes.
 	panic("not implemented")
 }
 
-func (MockClient) ImageList(_ context.Context, _ dockertypes.ImageListOptions) ([]dockertypes.ImageSummary, error) {
+func (MockClient) ImageList(_ context.Context, _ image.ListOptions) ([]image.Summary, error) {
 	panic("not implemented")
 }
 
@@ -70,18 +71,18 @@ func (MockClient) ImageLoad(_ context.Context, _ io.Reader, _ bool) (dockertypes
 	panic("not implemented")
 }
 
-func (m MockClient) ImagePull(ctx context.Context, ref string, options dockertypes.ImagePullOptions) (io.ReadCloser, error) {
+func (m MockClient) ImagePull(ctx context.Context, ref string, options image.PullOptions) (io.ReadCloser, error) {
 	if m.ImagePullFn == nil {
 		return io.NopCloser(strings.NewReader("")), nil
 	}
 	return m.ImagePullFn(ctx, ref, options)
 }
 
-func (MockClient) ImagePush(_ context.Context, _ string, _ dockertypes.ImagePushOptions) (io.ReadCloser, error) {
+func (MockClient) ImagePush(_ context.Context, _ string, _ image.PushOptions) (io.ReadCloser, error) {
 	panic("not implemented")
 }
 
-func (MockClient) ImageRemove(_ context.Context, _ string, _ dockertypes.ImageRemoveOptions) ([]dockertypes.ImageDeleteResponseItem, error) {
+func (MockClient) ImageRemove(_ context.Context, _ string, _ image.RemoveOptions) ([]image.DeleteResponse, error) {
 	panic("not implemented")
 }
 
@@ -108,11 +109,11 @@ func (MockClient) Events(_ context.Context, _ dockertypes.EventsOptions) (<-chan
 	panic("not implemented")
 }
 
-func (MockClient) Info(_ context.Context) (dockertypes.Info, error) {
+func (MockClient) Info(_ context.Context) (system.Info, error) {
 	panic("not implemented")
 }
 
-func (MockClient) RegistryLogin(_ context.Context, _ dockertypes.AuthConfig) (registry.AuthenticateOKBody, error) {
+func (MockClient) RegistryLogin(_ context.Context, _ registry.AuthConfig) (registry.AuthenticateOKBody, error) {
 	panic("not implemented")
 }
 
@@ -127,11 +128,11 @@ func (m MockClient) Ping(ctx context.Context) (dockertypes.Ping, error) {
 	return m.PingFn(ctx)
 }
 
-func (MockClient) ContainerAttach(_ context.Context, _ string, _ dockertypes.ContainerAttachOptions) (dockertypes.HijackedResponse, error) {
+func (MockClient) ContainerAttach(_ context.Context, _ string, _ containertypes.AttachOptions) (dockertypes.HijackedResponse, error) {
 	panic("not implemented")
 }
 
-func (MockClient) ContainerCommit(_ context.Context, _ string, _ dockertypes.ContainerCommitOptions) (dockertypes.IDResponse, error) {
+func (MockClient) ContainerCommit(_ context.Context, _ string, _ containertypes.CommitOptions) (dockertypes.IDResponse, error) {
 	panic("not implemented")
 }
 
@@ -142,7 +143,7 @@ func (m MockClient) ContainerCreate(ctx context.Context, config *containertypes.
 	return m.ContainerCreateFn(ctx, config, hostConfig, networkingConfig, pspecs, containerName)
 }
 
-func (MockClient) ContainerDiff(_ context.Context, _ string) ([]containertypes.ContainerChangeResponseItem, error) {
+func (MockClient) ContainerDiff(_ context.Context, _ string) ([]containertypes.FilesystemChange, error) {
 	panic("not implemented")
 }
 
@@ -168,7 +169,7 @@ func (m MockClient) ContainerExecInspect(ctx context.Context, id string) (docker
 	return m.ContainerExecInspectFn(ctx, id)
 }
 
-func (MockClient) ContainerExecResize(_ context.Context, _ string, _ dockertypes.ResizeOptions) error {
+func (MockClient) ContainerExecResize(_ context.Context, _ string, _ containertypes.ResizeOptions) error {
 	panic("not implemented")
 }
 
@@ -198,11 +199,11 @@ func (MockClient) ContainerKill(_ context.Context, _ string, _ string) error {
 	panic("not implemented")
 }
 
-func (MockClient) ContainerList(_ context.Context, _ dockertypes.ContainerListOptions) ([]dockertypes.Container, error) {
+func (MockClient) ContainerList(_ context.Context, _ containertypes.ListOptions) ([]dockertypes.Container, error) {
 	panic("not implemented")
 }
 
-func (MockClient) ContainerLogs(_ context.Context, _ string, _ dockertypes.ContainerLogsOptions) (io.ReadCloser, error) {
+func (MockClient) ContainerLogs(_ context.Context, _ string, _ containertypes.LogsOptions) (io.ReadCloser, error) {
 	panic("not implemented")
 }
 
@@ -210,7 +211,7 @@ func (MockClient) ContainerPause(_ context.Context, _ string) error {
 	panic("not implemented")
 }
 
-func (m MockClient) ContainerRemove(ctx context.Context, name string, options dockertypes.ContainerRemoveOptions) error {
+func (m MockClient) ContainerRemove(ctx context.Context, name string, options containertypes.RemoveOptions) error {
 	if m.ContainerRemoveFn == nil {
 		return nil
 	}
@@ -221,7 +222,7 @@ func (MockClient) ContainerRename(_ context.Context, _ string, _ string) error {
 	panic("not implemented")
 }
 
-func (MockClient) ContainerResize(_ context.Context, _ string, _ dockertypes.ResizeOptions) error {
+func (MockClient) ContainerResize(_ context.Context, _ string, _ containertypes.ResizeOptions) error {
 	panic("not implemented")
 }
 
@@ -237,7 +238,7 @@ func (MockClient) ContainerStats(_ context.Context, _ string, _ bool) (dockertyp
 	panic("not implemented")
 }
 
-func (m MockClient) ContainerStart(ctx context.Context, name string, options dockertypes.ContainerStartOptions) error {
+func (m MockClient) ContainerStart(ctx context.Context, name string, options containertypes.StartOptions) error {
 	if m.ContainerStartFn == nil {
 		return nil
 	}

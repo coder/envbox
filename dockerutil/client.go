@@ -7,23 +7,29 @@ import (
 	"os"
 
 	"github.com/cpuguy83/dockercfg"
-	dockertypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/registry"
 	dockerclient "github.com/docker/docker/client"
 
 	"golang.org/x/xerrors"
 )
 
+type Client interface {
+	dockerclient.SystemAPIClient
+	dockerclient.ContainerAPIClient
+	dockerclient.ImageAPIClient
+}
+
 type clientKey struct{}
 
 // WithClient sets the provided DockerClient on the context.
 // It should only be used for tests.
-func WithClient(ctx context.Context, client DockerClient) context.Context {
+func WithClient(ctx context.Context, client Client) context.Context {
 	return context.WithValue(ctx, clientKey{}, client)
 }
 
-// Client returns the DockerClient set on the context. If one can't be
+// ExtractClient returns the DockerClient set on the context. If one can't be
 // found a default client is returned.
-func Client(ctx context.Context) (DockerClient, error) {
+func ExtractClient(ctx context.Context) (Client, error) {
 	client := ctx.Value(clientKey{})
 	if client == nil {
 		client, err := dockerclient.NewClientWithOpts(dockerclient.FromEnv)
@@ -35,10 +41,10 @@ func Client(ctx context.Context) (DockerClient, error) {
 	}
 
 	//nolint we should panic if this isn't the case.
-	return client.(DockerClient), nil
+	return client.(Client), nil
 }
 
-type AuthConfig dockertypes.AuthConfig
+type AuthConfig registry.AuthConfig
 
 func (a AuthConfig) Base64() (string, error) {
 	authStr, err := json.Marshal(a)
@@ -67,8 +73,8 @@ func AuthConfigFromString(raw string, reg string) (AuthConfig, error) {
 	return parseConfig(cfg, reg)
 }
 
-func parseConfig(cfg dockercfg.Config, registry string) (AuthConfig, error) {
-	hostname := dockercfg.ResolveRegistryHost(registry)
+func parseConfig(cfg dockercfg.Config, reg string) (AuthConfig, error) {
+	hostname := dockercfg.ResolveRegistryHost(reg)
 
 	username, secret, err := cfg.GetRegistryCredentials(hostname)
 	if err != nil {
@@ -87,5 +93,5 @@ func parseConfig(cfg dockercfg.Config, registry string) (AuthConfig, error) {
 		}, nil
 	}
 
-	return AuthConfig{}, xerrors.Errorf("no auth config found for registry %s: %w", registry, os.ErrNotExist)
+	return AuthConfig{}, xerrors.Errorf("no auth config found for registry %s: %w", reg, os.ErrNotExist)
 }
