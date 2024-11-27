@@ -425,6 +425,9 @@ func TestDocker(t *testing.T) {
 			HostKeyPath:  regKeyPath,
 			Image:        integrationtest.UbuntuImage,
 			TLSPort:      strconv.Itoa(registryAddr.Port),
+			PasswordDir:  dir,
+			Username:     "user",
+			Password:     "password",
 		})
 
 		envs := []string{
