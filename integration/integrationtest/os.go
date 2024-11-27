@@ -17,6 +17,12 @@ func TmpDir(t *testing.T) string {
 	tmpdir, err := os.MkdirTemp("", strings.ReplaceAll(t.Name(), "/", "_"))
 	require.NoError(t, err)
 	t.Logf("using tmpdir %s", tmpdir)
+	t.Cleanup(func() {
+		if !t.Failed() {
+			// Could be useful in case of test failure.
+			_ = os.RemoveAll(tmpdir)
+		}
+	})
 	return tmpdir
 }
 
