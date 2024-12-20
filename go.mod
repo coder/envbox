@@ -16,6 +16,7 @@ require (
 	github.com/docker/docker v27.3.1+incompatible
 	github.com/google/go-containerregistry v0.14.0
 	github.com/google/uuid v1.6.0
+	github.com/moby/moby v27.1.1+incompatible
 	github.com/opencontainers/image-spec v1.1.0
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/quasilyte/go-ruleguard/dsl v0.3.22

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -148,8 +149,8 @@ func processImagePullEvents(r io.Reader, fn ImagePullProgressFn) error {
 }
 
 type ImageMetadata struct {
-	UID     string
-	GID     string
+	UID     int
+	GID     int
 	HomeDir string
 	HasInit bool
 }
@@ -226,9 +227,19 @@ func GetImageMetadata(ctx context.Context, client Client, img, username string) 
 		return ImageMetadata{}, xerrors.Errorf("no users returned for username %s", username)
 	}
 
+	uid, err := strconv.ParseInt(users[0].Uid, 10, 32)
+	if err != nil {
+		return ImageMetadata{}, xerrors.Errorf("parse uid: %w", err)
+	}
+
+	gid, err := strconv.ParseInt(users[0].Gid, 10, 32)
+	if err != nil {
+		return ImageMetadata{}, xerrors.Errorf("parse gid: %w", err)
+	}
+
 	return ImageMetadata{
-		UID:     users[0].Uid,
-		GID:     users[0].Gid,
+		UID:     int(uid),
+		GID:     int(gid),
 		HomeDir: users[0].HomeDir,
 		HasInit: initExists,
 	}, nil

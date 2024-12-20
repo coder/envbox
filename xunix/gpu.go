@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -36,7 +37,7 @@ func GPUEnvs(ctx context.Context) []string {
 	return gpus
 }
 
-func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []mount.MountPoint, error) {
+func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []Mount, error) {
 	var (
 		mounter = Mounter(ctx)
 		devices = []Device{}
@@ -84,7 +85,7 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []m
 		}
 	}
 
-	return devices, binds, nil
+	return devices, toMounts(binds), nil
 }
 
 func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]mount.MountPoint, error) {
@@ -209,4 +210,19 @@ func TryUnmountProcGPUDrivers(ctx context.Context, log slog.Logger) ([]mount.Mou
 	}
 
 	return drivers, nil
+}
+
+func toMounts(mounts []mount.MountPoint) []Mount {
+	m := make([]Mount, 0, len(mounts))
+	for _, mount := range mounts {
+		m = append(m, toMount(mount))
+	}
+	return m
+}
+
+func toMount(m mount.MountPoint) Mount {
+	return Mount{
+		Source:   m.Path,
+		ReadOnly: slices.Contains(m.Opts, "ro"),
+	}
 }

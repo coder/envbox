@@ -16,7 +16,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/spf13/cobra"
-	"golang.org/x/exp/slices"
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog"
@@ -314,6 +313,13 @@ func dockerCmd() *cobra.Command {
 				)
 			}
 
+			// Set our OOM score to something really unfavorable to avoid getting killed
+			// in memory-scarce scenarios.
+			err = xunix.SetOOMScore(ctx, "self", "-1000")
+			if err != nil {
+				return xerrors.Errorf("set oom score: %w", err)
+			}
+
 			err = runDockerCVM(ctx, log, client, blog, flags)
 			if err != nil {
 				// It's possible we failed because we ran out of disk while
@@ -390,12 +396,6 @@ func dockerCmd() *cobra.Command {
 func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client, blog buildlog.Logger, flags flags) error {
 	fs := xunix.GetFS(ctx)
 
-	// Set our OOM score to something really unfavorable to avoid getting killed
-	// in memory-scarce scenarios.
-	err := xunix.SetOOMScore(ctx, "self", "-1000")
-	if err != nil {
-		return xerrors.Errorf("set oom score: %w", err)
-	}
 	ref, err := name.NewTag(flags.innerImage)
 	if err != nil {
 		return xerrors.Errorf("parse ref: %w", err)
@@ -536,15 +536,6 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		slog.F("has_init", imgMeta.HasInit),
 	)
 
-	uid, err := strconv.ParseInt(imgMeta.UID, 10, 32)
-	if err != nil {
-		return xerrors.Errorf("parse image uid: %w", err)
-	}
-	gid, err := strconv.ParseInt(imgMeta.GID, 10, 32)
-	if err != nil {
-		return xerrors.Errorf("parse image gid: %w", err)
-	}
-
 	for _, m := range mounts {
 		// Don't modify anything private to envbox.
 		if isPrivateMount(m) {
@@ -581,8 +572,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 			// We want to ensure that the inner directory is ID shifted to
 			// the namespaced UID of the user in the inner container otherwise
 			// they won't be able to write files.
-			shiftedUID = shiftedID(int(uid))
-			shiftedGID = shiftedID(int(gid))
+			shiftedUID = shiftedID(imgMeta.UID)
+			shiftedGID = shiftedID(imgMeta.GID)
 		}
 
 		log.Debug(ctx, "chowning mount",
@@ -617,18 +608,14 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		for _, bind := range binds {
 			// If the bind has a path that points to the host-mounted /usr/lib
 			// directory we need to remap it to /usr/lib inside the container.
-			mountpoint := bind.Path
-			if strings.HasPrefix(mountpoint, flags.hostUsrLibDir) {
-				mountpoint = filepath.Join(
+			bind.Mountpoint = bind.Source
+			if strings.HasPrefix(bind.Mountpoint, flags.hostUsrLibDir) {
+				bind.Mountpoint = filepath.Join(
 					"/usr/lib",
-					strings.TrimPrefix(mountpoint, strings.TrimSuffix(flags.hostUsrLibDir, "/")),
+					strings.TrimPrefix(bind.Mountpoint, strings.TrimSuffix(flags.hostUsrLibDir, "/")),
 				)
 			}
-			mounts = append(mounts, xunix.Mount{
-				Source:     bind.Path,
-				Mountpoint: mountpoint,
-				ReadOnly:   slices.Contains(bind.Opts, "ro"),
-			})
+			mounts = append(mounts, bind)
 		}
 		envs = append(envs, xunix.GPUEnvs(ctx)...)
 	}
@@ -680,7 +667,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	blog.Infof("Creating %q directory to host Coder assets...", bootDir)
 	_, err = dockerutil.ExecContainer(ctx, client, dockerutil.ExecConfig{
 		ContainerID: containerID,
-		User:        imgMeta.UID,
+		User:        strconv.Itoa(imgMeta.UID),
 		Cmd:         "mkdir",
 		Args:        []string{"-p", bootDir},
 	})
@@ -721,7 +708,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	blog.Infof("Bootstrapping workspace...")
 	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
 		ContainerID: containerID,
-		User:        imgMeta.UID,
+		User:        strconv.Itoa(imgMeta.UID),
 		Script:      flags.boostrapScript,
 		// We set this because the default behavior is to download the agent
 		// to /tmp/coder.XXXX. This causes a race to happen where we finish
