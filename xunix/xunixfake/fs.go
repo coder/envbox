@@ -7,7 +7,20 @@ import (
 
 	"github.com/spf13/afero"
 	"golang.org/x/xerrors"
+	mount "k8s.io/mount-utils"
 )
+
+type FakeOS struct {
+	*MemFS
+	*mount.FakeMounter
+}
+
+func NewFakeOS() *FakeOS {
+	return &FakeOS{
+		MemFS:       NewMemFS(),
+		FakeMounter: &mount.FakeMounter{},
+	}
+}
 
 type FileOwner struct {
 	UID int

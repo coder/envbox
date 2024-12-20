@@ -23,11 +23,9 @@ var (
 	gpuEnvRegex   = regexp.MustCompile("(?i)nvidia")
 )
 
-func GPUEnvs(ctx context.Context) []string {
-	envs := Environ(ctx)
-
+func GPUEnvs(ctx context.Context, environ []string) []string {
 	gpus := []string{}
-	for _, env := range envs {
+	for _, env := range environ {
 		name := strings.Split(env, "=")[0]
 		if gpuEnvRegex.MatchString(name) {
 			gpus = append(gpus, env)
@@ -37,14 +35,13 @@ func GPUEnvs(ctx context.Context) []string {
 	return gpus
 }
 
-func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []Mount, error) {
+func GPUs(ctx context.Context, log slog.Logger, xos OS, usrLibDir string) ([]Device, []Mount, error) {
 	var (
-		mounter = Mounter(ctx)
 		devices = []Device{}
 		binds   = []mount.MountPoint{}
 	)
 
-	mounts, err := mounter.List()
+	mounts, err := xos.List()
 	if err != nil {
 		return nil, nil, xerrors.Errorf("list mounts: %w", err)
 	}
@@ -67,7 +64,7 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []M
 		}
 	}
 
-	extraGPUS, err := usrLibGPUs(ctx, log, usrLibDir)
+	extraGPUS, err := usrLibGPUs(ctx, log, xos, usrLibDir)
 	if err != nil {
 		return nil, nil, xerrors.Errorf("find %q gpus: %w", usrLibDir, err)
 	}
@@ -88,13 +85,12 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []M
 	return devices, toMounts(binds), nil
 }
 
-func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]mount.MountPoint, error) {
+func usrLibGPUs(ctx context.Context, log slog.Logger, xfs FS, usrLibDir string) ([]mount.MountPoint, error) {
 	var (
-		afs   = GetFS(ctx)
 		binds = []string{}
 	)
 
-	err := afero.Walk(afs, usrLibDir,
+	err := afero.Walk(xfs, usrLibDir,
 		func(path string, _ fs.FileInfo, err error) error {
 			if path == usrLibDir && err != nil {
 				return xerrors.Errorf("stat /usr/lib mountpoint %q: %w", usrLibDir, err)
@@ -108,7 +104,7 @@ func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]mount
 				return nil
 			}
 
-			paths, err := recursiveSymlinks(afs, usrLibDir, path)
+			paths, err := recursiveSymlinks(xfs, usrLibDir, path)
 			if err != nil {
 				log.Error(ctx, "find recursive symlinks", slog.F("path", path), slog.Error(err))
 			}
@@ -179,10 +175,8 @@ func recursiveSymlinks(afs FS, mountpoint string, path string) ([]string, error)
 // TryUnmountProcGPUDrivers unmounts any GPU-related mounts under /proc as it causes
 // issues when creating any container in some cases. Errors encountered while
 // unmounting are treated as non-fatal.
-func TryUnmountProcGPUDrivers(ctx context.Context, log slog.Logger) ([]mount.MountPoint, error) {
-	mounter := Mounter(ctx)
-
-	mounts, err := mounter.List()
+func TryUnmountProcGPUDrivers(ctx context.Context, mnt mount.Interface, log slog.Logger) ([]mount.MountPoint, error) {
+	mounts, err := mnt.List()
 	if err != nil {
 		return nil, xerrors.Errorf("list mounts: %w", err)
 	}
@@ -196,7 +190,7 @@ func TryUnmountProcGPUDrivers(ctx context.Context, log slog.Logger) ([]mount.Mou
 	drivers := []mount.MountPoint{}
 	for _, m := range mounts {
 		if strings.HasPrefix(m.Path, "/proc/") && gpuMountRegex.MatchString(m.Path) {
-			err := mounter.Unmount(m.Path)
+			err := mnt.Unmount(m.Path)
 			if err != nil {
 				log.Warn(ctx,
 					"umount potentially problematic mount",

@@ -9,9 +9,22 @@ import (
 
 	"github.com/spf13/afero"
 	"golang.org/x/xerrors"
+	mount "k8s.io/mount-utils"
 
 	"cdr.dev/slog"
 )
+
+type OS interface {
+	FS
+	mount.Interface
+}
+
+var _ OS = &LinuxOS{}
+
+type LinuxOS struct {
+	FS
+	mount.Interface
+}
 
 type CPUQuota struct {
 	Quota  int

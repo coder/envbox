@@ -411,6 +411,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 
 	log.Info(ctx, "checking for docker config file", slog.F("path", flags.dockerConfig))
 	if _, err := fs.Stat(flags.dockerConfig); err == nil {
+		fmt.Println("WTF")
 		log.Info(ctx, "detected file", slog.F("image", flags.innerImage))
 		dockerAuth, err = dockerutil.AuthConfigFromPath(flags.dockerConfig, ref.RegistryStr())
 		if err != nil && !xerrors.Is(err, os.ErrNotExist) {
@@ -437,7 +438,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	if flags.addTUN {
 		log.Debug(ctx, "creating TUN device", slog.F("path", OuterTUNPath))
 		blog.Info("Creating TUN device")
-		dev, err := xunix.CreateTUNDevice(ctx, OuterTUNPath)
+		dev, err := xunix.CreateTUNDevice(fs, OuterTUNPath)
 		if err != nil {
 			return xerrors.Errorf("creat tun device: %w", err)
 		}
@@ -452,7 +453,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	if flags.addFUSE {
 		log.Debug(ctx, "creating FUSE device", slog.F("path", OuterFUSEPath))
 		blog.Info("Creating FUSE device")
-		dev, err := xunix.CreateFuseDevice(ctx, OuterFUSEPath)
+		dev, err := xunix.CreateFuseDevice(fs, OuterFUSEPath)
 		if err != nil {
 			return xerrors.Errorf("create fuse device: %w", err)
 		}
@@ -507,7 +508,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 
 		// Unmount GPU drivers in /proc as it causes issues when creating any
 		// container in some cases (even the image metadata container).
-		_, err = xunix.TryUnmountProcGPUDrivers(ctx, log)
+		mounter := xunix.Mounter(ctx)
+		_, err = xunix.TryUnmountProcGPUDrivers(ctx, mounter, log)
 		if err != nil {
 			return xerrors.Errorf("unmount /proc GPU drivers: %w", err)
 		}
@@ -536,6 +538,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		slog.F("has_init", imgMeta.HasInit),
 	)
 
+	mounter := xunix.Mounter(ctx)
 	for _, m := range mounts {
 		// Don't modify anything private to envbox.
 		if isPrivateMount(m) {
@@ -551,7 +554,6 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		// can id shift it correctly. We'll still mount it read-only into
 		// the inner container.
 		if m.ReadOnly {
-			mounter := xunix.Mounter(ctx)
 			err := mounter.Mount("", m.Source, "", []string{"remount,rw"})
 			if err != nil {
 				return xerrors.Errorf("remount: %w", err)
@@ -592,7 +594,11 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	}
 
 	if flags.addGPU {
-		devs, binds, err := xunix.GPUs(ctx, log, flags.hostUsrLibDir)
+		linuxOS := xunix.LinuxOS{
+			FS:        fs,
+			Interface: mounter,
+		}
+		devs, binds, err := xunix.GPUs(ctx, log, linuxOS, flags.hostUsrLibDir)
 		if err != nil {
 			return xerrors.Errorf("find gpus: %w", err)
 		}
@@ -617,7 +623,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 			}
 			mounts = append(mounts, bind)
 		}
-		envs = append(envs, xunix.GPUEnvs(ctx)...)
+		envs = append(envs, xunix.GPUEnvs(ctx, xunix.Environ(ctx))...)
 	}
 
 	blog.Info("Creating workspace...")

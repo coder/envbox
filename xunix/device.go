@@ -1,7 +1,6 @@
 package xunix
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 
@@ -31,7 +30,7 @@ type Device struct {
 	GID      int32
 }
 
-func CreateTUNDevice(ctx context.Context, path string) (Device, error) {
+func CreateTUNDevice(xfs FS, path string) (Device, error) {
 	const (
 		major uint = 10
 		// See https://github.com/torvalds/linux/blob/master/Documentation/admin-guide/devices.txt#L336
@@ -39,7 +38,7 @@ func CreateTUNDevice(ctx context.Context, path string) (Device, error) {
 	)
 
 	// TODO offset (from legacy.go)
-	err := createDevice(ctx, deviceConfig{
+	err := createDevice(xfs, deviceConfig{
 		path:  path,
 		mode:  charDevMode,
 		dev:   dev(major, minor),
@@ -60,7 +59,7 @@ func CreateTUNDevice(ctx context.Context, path string) (Device, error) {
 	}, nil
 }
 
-func CreateFuseDevice(ctx context.Context, path string) (Device, error) {
+func CreateFuseDevice(xfs FS, path string) (Device, error) {
 	const (
 		major uint = 10
 
@@ -68,7 +67,7 @@ func CreateFuseDevice(ctx context.Context, path string) (Device, error) {
 		minor uint = 229
 	)
 
-	err := createDevice(ctx, deviceConfig{
+	err := createDevice(xfs, deviceConfig{
 		path:  path,
 		mode:  charDevMode,
 		dev:   dev(major, minor),
@@ -98,24 +97,23 @@ type deviceConfig struct {
 	ftype uint32
 }
 
-func createDevice(ctx context.Context, conf deviceConfig) error {
+func createDevice(xfs FS, conf deviceConfig) error {
 	var (
-		fs  = GetFS(ctx)
 		dir = filepath.Dir(conf.path)
 	)
 
-	err := fs.MkdirAll(dir, 0o700)
+	err := xfs.MkdirAll(dir, 0o700)
 	if err != nil {
 		return xerrors.Errorf("ensure parent dir: %w", err)
 	}
 
 	//nolint:gosec
-	err = fs.Mknod(conf.path, conf.ftype|conf.mode, int(conf.dev))
+	err = xfs.Mknod(conf.path, conf.ftype|conf.mode, int(conf.dev))
 	if err != nil {
 		return xerrors.Errorf("mknod %s c %d %d: %w", conf.path, conf.major, conf.minor, err)
 	}
 
-	err = fs.Chmod(conf.path, os.FileMode(conf.mode))
+	err = xfs.Chmod(conf.path, os.FileMode(conf.mode))
 	if err != nil {
 		return xerrors.Errorf("chown %v %q: %w", conf.mode, conf.path, err)
 	}

@@ -45,6 +45,7 @@ type Config struct {
 	OSEnvs     []string
 
 	// Optional fields.
+	BuildLog             buildlog.Logger
 	InnerEnvs            []string
 	WorkDir              string
 	Hostname             string
@@ -53,7 +54,6 @@ type Config struct {
 	AddTUN               bool
 	AddFUSE              bool
 	AddGPU               bool
-	DockerDBridgeCIDR    string
 	BoostrapScript       string
 	Mounts               []xunix.Mount
 	HostUsrLibDir        string
@@ -71,7 +71,7 @@ type Config struct {
 	GPUConfig
 }
 
-func Run(ctx context.Context, log slog.Logger, blog buildlog.Logger, client dockerutil.Client, fs xunix.FS, cfg Config) error {
+func Run(ctx context.Context, log slog.Logger, xos xunix.OS, client dockerutil.Client, cfg Config) error {
 
 	log = log.With(
 		slog.F("image", cfg.Tag.String()),
@@ -82,7 +82,6 @@ func Run(ctx context.Context, log slog.Logger, blog buildlog.Logger, client dock
 		slog.F("add_tun", cfg.AddTUN),
 		slog.F("add_fuse", cfg.AddFUSE),
 		slog.F("add_gpu", cfg.AddGPU),
-		slog.F("docker_dbridge_cidr", cfg.DockerDBridgeCIDR),
 		slog.F("host_usr_lib_dir", cfg.HostUsrLibDir),
 		slog.F("docker_config", cfg.DockerConfig),
 		slog.F("cpus", cfg.CPUS),
@@ -91,6 +90,11 @@ func Run(ctx context.Context, log slog.Logger, blog buildlog.Logger, client dock
 		slog.F("extra_certs_path", cfg.ExtraCertsPath),
 		slog.F("mounts", cfg.Mounts),
 	)
+
+	blog := cfg.BuildLog
+	if blog == nil {
+		blog = buildlog.NopLogger{}
+	}
 
 	var dockerAuth dockerutil.AuthConfig
 	if cfg.ImagePullSecret != "" {
@@ -101,9 +105,7 @@ func Run(ctx context.Context, log slog.Logger, blog buildlog.Logger, client dock
 		}
 	}
 
-	log.Info(ctx, "checking for docker config file")
-
-	if _, err := fs.Stat(cfg.DockerConfig); err == nil {
+	if _, err := xos.Stat(cfg.DockerConfig); err == nil {
 		log.Info(ctx, "detected docker config file")
 		dockerAuth, err = dockerutil.AuthConfigFromPath(cfg.DockerConfig, cfg.Tag.RegistryStr())
 		if err != nil && !xerrors.Is(err, os.ErrNotExist) {
@@ -116,7 +118,7 @@ func Run(ctx context.Context, log slog.Logger, blog buildlog.Logger, client dock
 
 	mounts := append(defaultMounts(), cfg.Mounts...)
 
-	devices, err := ensureDevices(ctx, fs, log, blog, cfg.AddTUN, cfg.AddFUSE)
+	devices, err := ensureDevices(ctx, xos, log, blog, cfg.AddTUN, cfg.AddFUSE)
 	if err != nil {
 		return xerrors.Errorf("create devices: %w", err)
 	}
@@ -134,7 +136,7 @@ func Run(ctx context.Context, log slog.Logger, blog buildlog.Logger, client dock
 	}
 
 	// After image pull we remount /sys so sysbox can have appropriate perms to create a container.
-	err = xunix.MountFS(ctx, "/sys", "/sys", "", "remount", "rw")
+	err = xos.Mount("/sys", "/sys", "", []string{"remount", "rw"})
 	if err != nil {
 		return xerrors.Errorf("remount /sys: %w", err)
 	}
@@ -142,7 +144,7 @@ func Run(ctx context.Context, log slog.Logger, blog buildlog.Logger, client dock
 	if cfg.GPUConfig.HostUsrLibDir != "" {
 		// Unmount GPU drivers in /proc as it causes issues when creating any
 		// container in some cases (even the image metadata container).
-		_, err = xunix.TryUnmountProcGPUDrivers(ctx, log)
+		_, err = xunix.TryUnmountProcGPUDrivers(ctx, xos, log)
 		if err != nil {
 			return xerrors.Errorf("unmount /proc GPU drivers: %w", err)
 		}
@@ -175,19 +177,19 @@ func Run(ctx context.Context, log slog.Logger, blog buildlog.Logger, client dock
 		slog.F("has_init", imgMeta.HasInit),
 	)
 
-	err = idShiftMounts(ctx, log, fs, mounts, imgMeta.UID, imgMeta.GID)
+	err = idShiftMounts(ctx, log, xos, mounts, imgMeta.UID, imgMeta.GID)
 	if err != nil {
 		return xerrors.Errorf("id shift mounts: %w", err)
 	}
 
 	if cfg.GPUConfig.HostUsrLibDir != "" {
-		devs, mounts, envs, err := gpuMappings(ctx, log, cfg.GPUConfig.HostUsrLibDir)
+		devs, binds, gpuEnvs, err := gpuMappings(ctx, log, xos, cfg.OSEnvs, cfg.GPUConfig.HostUsrLibDir)
 		if err != nil {
 			return xerrors.Errorf("gpu mappings: %w", err)
 		}
 
-		mounts = append(mounts, mounts...)
-		envs = append(envs, envs...)
+		mounts = append(mounts, binds...)
+		envs = append(envs, gpuEnvs...)
 		devices = append(devices, devs...)
 	}
 
@@ -295,8 +297,8 @@ func Run(ctx context.Context, log slog.Logger, blog buildlog.Logger, client dock
 	return nil
 }
 
-func gpuMappings(ctx context.Context, log slog.Logger, urlLibDir string) ([]container.DeviceMapping, []xunix.Mount, []string, error) {
-	devs, binds, err := xunix.GPUs(ctx, log, urlLibDir)
+func gpuMappings(ctx context.Context, log slog.Logger, xos xunix.OS, environ []string, urlLibDir string) ([]container.DeviceMapping, []xunix.Mount, []string, error) {
+	devs, binds, err := xunix.GPUs(ctx, log, xos, urlLibDir)
 	if err != nil {
 		return nil, nil, nil, xerrors.Errorf("find gpus: %w", err)
 	}
@@ -323,7 +325,7 @@ func gpuMappings(ctx context.Context, log slog.Logger, urlLibDir string) ([]cont
 		binds[i] = bind
 	}
 
-	envs := xunix.GPUEnvs(ctx)
+	envs := xunix.GPUEnvs(ctx, environ)
 
 	return devices, binds, envs, nil
 }
@@ -417,7 +419,7 @@ func ensureDevices(ctx context.Context, fs xunix.FS, log slog.Logger, blog build
 	if tun {
 		log.Debug(ctx, "creating TUN device", slog.F("path", OuterTUNPath))
 		blog.Info("Creating TUN device")
-		dev, err := xunix.CreateTUNDevice(ctx, OuterTUNPath)
+		dev, err := xunix.CreateTUNDevice(fs, OuterTUNPath)
 		if err != nil {
 			return nil, xerrors.Errorf("create tun device: %w", err)
 		}
@@ -432,7 +434,7 @@ func ensureDevices(ctx context.Context, fs xunix.FS, log slog.Logger, blog build
 	if fuse {
 		log.Debug(ctx, "creating FUSE device", slog.F("path", OuterFUSEPath))
 		blog.Info("Creating FUSE device")
-		dev, err := xunix.CreateFuseDevice(ctx, OuterFUSEPath)
+		dev, err := xunix.CreateFuseDevice(fs, OuterFUSEPath)
 		if err != nil {
 			return nil, xerrors.Errorf("create fuse device: %w", err)
 		}
@@ -461,7 +463,7 @@ func ensureDevices(ctx context.Context, fs xunix.FS, log slog.Logger, blog build
 	return devices, nil
 }
 
-func idShiftMounts(ctx context.Context, log slog.Logger, fs xunix.FS, mounts []xunix.Mount, uid, gid int) error {
+func idShiftMounts(ctx context.Context, log slog.Logger, xos xunix.OS, mounts []xunix.Mount, uid, gid int) error {
 	for _, m := range mounts {
 		// Don't modify anything private to envbox.
 		if isPrivateMount(m) {
@@ -477,14 +479,13 @@ func idShiftMounts(ctx context.Context, log slog.Logger, fs xunix.FS, mounts []x
 		// can id shift it correctly. We'll still mount it read-only into
 		// the inner container.
 		if m.ReadOnly {
-			mounter := xunix.Mounter(ctx)
-			err := mounter.Mount("", m.Source, "", []string{"remount,rw"})
+			err := xos.Mount("", m.Source, "", []string{"remount,rw"})
 			if err != nil {
 				return xerrors.Errorf("remount: %w", err)
 			}
 		}
 
-		err := fs.Chmod(m.Source, 0o2755)
+		err := xos.Chmod(m.Source, 0o2755)
 		if err != nil {
 			return xerrors.Errorf("chmod mountpoint %q: %w", m.Source, err)
 		}
@@ -511,7 +512,7 @@ func idShiftMounts(ctx context.Context, log slog.Logger, fs xunix.FS, mounts []x
 
 		// Any non-home directory we assume should be owned by id-shifted root
 		// user.
-		err = fs.Chown(m.Source, shiftedUID, shiftedGID)
+		err = xos.Chown(m.Source, shiftedUID, shiftedGID)
 		if err != nil {
 			return xerrors.Errorf("chown mountpoint %q: %w", m.Source, err)
 		}

@@ -2,6 +2,7 @@ package xunix
 
 import (
 	"context"
+	"fmt"
 
 	mount "k8s.io/mount-utils"
 )
@@ -26,6 +27,15 @@ type Mount struct {
 	Source     string
 	Mountpoint string
 	ReadOnly   bool
+}
+
+// String returns the bind mount string for the mount.
+func (m Mount) String() string {
+	bind := fmt.Sprintf("%s:%s", m.Source, m.Mountpoint)
+	if m.ReadOnly {
+		bind += ":ro"
+	}
+	return bind
 }
 
 func MountFS(ctx context.Context, source, mountpoint, fstype string, options ...string) error {
