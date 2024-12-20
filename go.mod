@@ -16,7 +16,6 @@ require (
 	github.com/docker/docker v27.3.1+incompatible
 	github.com/google/go-containerregistry v0.14.0
 	github.com/google/uuid v1.6.0
-	github.com/moby/moby v27.1.1+incompatible
 	github.com/opencontainers/image-spec v1.1.0
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/quasilyte/go-ruleguard/dsl v0.3.22
@@ -26,7 +25,6 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/vishvananda/netlink v1.2.1-beta.2
 	golang.org/x/crypto v0.31.0
-	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225
 	golang.org/x/mod v0.19.0
 	golang.org/x/sys v0.28.0
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
@@ -202,6 +200,7 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go4.org/mem v0.0.0-20220726221520-4f986261bf13 // indirect
 	go4.org/netipx v0.0.0-20230728180743-ad4cb58a6516 // indirect
+	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
