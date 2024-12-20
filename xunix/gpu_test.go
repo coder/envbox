@@ -31,7 +31,14 @@ func TestGPUEnvs(t *testing.T) {
 			}
 		})
 
-		envs := xunix.GPUEnvs(ctx)
+		envs := xunix.GPUEnvs(ctx, []string{
+			"NVIDIA_TEST=1",
+			"VULKAN_TEST=1",
+			"LIBGL_TEST=1",
+			"TEST_NVIDIA=1",
+			"nvidia_test=1",
+		},
+		)
 		require.Contains(t, envs, "NVIDIA_TEST=1")
 		require.Contains(t, envs, "TEST_NVIDIA=1")
 		require.Contains(t, envs, "nvidia_test=1")
