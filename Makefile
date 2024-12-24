@@ -1,15 +1,15 @@
 PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
 GO_FILES := $(shell git ls-files '*.go' '*.sum')
 IMAGE_FILES := $(shell find deploy)
-ARCH ?= linux/amd64
-SYSBOX_SHA ?= f02ffb48eae99d6c884c9aa0378070cc716d028f58e87deec5ae00a41b706fe8
+ARCH := "linux/$(shell go env GOARCH)"
+SYSBOX_SHA := $(shell ARCH=$(ARCH) ./scripts/sysbox_sha.sh)
 
 .PHONY: clean
 clean:
 	rm -rf build
 
 build/envbox: $(GO_FILES)
-	CGO_ENABLED=0 go build -o build/envbox ./cmd/envbox
+	CGO_ENABLED=0 GOOS=linux go build -o build/envbox ./cmd/envbox
 
 .PHONY: build/image/envbox
 build/image/envbox: build/image/envbox/.ctx
