@@ -29,6 +29,15 @@ const (
 	OuterTUNPath = "/tmp/coder-tun"
 	InnerTUNPath = "/dev/net/tun"
 
+	// Required for userns mapping.
+	// This is the ID of the user we apply in `envbox/Dockerfile`.
+	//
+	// There should be caution changing this value.
+	// Source directory permissions on the host are offset by this
+	// value. For example, folder `/home/coder` inside the container
+	// with UID/GID 1000 will be mapped to `UserNamespaceOffset` + 1000
+	// on the host. Changing this value will result in improper mappings
+	// on existing containers.
 	UserNamespaceOffset = 100000
 	InnerContainerName  = "workspace_cvm"
 )

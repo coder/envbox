@@ -6,7 +6,6 @@ import (
 	"context"
 	"io"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"golang.org/x/xerrors"
@@ -26,7 +25,6 @@ type Process struct {
 
 	userKilled *int64
 	waitCh     chan struct{}
-	mu         sync.Mutex
 	err        error
 }
 
@@ -55,42 +53,6 @@ func New(ctx context.Context, log slog.Logger, cmd string, args ...string) *Proc
 
 // Start starts the daemon. It functions akin to ox/exec.Command.Start().
 func (d *Process) Start() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	return d.startProcess()
-}
-
-// Wait waits for the process to exit, returning the error on the provided
-// channel.
-func (d *Process) Wait() error {
-	<-d.waitCh
-	return d.err
-}
-
-// Run runs the command and waits for it to exit. It is a convenience
-// function that combines both Start() and Wait().
-func (d *Process) Run() error {
-	err := d.Start()
-	if err != nil {
-		return err
-	}
-
-	return d.Wait()
-}
-
-func (d *Process) KillAndWait() error {
-	if atomic.CompareAndSwapInt64(d.userKilled, 0, 1) {
-		err := d.kill()
-		if err != nil {
-			return xerrors.Errorf("kill: %w", err)
-		}
-	}
-
-	return d.Wait()
-}
-
-func (d *Process) startProcess() error {
 	var (
 		buf bytes.Buffer
 
@@ -135,13 +97,40 @@ func (d *Process) startProcess() error {
 			return
 		}
 
-		if err == nil {
-			d.err = nil
-		} else {
+		if err != nil {
 			d.err = xerrors.Errorf("%s: %w", buf.Bytes(), err)
 		}
 	}()
 	return nil
+}
+
+// Wait waits for the process to exit, returning the error on the provided
+// channel.
+func (d *Process) Wait() error {
+	<-d.waitCh
+	return d.err
+}
+
+// Run runs the command and waits for it to exit. It is a convenience
+// function that combines both Start() and Wait().
+func (d *Process) Run() error {
+	err := d.Start()
+	if err != nil {
+		return err
+	}
+
+	return d.Wait()
+}
+
+func (d *Process) KillAndWait() error {
+	if atomic.CompareAndSwapInt64(d.userKilled, 0, 1) {
+		err := d.kill()
+		if err != nil {
+			return xerrors.Errorf("kill: %w", err)
+		}
+	}
+
+	return d.Wait()
 }
 
 func (d *Process) kill() error {

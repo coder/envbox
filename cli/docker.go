@@ -38,43 +38,8 @@ const (
 )
 
 const (
-	defaultNetLink      = "eth0"
-	defaultDockerBridge = "docker0"
-	// From https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts-technical-overview.html
-	awsWebIdentityTokenFilePath = "/var/run/secrets/eks.amazonaws.com/serviceaccount/token" //nolint
-	sysboxErrMsg                = "Sysbox exited, possibly because of an unsupported kernel version. Please contact an infrastructure administrator and request a node kernel with seccomp API level >= 5."
-
-	// noSpaceDataDir is the directory to use for the data directory
-	// for dockerd when the default directory (/var/lib/docker pointing
-	// to the user's pvc) is at capacity. This directory points to
-	// ephemeral storage allocated by the node and should be more likely
-	// to have capacity.
-	noSpaceDataDir = "/var/lib/docker.bak"
-	// noSpaceDockerDriver is the storage driver to use in cases where
-	// the default data dir (residing in the user's PVC) is at capacity.
-	// In such cases we must use the vfs storage driver because overlay2
-	// does not work on top of overlay.
-	noSpaceDockerDriver = "vfs"
-
-	OuterFUSEPath = "/tmp/coder-fuse"
-	InnerFUSEPath = "/dev/fuse"
-
-	OuterTUNPath = "/tmp/coder-tun"
-	InnerTUNPath = "/dev/net/tun"
-
-	InnerContainerName = "workspace_cvm"
-
-	// Required for userns mapping.
-	// This is the ID of the user we apply in `envbox/Dockerfile`.
-	//
-	// There should be caution changing this value.
-	// Source directory permissions on the host are offset by this
-	// value. For example, folder `/home/coder` inside the container
-	// with UID/GID 1000 will be mapped to `UserNamespaceOffset` + 1000
-	// on the host. Changing this value will result in improper mappings
-	// on existing containers.
-	UserNamespaceOffset = 100000
-	devDir              = "/dev"
+	defaultNetLink = "eth0"
+	sysboxErrMsg   = "Sysbox exited, possibly because of an unsupported kernel version. Please contact an infrastructure administrator and request a node kernel with seccomp API level >= 5."
 )
 
 var (
@@ -100,19 +65,6 @@ var (
 	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
 	EnvExtraCertsPath       = "CODER_EXTRA_CERTS_PATH"
 )
-
-var envboxPrivateMounts = map[string]struct{}{
-	"/var/lib/containers": {},
-	"/var/lib/docker":     {},
-	"/var/lib/sysbox":     {},
-	"/lib/modules":        {},
-	"/usr/src":            {},
-	// /var/lib/coder is not technically a mount
-	// private to envbox but it is specially handled
-	// by sysbox so it does not require any effort
-	// on our part.
-	"/var/lib/coder": {},
-}
 
 type flags struct {
 	innerImage    string

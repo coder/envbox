@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/envbox/cli"
+	"github.com/coder/envbox/cvm"
 	"github.com/coder/envbox/dockerutil"
 	"github.com/coder/envbox/integration/integrationtest"
 )
@@ -178,14 +179,14 @@ func TestDocker(t *testing.T) {
 		// Assert that the FUSE device exists.
 		_, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
 			ContainerID: resource.Container.ID,
-			Cmd:         []string{"stat", cli.InnerFUSEPath},
+			Cmd:         []string{"stat", cvm.InnerFUSEPath},
 		})
 		require.NoError(t, err)
 
 		// Assert that the TUN device exists.
 		_, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
 			ContainerID: resource.Container.ID,
-			Cmd:         []string{"stat", cli.InnerTUNPath},
+			Cmd:         []string{"stat", cvm.InnerTUNPath},
 		})
 		require.NoError(t, err)
 

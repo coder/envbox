@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"cdr.dev/slog/sloggers/slogtest"
-	"github.com/coder/envbox/cli"
 	"github.com/coder/envbox/cvm"
 	"github.com/coder/envbox/dockerutil"
 	"github.com/coder/envbox/dockerutil/dockerfake"
@@ -158,7 +157,7 @@ func TestRun(t *testing.T) {
 
 		var called bool
 		client.ContainerCreateFn = func(_ context.Context, config *container.Config, _ *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
-			if containerName == cli.InnerContainerName {
+			if containerName == cvm.InnerContainerName {
 				called = true
 				require.ElementsMatch(t, expectedEnvs, config.Env)
 			}
@@ -227,7 +226,7 @@ func TestRun(t *testing.T) {
 
 		var called bool
 		client.ContainerCreateFn = func(_ context.Context, _ *container.Config, hostConfig *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
-			if containerName == cli.InnerContainerName {
+			if containerName == cvm.InnerContainerName {
 				called = true
 				require.Equal(t, expectedMounts, hostConfig.Binds)
 			}
@@ -250,8 +249,8 @@ func TestRun(t *testing.T) {
 		// Check that we're calling chown and shifting the ID.
 		owner, ok := xos.GetFileOwner("/home/coder")
 		require.True(t, ok)
-		require.Equal(t, cli.UserNamespaceOffset+1001, owner.UID)
-		require.Equal(t, cli.UserNamespaceOffset+1001, owner.GID)
+		require.Equal(t, cvm.UserNamespaceOffset+1001, owner.UID)
+		require.Equal(t, cvm.UserNamespaceOffset+1001, owner.GID)
 	})
 
 	t.Run("RemountSysfs", func(t *testing.T) {
@@ -288,20 +287,20 @@ func TestRun(t *testing.T) {
 
 		expectedDevices := []container.DeviceMapping{
 			{
-				PathOnHost:        cli.OuterTUNPath,
-				PathInContainer:   cli.InnerTUNPath,
+				PathOnHost:        cvm.OuterTUNPath,
+				PathInContainer:   cvm.InnerTUNPath,
 				CgroupPermissions: "rwm",
 			},
 			{
-				PathOnHost:        cli.OuterFUSEPath,
-				PathInContainer:   cli.InnerFUSEPath,
+				PathOnHost:        cvm.OuterFUSEPath,
+				PathInContainer:   cvm.InnerFUSEPath,
 				CgroupPermissions: "rwm",
 			},
 		}
 
 		var called bool
 		client.ContainerCreateFn = func(_ context.Context, _ *container.Config, hostConfig *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
-			if containerName == cli.InnerContainerName {
+			if containerName == cvm.InnerContainerName {
 				called = true
 				require.Equal(t, expectedDevices, hostConfig.Devices)
 			}
@@ -318,15 +317,15 @@ func TestRun(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, called, "container create fn not called")
 
-		owner, ok := xos.GetFileOwner(cli.OuterTUNPath)
+		owner, ok := xos.GetFileOwner(cvm.OuterTUNPath)
 		require.True(t, ok)
-		require.Equal(t, cli.UserNamespaceOffset, owner.UID)
-		require.Equal(t, cli.UserNamespaceOffset, owner.GID)
+		require.Equal(t, cvm.UserNamespaceOffset, owner.UID)
+		require.Equal(t, cvm.UserNamespaceOffset, owner.GID)
 
-		owner, ok = xos.GetFileOwner(cli.OuterFUSEPath)
+		owner, ok = xos.GetFileOwner(cvm.OuterFUSEPath)
 		require.True(t, ok)
-		require.Equal(t, cli.UserNamespaceOffset, owner.UID)
-		require.Equal(t, cli.UserNamespaceOffset, owner.GID)
+		require.Equal(t, cvm.UserNamespaceOffset, owner.UID)
+		require.Equal(t, cvm.UserNamespaceOffset, owner.GID)
 	})
 
 	// Tests that 'sleep infinity' is used if /sbin/init
@@ -363,7 +362,7 @@ func TestRun(t *testing.T) {
 
 		var called bool
 		client.ContainerCreateFn = func(_ context.Context, config *container.Config, _ *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
-			if containerName == cli.InnerContainerName {
+			if containerName == cvm.InnerContainerName {
 				called = true
 				require.Equal(t, []string{"sleep", "infinity"}, []string(config.Entrypoint))
 			}
@@ -433,7 +432,7 @@ func TestRun(t *testing.T) {
 
 		var called bool
 		client.ContainerCreateFn = func(_ context.Context, _ *container.Config, hostConfig *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
-			if containerName == cli.InnerContainerName {
+			if containerName == cvm.InnerContainerName {
 				called = true
 				require.Equal(t, int64(memory), hostConfig.Memory)
 				require.Equal(t, int64(cpus*dockerutil.DefaultCPUPeriod), hostConfig.CPUQuota)
@@ -529,7 +528,7 @@ func TestRun(t *testing.T) {
 
 		var called bool
 		client.ContainerCreateFn = func(_ context.Context, config *container.Config, hostConfig *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
-			if containerName == cli.InnerContainerName {
+			if containerName == cvm.InnerContainerName {
 				called = true
 				// Test that '/dev' mounts are passed as devices.
 				require.Contains(t, hostConfig.Devices, container.DeviceMapping{
@@ -593,7 +592,7 @@ func TestRun(t *testing.T) {
 
 		var called bool
 		client.ContainerCreateFn = func(_ context.Context, config *container.Config, _ *container.HostConfig, _ *network.NetworkingConfig, _ *v1.Platform, containerName string) (container.CreateResponse, error) {
-			if containerName == cli.InnerContainerName {
+			if containerName == cvm.InnerContainerName {
 				called = true
 				require.Equal(t, "hello-world", config.Hostname)
 			}
