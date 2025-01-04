@@ -7,13 +7,10 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
+	"sync"
 
-	"github.com/docker/docker/api/types/container"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/spf13/cobra"
 	"golang.org/x/xerrors"
@@ -23,6 +20,7 @@ import (
 	"github.com/coder/envbox/background"
 	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/cli/cliflag"
+	"github.com/coder/envbox/cvm"
 	"github.com/coder/envbox/dockerutil"
 	"github.com/coder/envbox/slogkubeterminate"
 	"github.com/coder/envbox/sysboxutil"
@@ -154,14 +152,48 @@ func dockerCmd() *cobra.Command {
 		Short: "Create a docker-based CVM",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			var (
-				ctx                  = cmd.Context()
-				log                  = slog.Make(slogjson.Sink(cmd.ErrOrStderr()), slogkubeterminate.Make()).Leveled(slog.LevelDebug)
-				blog buildlog.Logger = buildlog.JSONLogger{Encoder: json.NewEncoder(os.Stderr)}
+				ctx = cmd.Context()
+				log = slog.Make(
+					slogjson.Sink(cmd.ErrOrStderr()),
+					slogkubeterminate.Make(),
+				).Leveled(slog.LevelDebug)
+				cfg = cvm.Config{
+					Username:   flags.innerUsername,
+					AgentToken: flags.agentToken,
+					OSEnvs:     os.Environ(),
+
+					BuildLog: buildlog.JSONLogger{
+						Encoder: json.NewEncoder(os.Stderr),
+					},
+					InnerEnvs:       strings.Split(flags.innerEnvs, ","),
+					WorkDir:         flags.innerWorkDir,
+					Hostname:        flags.innerHostname,
+					ImagePullSecret: flags.imagePullSecret,
+					CoderURL:        flags.coderURL,
+					AddTUN:          flags.addTUN,
+					AddFUSE:         flags.addFUSE,
+					BoostrapScript:  flags.boostrapScript,
+					DockerConfig:    flags.dockerConfig,
+					CPUS:            flags.cpus,
+					Memory:          flags.memory,
+					GPUConfig: cvm.GPUConfig{
+						HostUsrLibDir: flags.hostUsrLibDir,
+					},
+				}
 			)
+
+			cfg.Mounts, err = parseMounts(flags.containerMounts)
+			if err != nil {
+				return xerrors.Errorf("parse mounts: %w", err)
+			}
+
+			if flags.addGPU && flags.hostUsrLibDir == "" {
+				return xerrors.Errorf("when using GPUs, %q must be specified", EnvUsrLibDir)
+			}
 
 			if flags.noStartupLogs {
 				log = slog.Make(slogjson.Sink(io.Discard))
-				blog = buildlog.NopLogger{}
+				cfg.BuildLog = buildlog.NopLogger{}
 			}
 
 			httpClient, err := xhttp.Client(log, flags.extraCertsPath)
@@ -181,17 +213,17 @@ func dockerCmd() *cobra.Command {
 					// an inability to push build logs.
 					log.Error(ctx, "failed to instantiate coder build log client, no logs will be pushed", slog.Error(err))
 				} else {
-					blog = buildlog.MultiLogger(
+					cfg.BuildLog = buildlog.MultiLogger(
 						buildlog.OpenCoderLogger(ctx, agent, log),
-						blog,
+						cfg.BuildLog,
 					)
 				}
 			}
-			defer blog.Close()
+			defer cfg.BuildLog.Close()
 
 			defer func(err *error) {
 				if *err != nil {
-					blog.Errorf("Failed to run envbox: %v", *err)
+					cfg.BuildLog.Errorf("Failed to run envbox: %v", *err)
 				}
 			}(&err)
 
@@ -204,12 +236,12 @@ func dockerCmd() *cobra.Command {
 				select {
 				// Start sysbox-mgr and sysbox-fs in order to run
 				// sysbox containers.
-				case err := <-background.New(ctx, log, "sysbox-mgr", sysboxArgs...).Run():
-					blog.Info(sysboxErrMsg)
+				case err := <-background.RunCh(ctx, log, "sysbox-mgr", sysboxArgs...):
+					cfg.BuildLog.Info(sysboxErrMsg)
 					//nolint
 					log.Fatal(ctx, "sysbox-mgr exited", slog.Error(err))
-				case err := <-background.New(ctx, log, "sysbox-fs").Run():
-					blog.Info(sysboxErrMsg)
+				case err := <-background.RunCh(ctx, log, "sysbox-fs"):
+					cfg.BuildLog.Info(sysboxErrMsg)
 					//nolint
 					log.Fatal(ctx, "sysbox-fs exited", slog.Error(err))
 				}
@@ -221,21 +253,7 @@ func dockerCmd() *cobra.Command {
 				log.Debug(ctx, "using custom docker bridge CIDR", slog.F("cidr", cidr))
 			}
 
-			dargs, err := dockerdArgs(flags.ethlink, cidr, false)
-			if err != nil {
-				return xerrors.Errorf("dockerd args: %w", err)
-			}
-
-			log.Debug(ctx, "starting dockerd", slog.F("args", args))
-
-			blog.Info("Waiting for sysbox processes to startup...")
-			dockerd := background.New(ctx, log, "dockerd", dargs...)
-			err = dockerd.Start()
-			if err != nil {
-				return xerrors.Errorf("start dockerd: %w", err)
-			}
-
-			log.Debug(ctx, "waiting for manager")
+			cfg.BuildLog.Info("Waiting for sysbox processes to startup...")
 
 			err = sysboxutil.WaitForManager(ctx)
 			if err != nil {
@@ -247,39 +265,36 @@ func dockerCmd() *cobra.Command {
 				return xerrors.Errorf("new docker client: %w", err)
 			}
 
+			dockerd, err := dockerutil.StartDaemon(ctx, log, &dockerutil.DaemonOptions{
+				Link:   flags.ethlink,
+				CIDR:   cidr,
+				Driver: "vfs",
+			})
+			if err != nil {
+				return xerrors.Errorf("start dockerd: %w", err)
+			}
+
+			mustRestartDockerd := mustRestartDockerd(ctx, log, cfg.BuildLog, dockerd, &dockerutil.DaemonOptions{
+				Link:   flags.ethlink,
+				CIDR:   cidr,
+				Driver: "vfs",
+			})
+
 			go func() {
-				err := <-dockerd.Wait()
 				// It's possible the for the docker daemon to run out of disk
 				// while trying to startup, in such cases we should restart
 				// it and point it to an ephemeral directory. Since this
 				// directory is going to be on top of an overlayfs filesystem
 				// we have to use the vfs storage driver.
-				if xunix.IsNoSpaceErr(err) {
-					args, err = dockerdArgs(flags.ethlink, cidr, true)
-					if err != nil {
-						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
-						//nolint
-						log.Fatal(ctx, "dockerd exited, failed getting args for restart", slog.Error(err))
-					}
-
-					err = dockerd.Restart(ctx, "dockerd", args...)
-					if err != nil {
-						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
-						//nolint
-						log.Fatal(ctx, "restart dockerd", slog.Error(err))
-					}
-
-					err = <-dockerd.Wait()
-				}
-
-				// It's possible lower down in the call stack to restart
-				// the docker daemon if we run out of disk while starting the
-				// container.
-				if err != nil && !xerrors.Is(err, background.ErrUserKilled) {
-					blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
+				if !xunix.IsNoSpaceErr(err) {
+					cfg.BuildLog.Error("Failed to create Container-based Virtual Machine: " + err.Error())
 					//nolint
 					log.Fatal(ctx, "dockerd exited", slog.Error(err))
 				}
+				cfg.BuildLog.Info("Insufficient space to start inner container. Restarting dockerd using the vfs driver. Your performance will be degraded. Clean up your home volume and then restart the workspace to improve performance.")
+				log.Debug(ctx, "encountered 'no space left on device' error while starting workspace", slog.Error(err))
+
+				mustRestartDockerd()
 			}()
 
 			log.Debug(ctx, "waiting for dockerd")
@@ -287,27 +302,26 @@ func dockerCmd() *cobra.Command {
 			// We wait for the daemon after spawning the goroutine in case
 			// startup causes the daemon to encounter encounter a 'no space left
 			// on device' error.
-			blog.Info("Waiting for dockerd to startup...")
+			cfg.BuildLog.Info("Waiting for dockerd to startup...")
 			err = dockerutil.WaitForDaemon(ctx, client)
 			if err != nil {
 				return xerrors.Errorf("wait for dockerd: %w", err)
 			}
 
-			if flags.extraCertsPath != "" {
-				// Parse the registry from the inner image
-				registry, err := name.ParseReference(flags.innerImage)
-				if err != nil {
-					return xerrors.Errorf("invalid image: %w", err)
-				}
-				registryName := registry.Context().RegistryStr()
+			tag, err := name.NewTag(flags.innerImage)
+			if err != nil {
+				return xerrors.Errorf("parse image: %w", err)
+			}
 
+			if flags.extraCertsPath != "" {
+				registryName := tag.RegistryStr()
 				// Write certificates for the registry
 				err = dockerutil.WriteCertsForRegistry(ctx, registryName, flags.extraCertsPath)
 				if err != nil {
 					return xerrors.Errorf("write certs for registry: %w", err)
 				}
 
-				blog.Infof("Successfully copied certificates from %q to %q", flags.extraCertsPath, filepath.Join("/etc/docker/certs.d", registryName))
+				cfg.BuildLog.Infof("Successfully copied certificates from %q to %q", flags.extraCertsPath, filepath.Join("/etc/docker/certs.d", registryName))
 				log.Debug(ctx, "wrote certificates for registry", slog.F("registry", registryName),
 					slog.F("extra_certs_path", flags.extraCertsPath),
 				)
@@ -320,7 +334,7 @@ func dockerCmd() *cobra.Command {
 				return xerrors.Errorf("set oom score: %w", err)
 			}
 
-			err = runDockerCVM(ctx, log, client, blog, flags)
+			err = cvm.Run(ctx, log, xunix.NewLinuxOS(), client, cfg)
 			if err != nil {
 				// It's possible we failed because we ran out of disk while
 				// pulling the image. We should restart the daemon and use
@@ -328,33 +342,18 @@ func dockerCmd() *cobra.Command {
 				// a user can access their workspace and try to delete whatever
 				// is causing their disk to fill up.
 				if xunix.IsNoSpaceErr(err) {
-					blog.Info("Insufficient space to start inner container. Restarting dockerd using the vfs driver. Your performance will be degraded. Clean up your home volume and then restart the workspace to improve performance.")
+					cfg.BuildLog.Info("Insufficient space to start inner container. Restarting dockerd using the vfs driver. Your performance will be degraded. Clean up your home volume and then restart the workspace to improve performance.")
 					log.Debug(ctx, "encountered 'no space left on device' error while starting workspace", slog.Error(err))
-					args, err := dockerdArgs(flags.ethlink, cidr, true)
-					if err != nil {
-						return xerrors.Errorf("dockerd args for restart: %w", err)
-					}
 
-					log.Debug(ctx, "restarting dockerd", slog.F("args", args))
-
-					err = dockerd.Restart(ctx, "dockerd", args...)
-					if err != nil {
-						return xerrors.Errorf("restart dockerd: %w", err)
-					}
-					go func() {
-						err = <-dockerd.Wait()
-						blog.Errorf("restarted dockerd exited: %v", err)
-						//nolint
-						log.Fatal(ctx, "restarted dockerd exited", slog.Error(err))
-					}()
+					mustRestartDockerd()
 
 					log.Debug(ctx, "reattempting container creation")
-					err = runDockerCVM(ctx, log, client, blog, flags)
+					err = cvm.Run(ctx, log, xunix.NewLinuxOS(), client, cfg)
 				}
-				if err != nil {
-					blog.Errorf("Failed to run envbox: %v", err)
-					return xerrors.Errorf("run: %w", err)
-				}
+			}
+			if err != nil {
+				cfg.BuildLog.Errorf("Failed to run envbox: %v", err)
+				return xerrors.Errorf("run: %w", err)
 			}
 
 			return nil
@@ -393,407 +392,6 @@ func dockerCmd() *cobra.Command {
 	return cmd
 }
 
-func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client, blog buildlog.Logger, flags flags) error {
-	fs := xunix.GetFS(ctx)
-
-	ref, err := name.NewTag(flags.innerImage)
-	if err != nil {
-		return xerrors.Errorf("parse ref: %w", err)
-	}
-
-	var dockerAuth dockerutil.AuthConfig
-	if flags.imagePullSecret != "" {
-		dockerAuth, err = dockerutil.AuthConfigFromString(flags.imagePullSecret, ref.RegistryStr())
-		if err != nil {
-			return xerrors.Errorf("parse auth config: %w", err)
-		}
-	}
-
-	log.Info(ctx, "checking for docker config file", slog.F("path", flags.dockerConfig))
-	if _, err := fs.Stat(flags.dockerConfig); err == nil {
-		fmt.Println("WTF")
-		log.Info(ctx, "detected file", slog.F("image", flags.innerImage))
-		dockerAuth, err = dockerutil.AuthConfigFromPath(flags.dockerConfig, ref.RegistryStr())
-		if err != nil && !xerrors.Is(err, os.ErrNotExist) {
-			return xerrors.Errorf("auth config from file: %w", err)
-		}
-	}
-
-	envs := defaultContainerEnvs(ctx, flags.agentToken)
-
-	innerEnvsTokens := strings.Split(flags.innerEnvs, ",")
-	envs = append(envs, filterElements(xunix.Environ(ctx), innerEnvsTokens...)...)
-
-	mounts := defaultMounts()
-	// Add any user-specified mounts to our mounts list.
-	extraMounts, err := parseMounts(flags.containerMounts)
-	if err != nil {
-		return xerrors.Errorf("read mounts: %w", err)
-	}
-	mounts = append(mounts, extraMounts...)
-
-	log.Debug(ctx, "using mounts", slog.F("mounts", mounts))
-
-	devices := make([]container.DeviceMapping, 0, 2)
-	if flags.addTUN {
-		log.Debug(ctx, "creating TUN device", slog.F("path", OuterTUNPath))
-		blog.Info("Creating TUN device")
-		dev, err := xunix.CreateTUNDevice(fs, OuterTUNPath)
-		if err != nil {
-			return xerrors.Errorf("creat tun device: %w", err)
-		}
-
-		devices = append(devices, container.DeviceMapping{
-			PathOnHost:        dev.Path,
-			PathInContainer:   InnerTUNPath,
-			CgroupPermissions: "rwm",
-		})
-	}
-
-	if flags.addFUSE {
-		log.Debug(ctx, "creating FUSE device", slog.F("path", OuterFUSEPath))
-		blog.Info("Creating FUSE device")
-		dev, err := xunix.CreateFuseDevice(fs, OuterFUSEPath)
-		if err != nil {
-			return xerrors.Errorf("create fuse device: %w", err)
-		}
-
-		devices = append(devices, container.DeviceMapping{
-			PathOnHost:        dev.Path,
-			PathInContainer:   InnerFUSEPath,
-			CgroupPermissions: "rwm",
-		})
-	}
-
-	log.Debug(ctx, "using devices", slog.F("devices", devices))
-
-	// ID shift the devices so that they reflect the root user
-	// inside the container.
-	for _, device := range devices {
-		log.Debug(ctx, "chowning device",
-			slog.F("device", device.PathOnHost),
-			slog.F("uid", UserNamespaceOffset),
-			slog.F("gid", UserNamespaceOffset),
-		)
-		err = fs.Chown(device.PathOnHost, UserNamespaceOffset, UserNamespaceOffset)
-		if err != nil {
-			return xerrors.Errorf("chown device %q: %w", device.PathOnHost, err)
-		}
-	}
-
-	log.Debug(ctx, "pulling image", slog.F("image", flags.innerImage))
-
-	err = dockerutil.PullImage(ctx, &dockerutil.PullImageConfig{
-		Client:     client,
-		Image:      flags.innerImage,
-		Auth:       dockerAuth,
-		ProgressFn: dockerutil.DefaultLogImagePullFn(blog),
-	})
-	if err != nil {
-		return xerrors.Errorf("pull image: %w", err)
-	}
-
-	log.Debug(ctx, "remounting /sys")
-
-	// After image pull we remount /sys so sysbox can have appropriate perms to create a container.
-	err = xunix.MountFS(ctx, "/sys", "/sys", "", "remount", "rw")
-	if err != nil {
-		return xerrors.Errorf("remount /sys: %w", err)
-	}
-
-	if flags.addGPU {
-		if flags.hostUsrLibDir == "" {
-			return xerrors.Errorf("when using GPUs, %q must be specified", EnvUsrLibDir)
-		}
-
-		// Unmount GPU drivers in /proc as it causes issues when creating any
-		// container in some cases (even the image metadata container).
-		mounter := xunix.Mounter(ctx)
-		_, err = xunix.TryUnmountProcGPUDrivers(ctx, mounter, log)
-		if err != nil {
-			return xerrors.Errorf("unmount /proc GPU drivers: %w", err)
-		}
-	}
-
-	log.Debug(ctx, "fetching image metadata",
-		slog.F("image", flags.innerImage),
-		slog.F("username", flags.innerUsername),
-	)
-
-	blog.Info("Getting image metadata...")
-	// Get metadata about the image. We need to know things like the UID/GID
-	// of the user so that we can chown directories to the namespaced UID inside
-	// the inner container as well as whether we should be starting the container
-	// with /sbin/init or something simple like 'sleep infinity'.
-	imgMeta, err := dockerutil.GetImageMetadata(ctx, client, flags.innerImage, flags.innerUsername)
-	if err != nil {
-		return xerrors.Errorf("get image metadata: %w", err)
-	}
-
-	blog.Infof("Detected entrypoint user '%s:%s' with home directory %q", imgMeta.UID, imgMeta.UID, imgMeta.HomeDir)
-
-	log.Debug(ctx, "fetched image metadata",
-		slog.F("uid", imgMeta.UID),
-		slog.F("gid", imgMeta.GID),
-		slog.F("has_init", imgMeta.HasInit),
-	)
-
-	mounter := xunix.Mounter(ctx)
-	for _, m := range mounts {
-		// Don't modify anything private to envbox.
-		if isPrivateMount(m) {
-			continue
-		}
-
-		log.Debug(ctx, "chmod'ing directory",
-			slog.F("path", m.Source),
-			slog.F("mode", "02755"),
-		)
-
-		// If a mount is read-only we have to remount it rw so that we
-		// can id shift it correctly. We'll still mount it read-only into
-		// the inner container.
-		if m.ReadOnly {
-			err := mounter.Mount("", m.Source, "", []string{"remount,rw"})
-			if err != nil {
-				return xerrors.Errorf("remount: %w", err)
-			}
-		}
-
-		err := fs.Chmod(m.Source, 0o2755)
-		if err != nil {
-			return xerrors.Errorf("chmod mountpoint %q: %w", m.Source, err)
-		}
-
-		var (
-			shiftedUID = shiftedID(0)
-			shiftedGID = shiftedID(0)
-		)
-
-		if isHomeDir(m.Source) {
-			// We want to ensure that the inner directory is ID shifted to
-			// the namespaced UID of the user in the inner container otherwise
-			// they won't be able to write files.
-			shiftedUID = shiftedID(imgMeta.UID)
-			shiftedGID = shiftedID(imgMeta.GID)
-		}
-
-		log.Debug(ctx, "chowning mount",
-			slog.F("source", m.Source),
-			slog.F("target", m.Mountpoint),
-			slog.F("uid", shiftedUID),
-			slog.F("gid", shiftedGID),
-		)
-
-		// Any non-home directory we assume should be owned by id-shifted root
-		// user.
-		err = fs.Chown(m.Source, shiftedUID, shiftedGID)
-		if err != nil {
-			return xerrors.Errorf("chown mountpoint %q: %w", m.Source, err)
-		}
-	}
-
-	if flags.addGPU {
-		linuxOS := xunix.LinuxOS{
-			FS:        fs,
-			Interface: mounter,
-		}
-		devs, binds, err := xunix.GPUs(ctx, log, linuxOS, flags.hostUsrLibDir)
-		if err != nil {
-			return xerrors.Errorf("find gpus: %w", err)
-		}
-
-		for _, dev := range devs {
-			devices = append(devices, container.DeviceMapping{
-				PathOnHost:        dev.Path,
-				PathInContainer:   dev.Path,
-				CgroupPermissions: "rwm",
-			})
-		}
-
-		for _, bind := range binds {
-			// If the bind has a path that points to the host-mounted /usr/lib
-			// directory we need to remap it to /usr/lib inside the container.
-			bind.Mountpoint = bind.Source
-			if strings.HasPrefix(bind.Mountpoint, flags.hostUsrLibDir) {
-				bind.Mountpoint = filepath.Join(
-					"/usr/lib",
-					strings.TrimPrefix(bind.Mountpoint, strings.TrimSuffix(flags.hostUsrLibDir, "/")),
-				)
-			}
-			mounts = append(mounts, bind)
-		}
-		envs = append(envs, xunix.GPUEnvs(ctx, xunix.Environ(ctx))...)
-	}
-
-	blog.Info("Creating workspace...")
-
-	// Create the inner container.
-	containerID, err := dockerutil.CreateContainer(ctx, client, &dockerutil.ContainerConfig{
-		Log:         log,
-		Mounts:      mounts,
-		Devices:     devices,
-		Envs:        envs,
-		Name:        InnerContainerName,
-		Hostname:    flags.innerHostname,
-		WorkingDir:  flags.innerWorkDir,
-		HasInit:     imgMeta.HasInit,
-		Image:       flags.innerImage,
-		CPUs:        int64(flags.cpus),
-		MemoryLimit: int64(flags.memory),
-	})
-	if err != nil {
-		return xerrors.Errorf("create container: %w", err)
-	}
-
-	blog.Info("Pruning images to free up disk...")
-	// Prune images to avoid taking up any unnecessary disk from the user.
-	_, err = dockerutil.PruneImages(ctx, client)
-	if err != nil {
-		return xerrors.Errorf("prune images: %w", err)
-	}
-
-	// TODO fix iptables when istio detected.
-
-	blog.Info("Starting up workspace...")
-	err = client.ContainerStart(ctx, containerID, container.StartOptions{})
-	if err != nil {
-		return xerrors.Errorf("start container: %w", err)
-	}
-
-	log.Debug(ctx, "creating bootstrap directory", slog.F("directory", imgMeta.HomeDir))
-
-	// Create the directory to which we will download the agent.
-	// We create this directory because the default behavior is
-	// to download the agent to /tmp/coder.XXXX. This causes a race to happen
-	// where we finish downloading the binary but before we can execute
-	// systemd remounts /tmp.
-	bootDir := filepath.Join(imgMeta.HomeDir, ".coder")
-
-	blog.Infof("Creating %q directory to host Coder assets...", bootDir)
-	_, err = dockerutil.ExecContainer(ctx, client, dockerutil.ExecConfig{
-		ContainerID: containerID,
-		User:        strconv.Itoa(imgMeta.UID),
-		Cmd:         "mkdir",
-		Args:        []string{"-p", bootDir},
-	})
-	if err != nil {
-		return xerrors.Errorf("make bootstrap dir: %w", err)
-	}
-
-	cpuQuota, err := xunix.ReadCPUQuota(ctx, log)
-	if err != nil {
-		blog.Infof("Unable to read CPU quota: %s", err.Error())
-	} else {
-		log.Debug(ctx, "setting CPU quota",
-			slog.F("quota", cpuQuota.Quota),
-			slog.F("period", cpuQuota.Period),
-			slog.F("cgroup", cpuQuota.CGroup.String()),
-		)
-
-		// We want the inner container to have the same limits as the outer container
-		// so that processes inside the container know what they're working with.
-		if err := dockerutil.SetContainerQuota(ctx, containerID, cpuQuota); err != nil {
-			blog.Infof("Unable to set quota for inner container: %s", err.Error())
-			blog.Info("This is not a fatal error, but it may cause cgroup-aware applications to misbehave.")
-		}
-	}
-
-	blog.Info("Envbox startup complete!")
-
-	// The bootstrap script doesn't return since it execs the agent
-	// meaning that it can get pretty noisy if we were to log by default.
-	// In order to allow users to discern issues getting the bootstrap script
-	// to complete successfully we pipe the output to stdout if
-	// CODER_DEBUG=true.
-	debugWriter := io.Discard
-	if flags.debug {
-		debugWriter = os.Stdout
-	}
-	// Bootstrap the container if a script has been provided.
-	blog.Infof("Bootstrapping workspace...")
-	err = dockerutil.BootstrapContainer(ctx, client, dockerutil.BootstrapConfig{
-		ContainerID: containerID,
-		User:        strconv.Itoa(imgMeta.UID),
-		Script:      flags.boostrapScript,
-		// We set this because the default behavior is to download the agent
-		// to /tmp/coder.XXXX. This causes a race to happen where we finish
-		// downloading the binary but before we can execute systemd remounts
-		// /tmp.
-		Env:       []string{fmt.Sprintf("BINARY_DIR=%s", bootDir)},
-		StdOutErr: debugWriter,
-	})
-	if err != nil {
-		return xerrors.Errorf("boostrap container: %w", err)
-	}
-
-	return nil
-}
-
-//nolint:revive
-func dockerdArgs(link, cidr string, isNoSpace bool) ([]string, error) {
-	// We need to adjust the MTU for the host otherwise packets will fail delivery.
-	// 1500 is the standard, but certain deployments (like GKE) use custom MTU values.
-	// See: https://www.atlantis-press.com/journals/ijndc/125936177/view#sec-s3.1
-
-	mtu, err := xunix.NetlinkMTU(link)
-	if err != nil {
-		return nil, xerrors.Errorf("custom mtu: %w", err)
-	}
-
-	// We set the Docker Bridge IP explicitly here for a number of reasons:
-	// 1) It sometimes picks the 172.17.x.x address which conflicts with that of the Docker daemon in the inner container.
-	// 2) It defaults to a /16 network which is way more than we need for envbox.
-	// 3) The default may conflict with existing internal network resources, and an operator may wish to override it.
-	dockerBip, prefixLen := dockerutil.BridgeIPFromCIDR(cidr)
-
-	args := []string{
-		"--debug",
-		"--log-level=debug",
-		fmt.Sprintf("--mtu=%d", mtu),
-		"--userns-remap=coder",
-		"--storage-driver=overlay2",
-		fmt.Sprintf("--bip=%s/%d", dockerBip, prefixLen),
-	}
-
-	if isNoSpace {
-		args = append(args,
-			fmt.Sprintf("--data-root=%s", noSpaceDataDir),
-			fmt.Sprintf("--storage-driver=%s", noSpaceDockerDriver),
-		)
-	}
-
-	return args, nil
-}
-
-// TODO This is bad code.
-func filterElements(ss []string, filters ...string) []string {
-	filtered := make([]string, 0, len(ss))
-	for _, f := range filters {
-		f = strings.TrimSpace(f)
-		for _, s := range ss {
-			toks := strings.Split(s, "=")
-			if len(toks) < 2 {
-				// Malformed environment variable.
-				continue
-			}
-
-			key := toks[0]
-
-			if strings.HasSuffix(f, "*") {
-				filter := strings.TrimSuffix(f, "*")
-				if strings.HasPrefix(key, filter) {
-					filtered = append(filtered, s)
-				}
-			} else if key == f {
-				filtered = append(filtered, s)
-			}
-		}
-	}
-
-	return filtered
-}
-
 // parseMounts parses a list of mounts from containerMounts. The format should
 // be "src:dst[:ro],src:dst[:ro]".
 func parseMounts(containerMounts string) ([]xunix.Mount, error) {
@@ -822,79 +420,23 @@ func parseMounts(containerMounts string) ([]xunix.Mount, error) {
 	return mounts, nil
 }
 
-// defaultContainerEnvs returns environment variables that should always
-// be passed to the inner container.
-func defaultContainerEnvs(ctx context.Context, agentToken string) []string {
-	const agentSubsystemEnv = "CODER_AGENT_SUBSYSTEM"
-	env := xunix.Environ(ctx)
-	existingSubsystem := ""
-	for _, e := range env {
-		if strings.HasPrefix(e, agentSubsystemEnv+"=") {
-			existingSubsystem = strings.TrimPrefix(e, agentSubsystemEnv+"=")
-			break
-		}
-	}
-
-	// We should append to the existing agent subsystem if it exists.
-	agentSubsystem := "envbox"
-	if existingSubsystem != "" {
-		split := strings.Split(existingSubsystem, ",")
-		split = append(split, "envbox")
-
-		tidy := make([]string, 0, len(split))
-		seen := make(map[string]struct{})
-		for _, s := range split {
-			s := strings.TrimSpace(s)
-			if _, ok := seen[s]; s == "" || ok {
-				continue
-			}
-			seen[s] = struct{}{}
-			tidy = append(tidy, s)
+func mustRestartDockerd(ctx context.Context, log slog.Logger, blog buildlog.Logger, dockerd *background.Process, options *dockerutil.DaemonOptions) func() {
+	return sync.OnceFunc(func() {
+		err := dockerd.KillAndWait()
+		if err != nil {
+			log.Error(ctx, "failed to kill dockerd", slog.Error(err))
 		}
 
-		sort.Strings(tidy)
-		agentSubsystem = strings.Join(tidy, ",")
-	}
+		dockerd, err = dockerutil.StartDaemon(ctx, log, options)
+		if err != nil {
+			log.Fatal(ctx, "failed to start dockerd", slog.Error(err))
+		}
 
-	return []string{
-		fmt.Sprintf("%s=%s", EnvAgentToken, agentToken),
-		fmt.Sprintf("%s=%s", "CODER_AGENT_SUBSYSTEM", agentSubsystem),
-	}
-}
-
-// defaultMounts are bind mounts that are always provided to the inner
-// container.
-func defaultMounts() []xunix.Mount {
-	return []xunix.Mount{
-		{
-			Source:     "/var/lib/coder/docker",
-			Mountpoint: "/var/lib/docker",
-		},
-		{
-			Source:     "/var/lib/coder/containers",
-			Mountpoint: "/var/lib/containers",
-		},
-	}
-}
-
-// isPrivateMount returns true if the provided mount points to a mount
-// private to the envbox container itself.
-func isPrivateMount(m xunix.Mount) bool {
-	_, ok := envboxPrivateMounts[m.Mountpoint]
-	return ok
-}
-
-func isHomeDir(fpath string) bool {
-	if fpath == "/root" {
-		return true
-	}
-
-	dir, _ := path.Split(fpath)
-	return dir == "/home/"
-}
-
-// shiftedID returns the ID but shifted to the user namespace offset we
-// use for the inner container.
-func shiftedID(id int) int {
-	return id + UserNamespaceOffset
+		go func() {
+			err := dockerd.Wait()
+			blog.Errorf("restarted dockerd exited: %v", err)
+			//nolint
+			log.Fatal(ctx, "restarted dockerd exited", slog.Error(err))
+		}()
+	})
 }

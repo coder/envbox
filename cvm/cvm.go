@@ -45,23 +45,19 @@ type Config struct {
 	OSEnvs     []string
 
 	// Optional fields.
-	BuildLog             buildlog.Logger
-	InnerEnvs            []string
-	WorkDir              string
-	Hostname             string
-	ImagePullSecret      string
-	CoderURL             string
-	AddTUN               bool
-	AddFUSE              bool
-	AddGPU               bool
-	BoostrapScript       string
-	Mounts               []xunix.Mount
-	HostUsrLibDir        string
-	DockerConfig         string
-	CPUS                 int
-	Memory               int
-	DisableIDMappedMount bool
-	ExtraCertsPath       string
+	BuildLog        buildlog.Logger
+	InnerEnvs       []string
+	WorkDir         string
+	Hostname        string
+	ImagePullSecret string
+	CoderURL        string
+	AddTUN          bool
+	AddFUSE         bool
+	BoostrapScript  string
+	Mounts          []xunix.Mount
+	DockerConfig    string
+	CPUS            int
+	Memory          int
 
 	// Test flags.
 	Debug         bool
@@ -81,13 +77,10 @@ func Run(ctx context.Context, log slog.Logger, xos xunix.OS, client dockerutil.C
 		slog.F("coder_url", cfg.CoderURL),
 		slog.F("add_tun", cfg.AddTUN),
 		slog.F("add_fuse", cfg.AddFUSE),
-		slog.F("add_gpu", cfg.AddGPU),
 		slog.F("host_usr_lib_dir", cfg.HostUsrLibDir),
 		slog.F("docker_config", cfg.DockerConfig),
 		slog.F("cpus", cfg.CPUS),
 		slog.F("memory", cfg.Memory),
-		slog.F("disable_id_mapped_mount", cfg.DisableIDMappedMount),
-		slog.F("extra_certs_path", cfg.ExtraCertsPath),
 		slog.F("mounts", cfg.Mounts),
 	)
 
@@ -113,7 +106,7 @@ func Run(ctx context.Context, log slog.Logger, xos xunix.OS, client dockerutil.C
 		}
 	}
 
-	envs := defaultContainerEnvs(ctx, cfg.OSEnvs, cfg.AgentToken)
+	envs := defaultContainerEnvs(cfg.OSEnvs, cfg.AgentToken)
 	envs = append(envs, filterEnvs(cfg.OSEnvs, cfg.InnerEnvs...)...)
 
 	mounts := append(defaultMounts(), cfg.Mounts...)
@@ -360,7 +353,7 @@ func filterEnvs(os []string, matches ...string) []string {
 	return filtered
 }
 
-func defaultContainerEnvs(ctx context.Context, osEnvs []string, agentToken string) []string {
+func defaultContainerEnvs(osEnvs []string, agentToken string) []string {
 	const agentSubsystemEnv = "CODER_AGENT_SUBSYSTEM"
 	existingSubsystem := ""
 	for _, e := range osEnvs {

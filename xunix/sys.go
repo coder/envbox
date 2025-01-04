@@ -21,6 +21,13 @@ type OS interface {
 
 var _ OS = &LinuxOS{}
 
+func NewLinuxOS() *LinuxOS {
+	return &LinuxOS{
+		FS:        &osFS{&afero.OsFs{}},
+		Interface: mount.New("/bin/mount"),
+	}
+}
+
 type LinuxOS struct {
 	FS
 	mount.Interface
