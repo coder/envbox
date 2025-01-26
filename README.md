@@ -86,3 +86,37 @@ env {
 >   }
 > }
 > ```
+
+## GPUs
+
+When passing through GPUs to the inner container, you may end up using associated tooling such as the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/index.html) or the [NVIDIA GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/index.html). These will inject required utilities and libraries inside the inner container. You can verify this by directly running (without Envbox) a barebones image like `debian:bookworm` and running `mount` or `nvidia-smi` inside the container.
+
+Envbox will detect these mounts and pass them inside the inner container it creates, so that GPU-aware tools run inside the inner container can still utilize these libraries.
+
+## Hacking
+
+Here's a simple one-liner to run the `codercom/enterprise-minimal:ubuntu` image in Envbox using Docker:
+
+```
+docker run -it --rm \
+  -v /tmp/envbox/docker:/var/lib/coder/docker \
+  -v /tmp/envbox/containers:/var/lib/coder/containers \
+  -v /tmp/envbox/sysbox:/var/lib/sysbox \
+  -v /tmp/envbox/docker:/var/lib/docker \
+  -v /usr/src:/usr/src:ro \
+  -v /lib/modules:/lib/modules:ro \
+  --privileged \
+  -e CODER_INNER_IMAGE=codercom/enterprise-minimal:ubuntu \
+  -e CODER_INNER_USERNAME=coder \
+  envbox:latest /envbox docker
+```
+
+This will store persistent data under `/tmp/envbox`.
+
+## Troubleshooting
+
+### `failed to write <number> to cgroup.procs: write /sys/fs/cgroup/docker/<id>/init.scope/cgroup.procs: operation not supported: unknown`
+
+This issue occurs in Docker if you have `cgroupns-mode` set to `private`. To validate, add `--cgroupns=host` to your `docker run` invocation and re-run.
+
+To permanently set this as the default in your Docker daemon, add `"default-cgroupns-mode": "host"` to your `/etc/docker/daemon.json` and restart Docker.

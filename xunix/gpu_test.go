@@ -56,13 +56,13 @@ func TestGPUs(t *testing.T) {
 			expectedUsrLibFiles = []string{
 				filepath.Join(usrLibMountpoint, "nvidia", "libglxserver_nvidia.so"),
 				filepath.Join(usrLibMountpoint, "libnvidia-ml.so"),
+				filepath.Join(usrLibMountpoint, "nvidia", "libglxserver_nvidia.so.1"),
 			}
 
 			// fakeUsrLibFiles are files that should be written to the "mounted"
 			// /usr/lib directory. It includes files that shouldn't be returned.
 			fakeUsrLibFiles = append([]string{
 				filepath.Join(usrLibMountpoint, "libcurl-gnutls.so"),
-				filepath.Join(usrLibMountpoint, "nvidia", "libglxserver_nvidia.so.1"),
 			}, expectedUsrLibFiles...)
 		)
 
@@ -98,7 +98,7 @@ func TestGPUs(t *testing.T) {
 		devices, binds, err := xunix.GPUs(ctx, log, usrLibMountpoint)
 		require.NoError(t, err)
 		require.Len(t, devices, 2, "unexpected 2 nvidia devices")
-		require.Len(t, binds, 3, "expected 4 nvidia binds")
+		require.Len(t, binds, 4, "expected 4 nvidia binds")
 		require.Contains(t, binds, mount.MountPoint{
 			Device: "/dev/sda1",
 			Path:   "/usr/local/nvidia",
