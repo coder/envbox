@@ -240,28 +240,53 @@ func TestDocker(t *testing.T) {
 		require.Equal(t, "1000", strings.TrimSpace(string(out)))
 
 		// Validate that memory limit is being applied to the inner container.
-		out, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+		// First check under cgroupv2 path.
+		if out, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
 			ContainerID: resource.Container.ID,
-			Cmd:         []string{"cat", "/sys/fs/cgroup/memory/memory.limit_in_bytes"},
-		})
-		require.NoError(t, err)
-		require.Equal(t, expectedMemoryLimit, strings.TrimSpace(string(out)))
+			Cmd:         []string{"cat", "/sys/fs/cgroup/memory.max"},
+		}); err == nil {
+			require.Equal(t, expectedMemoryLimit, strings.TrimSpace(string(out)))
+		} else { // fall back to cgroupv1 path.
+			out, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+				ContainerID: resource.Container.ID,
+				Cmd:         []string{"cat", "/sys/fs/cgroup/memory/memory.limit_in_bytes"},
+			})
+			require.NoError(t, err)
+			require.Equal(t, expectedMemoryLimit, strings.TrimSpace(string(out)))
+		}
 
-		periodStr, err := integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+		// Validate the cpu limits are being applied to the inner container.
+		// First check under cgroupv2 path.
+		var quota, period int64
+		if out, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
 			ContainerID: resource.Container.ID,
-			Cmd:         []string{"cat", "/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_period_us"},
-		})
-		require.NoError(t, err)
-		period, err := strconv.ParseInt(strings.TrimSpace(string(periodStr)), 10, 64)
-		require.NoError(t, err)
+			Cmd:         []string{"cat", "/sys/fs/cgroup/cpu.max"},
+		}); err == nil {
+			// out is in the format "period quota"
+			// e.g. "100000 100000"
+			fields := strings.Fields(string(out))
+			require.Len(t, fields, 2)
+			period, err = strconv.ParseInt(fields[0], 10, 64)
+			require.NoError(t, err)
+			quota, err = strconv.ParseInt(fields[1], 10, 64)
+			require.NoError(t, err)
+		} else { // fall back to cgroupv1 path.
+			periodStr, err := integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+				ContainerID: resource.Container.ID,
+				Cmd:         []string{"cat", "/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_period_us"},
+			})
+			require.NoError(t, err)
+			period, err = strconv.ParseInt(strings.TrimSpace(string(periodStr)), 10, 64)
+			require.NoError(t, err)
 
-		quotaStr, err := integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
-			ContainerID: resource.Container.ID,
-			Cmd:         []string{"cat", "/sys/fs/cgroup/cpu/cpu.cfs_quota_us"},
-		})
-		require.NoError(t, err)
-		quota, err := strconv.ParseInt(strings.TrimSpace(string(quotaStr)), 10, 64)
-		require.NoError(t, err)
+			quotaStr, err := integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+				ContainerID: resource.Container.ID,
+				Cmd:         []string{"cat", "/sys/fs/cgroup/cpu/cpu.cfs_quota_us"},
+			})
+			require.NoError(t, err)
+			quota, err = strconv.ParseInt(strings.TrimSpace(string(quotaStr)), 10, 64)
+			require.NoError(t, err)
+		}
 
 		// Validate that the CPU limit is being applied to the inner container.
 		actualLimit := float64(quota) / float64(period)

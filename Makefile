@@ -32,3 +32,11 @@ fmt/go:
 .PHONY: fmt/md
 fmt/md:
 	go run github.com/Kunde21/markdownfmt/v3/cmd/markdownfmt@v3.1.0 -w ./README.md
+
+.PHONY: test
+test:
+	go test -v -count=1 ./...
+
+.PHONY: test-integration
+test-integration:
+	go test -v -count=1 -tags=integration ./integration/
