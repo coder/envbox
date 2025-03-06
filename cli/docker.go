@@ -621,9 +621,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 			if strings.HasPrefix(mountpoint, flags.hostUsrLibDir) {
 				mountpoint = filepath.Join(
 					// Note: we used to mount into /usr/lib, but this can change
-					// based on the distro inside the container. We are essentially
-					// mimicking the behavior of the nvidia container runtime.
-					imgMeta.UsrLibDir,
+					// based on the distro inside the container.
+					imgMeta.UsrLibDir(),
 					strings.TrimPrefix(mountpoint, strings.TrimSuffix(flags.hostUsrLibDir, "/")),
 				)
 			}

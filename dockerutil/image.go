@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	goruntime "runtime"
 	"strings"
 	"time"
 
@@ -22,18 +23,27 @@ import (
 
 const diskFullStorageDriver = "vfs"
 
-// Adapted from github.com/NVIDIA/nvidia-container-toolkit/internal/lookup/library.go
-// These are destination candidates for the /usr/lib directory in the container,
-// in order of priority.
-// Depending on the inner image, the desired location may vary.
-// Note that we are excluding some nvidia-specific directories here and also
-// include a fallback to /usr/lib.
-var usrLibCandidates = []string{
-	"/usr/lib/x86_64-linux-gnu",  // Debian uses a multiarch /usr/lib directory
-	"/usr/lib/aarch64-linux-gnu", // Above but for arm64.
-	"/usr/lib64",                 // Red Hat and friends.
-	"/usr/lib",                   // Fallback.
+var usrLibMultiarchDir = map[string]string{
+	"arm64": "/usr/lib/aarch64-linux-gnu",
+	"amd64": "/usr/lib/x86_64-linux-gnu",
 }
+
+// Adapted from https://github.com/NVIDIA/libnvidia-container/blob/v1.15.0/src/nvc_container.c#L152-L165
+var usrLibDirs = map[string]string{
+	// Debian-based distros use a multi-arch directory.
+	"debian": usrLibMultiarchDir[goruntime.GOARCH],
+	"ubuntu": usrLibMultiarchDir[goruntime.GOARCH],
+	// Fedora and Redhat use the standard /usr/lib64.
+	"fedora": "/usr/lib64",
+	"redhat": "/usr/lib64",
+	// Fall back to the standard /usr/lib.
+	"linux": "/usr/lib",
+}
+
+// /etc/os-release is the standard location for system identification data on
+// Linux systems running systemd.
+// Ref: https://www.freedesktop.org/software/systemd/man/latest/os-release.html
+var etcOsRelease = "/etc/os-release"
 
 type PullImageConfig struct {
 	Client     Client
@@ -161,11 +171,11 @@ func processImagePullEvents(r io.Reader, fn ImagePullProgressFn) error {
 }
 
 type ImageMetadata struct {
-	UID       string
-	GID       string
-	HomeDir   string
-	HasInit   bool
-	UsrLibDir string
+	UID         string
+	GID         string
+	HomeDir     string
+	HasInit     bool
+	OsReleaseID string
 }
 
 // GetImageMetadata returns metadata about an image such as the UID/GID of the
@@ -240,30 +250,46 @@ func GetImageMetadata(ctx context.Context, client Client, img, username string) 
 		return ImageMetadata{}, xerrors.Errorf("no users returned for username %s", username)
 	}
 
-	// Find the "best" usr lib directory for the container.
-	var foundUsrLibDir string
-	for _, candidate := range usrLibCandidates {
-		_, err := ExecContainer(ctx, client, ExecConfig{
-			ContainerID: inspect.ID,
-			Cmd:         "stat",
-			Args:        []string{candidate},
-		})
-		if err == nil {
-			foundUsrLibDir = candidate
+	// Read the /etc/os-release file to get the ID of the OS.
+	out, err = ExecContainer(ctx, client, ExecConfig{
+		ContainerID: inspect.ID,
+		Cmd:         "cat",
+		Args:        []string{etcOsRelease},
+	})
+	if err != nil {
+		return ImageMetadata{}, xerrors.Errorf("read /etc/os-release: %w", err)
+	}
+	// We only care about the ID field.
+	osReleaseID := ""
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "ID=") {
+			osReleaseID = strings.TrimPrefix(line, "ID=")
+			// The value may be quoted.
+			osReleaseID = strings.Trim(osReleaseID, "\"")
 			break
 		}
 	}
-	if foundUsrLibDir == "" {
-		return ImageMetadata{}, xerrors.Errorf("no eligible /usr/lib directory found in container")
+	if osReleaseID == "" {
+		// The default value is just "linux" if we can't find the ID.
+		osReleaseID = "linux"
 	}
 
 	return ImageMetadata{
-		UID:       users[0].Uid,
-		GID:       users[0].Gid,
-		HomeDir:   users[0].HomeDir,
-		HasInit:   initExists,
-		UsrLibDir: foundUsrLibDir,
+		UID:         users[0].Uid,
+		GID:         users[0].Gid,
+		HomeDir:     users[0].HomeDir,
+		HasInit:     initExists,
+		OsReleaseID: osReleaseID,
 	}, nil
+}
+
+// UsrLibDir returns the path to the /usr/lib directory for the given
+// operating system determined by the /etc/os-release file.
+func (im ImageMetadata) UsrLibDir() string {
+	if val, ok := usrLibDirs[im.OsReleaseID]; ok {
+		return val
+	}
+	return usrLibDirs["linux"] // fallback
 }
 
 func DefaultLogImagePullFn(log buildlog.Logger) func(ImagePullEvent) error {
