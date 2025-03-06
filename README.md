@@ -21,6 +21,7 @@ The environment variables can be used to configure various aspects of the inner 
 | `CODER_DOCKER_BRIDGE_CIDR`     | The bridge CIDR to start the Docker daemon with.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | false    |
 | `CODER_MOUNTS`                 | A list of mounts to mount into the inner container. Mounts default to `rw`. Ex: `CODER_MOUNTS=/home/coder:/home/coder,/var/run/mysecret:/var/run/mysecret:ro`                                                                                                                                                                                                                                                                                                                                                                  | false    |
 | `CODER_USR_LIB_DIR`            | The mountpoint of the host `/usr/lib` directory. Only required when using GPUs.                                                                                                                                                                                                                                                                                                                                                                                                                                                | false    |
+| `CODER_INNER_USR_LIB_DIR`      | The inner /usr/lib mountpoint. This is automatically detected based on `/etc/os-release` in the inner image, but may optionally be overridden.                                                                                                                                                                                                                                                                                                                                                                                 | false    |
 | `CODER_ADD_TUN`                | If `CODER_ADD_TUN=true` add a TUN device to the inner container.                                                                                                                                                                                                                                                                                                                                                                                                                                                               | false    |
 | `CODER_ADD_FUSE`               | If `CODER_ADD_FUSE=true` add a FUSE device to the inner container.                                                                                                                                                                                                                                                                                                                                                                                                                                                             | false    |
 | `CODER_ADD_GPU`                | If `CODER_ADD_GPU=true` add detected GPUs and related files to the inner container. Requires setting `CODER_USR_LIB_DIR` and mounting in the hosts `/usr/lib/` directory.                                                                                                                                                                                                                                                                                                                                                      | false    |
@@ -43,7 +44,7 @@ It is not possible to develop `envbox` effectively using a containerized environ
 
 If a login is required to pull images from a private repository, create a secret following the instructions from the [Kubernetes Documentation](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#create-a-secret-by-providing-credentials-on-the-command-line) as such:
 
-```
+```shell
 kubectl -n <coder namespace> create secret docker-registry regcred \
         --docker-server=<your-registry-server> \
         --docker-username=<your-name> \
@@ -53,7 +54,7 @@ kubectl -n <coder namespace> create secret docker-registry regcred \
 
 Then reference the secret in your template as such:
 
-```
+```shell
 env {
   name = "CODER_IMAGE_PULL_SECRET"
   value_from {
@@ -98,6 +99,7 @@ Here's an example Docker command to run a GPU-enabled workload in Envbox. Note t
 1) The NVidia container runtime must be installed on the host (`--runtime=nvidia`).
 2) `CODER_ADD_GPU=true` must be set to enable GPU-specific functionality.
 3) When `CODER_ADD_GPU` is set, it is required to also set `CODER_USR_LIB_DIR` to a location where the relvant host directory has been mounted inside the outer container. In the below example, this is `/usr/lib/x86_64-linux-gnu` on the underlying host. It is mounted into the container under the path `/var/coder/usr/lib`. We then set `CODER_USR_LIB_DIR=/var/coder/usr/lib`. The actual location inside the container is not important **as long as it does not overwrite any pre-existing directories containing system libraries**.
+4) The location to mount the libraries in the inner container is determined by the distribution ID in the `/etc/os-release` of the inner container. If the automatically determined location is incorrect, you can set it manually via `CODER_INNER_USR_LIB_DIR`.
 
    > Note: this step is required in case user workloads require libraries from the underlying host that are not added in by the container runtime.
 

@@ -98,6 +98,7 @@ var (
 	EnvMemory               = "CODER_MEMORY"
 	EnvAddGPU               = "CODER_ADD_GPU"
 	EnvUsrLibDir            = "CODER_USR_LIB_DIR"
+	EnvInnerUsrLibDir       = "CODER_INNER_USR_LIB_DIR"
 	EnvDockerConfig         = "CODER_DOCKER_CONFIG"
 	EnvDebug                = "CODER_DEBUG"
 	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
@@ -135,6 +136,7 @@ type flags struct {
 	boostrapScript       string
 	containerMounts      string
 	hostUsrLibDir        string
+	innerUsrLibDir       string
 	dockerConfig         string
 	cpus                 int
 	memory               int
@@ -370,6 +372,7 @@ func dockerCmd() *cobra.Command {
 	cliflag.StringVarP(cmd.Flags(), &flags.boostrapScript, "boostrap-script", "", EnvBootstrap, "", "The script to use to bootstrap the container. This should typically install and start the agent.")
 	cliflag.StringVarP(cmd.Flags(), &flags.containerMounts, "mounts", "", EnvMounts, "", "Comma separated list of mounts in the form of '<source>:<target>[:options]' (e.g. /var/lib/docker:/var/lib/docker:ro,/usr/src:/usr/src).")
 	cliflag.StringVarP(cmd.Flags(), &flags.hostUsrLibDir, "usr-lib-dir", "", EnvUsrLibDir, "", "The host /usr/lib mountpoint. Used to detect GPU drivers to mount into inner container.")
+	cliflag.StringVarP(cmd.Flags(), &flags.innerUsrLibDir, "inner-usr-lib-dir", "", EnvInnerUsrLibDir, "", "The inner /usr/lib mountpoint. This is automatically detected based on /etc/os-release in the inner image, but may optionally be overridden.")
 	cliflag.StringVarP(cmd.Flags(), &flags.dockerConfig, "docker-config", "", EnvDockerConfig, "/root/.docker/config.json", "The path to the docker config to consult when pulling an image.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.addTUN, "add-tun", "", EnvAddTun, false, "Add a TUN device to the inner container.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.addFUSE, "add-fuse", "", EnvAddFuse, false, "Add a FUSE device to the inner container.")
@@ -616,6 +619,13 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 			})
 		}
 
+		innerUsrLibDir := imgMeta.UsrLibDir()
+		if flags.innerUsrLibDir != "" {
+			log.Info(ctx, "overriding auto-detected inner usr lib dir ",
+				slog.F("before", innerUsrLibDir),
+				slog.F("after", flags.innerUsrLibDir))
+			innerUsrLibDir = flags.innerUsrLibDir
+		}
 		for _, bind := range binds {
 			// If the bind has a path that points to the host-mounted /usr/lib
 			// directory we need to remap it to /usr/lib inside the container.
@@ -624,7 +634,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 				mountpoint = filepath.Join(
 					// Note: we used to mount into /usr/lib, but this can change
 					// based on the distro inside the container.
-					imgMeta.UsrLibDir(),
+					innerUsrLibDir,
 					strings.TrimPrefix(mountpoint, strings.TrimSuffix(flags.hostUsrLibDir, "/")),
 				)
 			}
