@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -39,6 +40,7 @@ func GPUEnvs(ctx context.Context) []string {
 
 func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []mount.MountPoint, error) {
 	var (
+		afs     = GetFS(ctx)
 		mounter = Mounter(ctx)
 		devices = []Device{}
 		binds   = []mount.MountPoint{}
@@ -63,7 +65,19 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []m
 			}
 
 			// If it's not in /dev treat it as a bind mount.
+			links, err := SameDirSymlinks(afs, m.Path)
 			binds = append(binds, m)
+			if err != nil {
+				log.Error(ctx, "find symlinks", slog.F("path", m.Path), slog.Error(err))
+			} else {
+				for _, link := range links {
+					log.Debug(ctx, "found symlink", slog.F("link", link), slog.F("target", m.Path))
+					binds = append(binds, mount.MountPoint{
+						Path: link,
+						Opts: []string{"ro"},
+					})
+				}
+			}
 		}
 	}
 
@@ -174,6 +188,68 @@ func recursiveSymlinks(afs FS, mountpoint string, path string) ([]string, error)
 	}
 
 	return paths, nil
+}
+
+// SameDirSymlinks returns all links in the same directory as `target` that
+// point to target, either indirectly or directly. Only symlinks in the same
+// directory as `target` are considered.
+func SameDirSymlinks(afs FS, target string) ([]string, error) {
+	var (
+		found         = make([]string, 0)
+		maxIterations = 10 // arbitrary upper limit to prevent infinite loops
+	)
+	for range maxIterations {
+		foundThisTime := false
+		fis, err := afero.ReadDir(afs, filepath.Dir(target))
+		if err != nil {
+			return nil, xerrors.Errorf("read dir %q: %w", filepath.Dir(target), err)
+		}
+		for _, fi := range fis {
+			// Ignore the target itself.
+			if fi.Name() == filepath.Base(target) {
+				continue
+			}
+			// Ignore non-symlinks.
+			if fi.Mode()&os.ModeSymlink == 0 {
+				continue
+			}
+			// Get the target of the symlink.
+			link, err := afs.Readlink(filepath.Join(filepath.Dir(target), fi.Name()))
+			if err != nil {
+				return nil, xerrors.Errorf("readlink %q: %w", fi.Name(), err)
+			}
+			// Make the link absolute.
+			if !filepath.IsAbs(link) {
+				link = filepath.Join(filepath.Dir(target), link)
+			}
+			// Ignore symlinks that point outside of target's directory.
+			if filepath.Dir(link) != filepath.Dir(target) {
+				continue
+			}
+
+			// Check if the symlink points to to the target, or if it points
+			// to one of the symlinks we've already found.
+			if link != target {
+				if !slices.Contains(found, link) {
+					continue
+				}
+			}
+
+			// Have we already seen this target?
+			fullPath := filepath.Join(filepath.Dir(target), fi.Name())
+			if slices.Contains(found, fullPath) {
+				continue
+			}
+
+			found = append(found, filepath.Join(filepath.Dir(target), fi.Name()))
+			foundThisTime = true
+		}
+		// If we didn't find any symlinks this time, we're done.
+		if !foundThisTime {
+			break
+		}
+	}
+	return found, nil
 }
 
 // TryUnmountProcGPUDrivers unmounts any GPU-related mounts under /proc as it causes

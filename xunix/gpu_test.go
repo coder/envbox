@@ -2,10 +2,13 @@ package xunix_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/spf13/afero"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/mount-utils"
 
@@ -111,4 +114,104 @@ func TestGPUs(t *testing.T) {
 			})
 		}
 	})
+}
+
+func Test_SameDirSymlinks(t *testing.T) {
+	t.Parallel()
+
+	var (
+		ctx = context.Background()
+		// We need to test with a real filesystem as the fake one doesn't
+		// support creating symlinks.
+		tmpDir = t.TempDir()
+		// We do test with the interface though!
+		afs = xunix.GetFS(ctx)
+	)
+
+	// Create some files in the temporary directory.
+	_, err := os.Create(filepath.Join(tmpDir, "file1.real"))
+	require.NoError(t, err, "create file")
+	_, err = os.Create(filepath.Join(tmpDir, "file2.real"))
+	require.NoError(t, err, "create file2")
+	_, err = os.Create(filepath.Join(tmpDir, "file3.real"))
+	require.NoError(t, err, "create file3")
+	_, err = os.Create(filepath.Join(tmpDir, "file4.real"))
+	require.NoError(t, err, "create file4")
+
+	// Create a symlink to the file in the temporary directory.
+	// This needs to be done by the real os package.
+	err = os.Symlink(filepath.Join(tmpDir, "file1.real"), filepath.Join(tmpDir, "file1.link1"))
+	require.NoError(t, err, "create first symlink")
+
+	// Create another symlink to the previous symlink.
+	err = os.Symlink(filepath.Join(tmpDir, "file1.link1"), filepath.Join(tmpDir, "file1.link2"))
+	require.NoError(t, err, "create second symlink")
+
+	// Create a symlink to a file outside of the temporary directory.
+	err = os.MkdirAll(filepath.Join(tmpDir, "dir"), 0o755)
+	require.NoError(t, err, "create dir")
+	// Create a symlink from file2 to inside the dir.
+	err = os.Symlink(filepath.Join(tmpDir, "file2.real"), filepath.Join(tmpDir, "dir", "file2.link1"))
+	require.NoError(t, err, "create dir symlink")
+
+	// Create a symlink with a relative path. To do this, we need to
+	// change the working directory to the temporary directory.
+	oldWorkingDir, err := os.Getwd()
+	require.NoError(t, err, "get working dir")
+	// Change the working directory to the temporary directory.
+	require.NoError(t, os.Chdir(tmpDir), "change working dir")
+	err = os.Symlink(filepath.Join(tmpDir, "file4.real"), "file4.link1")
+	require.NoError(t, err, "create relative symlink")
+	// Change the working directory back to the original.
+	require.NoError(t, os.Chdir(oldWorkingDir), "change working dir back")
+
+	for _, tt := range []struct {
+		name     string
+		expected []string
+	}{
+		{
+			// Two symlinks to the same file.
+			name: "file1.real",
+			expected: []string{
+				filepath.Join(tmpDir, "file1.link1"),
+				filepath.Join(tmpDir, "file1.link2"),
+			},
+		},
+		{
+			// Mid-way in the symlink chain.
+			name: "file1.link1",
+			expected: []string{
+				filepath.Join(tmpDir, "file1.link2"),
+			},
+		},
+		{
+			// End of the symlink chain.
+			name:     "file1.link2",
+			expected: []string{},
+		},
+		{
+			// Symlink to a file outside of the temporary directory.
+			name:     "file2.real",
+			expected: []string{},
+		},
+		{
+			// No symlinks to this file.
+			name:     "file3.real",
+			expected: []string{},
+		},
+		{
+			// One relative symlink.
+			name:     "file4.real",
+			expected: []string{filepath.Join(tmpDir, "file4.link1")},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fullPath := filepath.Join(tmpDir, tt.name)
+			actual, err := xunix.SameDirSymlinks(afs, fullPath)
+			require.NoError(t, err, "find symlink")
+			sort.Strings(actual)
+			assert.Equal(t, tt.expected, actual, "find symlinks %q", tt.name)
+		})
+	}
 }
