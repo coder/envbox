@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	goruntime "runtime"
 	"strings"
 	"time"
 
@@ -24,16 +23,11 @@ import (
 
 const diskFullStorageDriver = "vfs"
 
-var usrLibMultiarchDir = map[string]string{
-	"arm64": "/usr/lib/aarch64-linux-gnu",
-	"amd64": "/usr/lib/x86_64-linux-gnu",
-}
-
 // Adapted from https://github.com/NVIDIA/libnvidia-container/blob/v1.15.0/src/nvc_container.c#L152-L165
 var UsrLibDirs = map[string]string{
 	// Debian-based distros use a multi-arch directory.
-	"debian": usrLibMultiarchDir[goruntime.GOARCH],
-	"ubuntu": usrLibMultiarchDir[goruntime.GOARCH],
+	"debian": usrLibMultiarchDir,
+	"ubuntu": usrLibMultiarchDir,
 	// Fedora and Redhat use the standard /usr/lib64.
 	"fedora": "/usr/lib64",
 	"rhel":   "/usr/lib64",
