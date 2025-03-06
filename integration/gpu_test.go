@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/envbox/integration/integrationtest"
@@ -41,8 +42,7 @@ func TestDocker_Nvidia(t *testing.T) {
 		)
 
 		// Assert that we can run nvidia-smi in the inner container.
-		_, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "nvidia-smi")
-		require.NoError(t, err, "failed to run nvidia-smi in the inner container")
+		assertInnerNvidiaSMI(ctx, t, ctID)
 	})
 
 	t.Run("Redhat", func(t *testing.T) {
@@ -52,16 +52,21 @@ func TestDocker_Nvidia(t *testing.T) {
 
 		// Start the envbox container.
 		ctID := startEnvboxCmd(ctx, t, integrationtest.RedhatImage, "root",
-			"-v", "/usr/lib/x86_64-linux-gnu:/var/coder/usr/lib64",
+			"-v", "/usr/lib/x86_64-linux-gnu:/var/coder/usr/lib",
 			"--env", "CODER_ADD_GPU=true",
-			"--env", "CODER_USR_LIB_DIR=/var/coder/usr/lib64",
+			"--env", "CODER_USR_LIB_DIR=/var/coder/usr/lib",
 			"--runtime=nvidia",
 			"--gpus=all",
 		)
 
 		// Assert that we can run nvidia-smi in the inner container.
-		_, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "nvidia-smi")
-		require.NoError(t, err, "failed to run nvidia-smi in the inner container")
+		assertInnerNvidiaSMI(ctx, t, ctID)
+
+		// Make sure dnf still works.
+		out, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "dnf", "list")
+		if !assert.NoError(t, err, "failed to run dnf in the inner container") {
+			t.Logf("dnf output:\n%s", strings.TrimSpace(out))
+		}
 	})
 
 	t.Run("InnerUsrLibDirOverride", func(t *testing.T) {
@@ -79,10 +84,34 @@ func TestDocker_Nvidia(t *testing.T) {
 			"--gpus=all",
 		)
 
-		// Assert that the libraries end up in the expected location in the inner container.
-		out, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "ls", "-l", "/usr/lib/coder")
+		// Assert that the libraries end up in the expected location in the inner
+		// container.
+		out, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "ls", "-1", "/usr/lib/coder")
 		require.NoError(t, err, "inner usr lib dir override failed")
 		require.Regexp(t, `(?i)(libgl|nvidia|vulkan|cuda)`, out)
+	})
+
+	t.Run("EmptyHostUsrLibDir", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		emptyUsrLibDir := t.TempDir()
+
+		// Start the envbox container.
+		ctID := startEnvboxCmd(ctx, t, integrationtest.UbuntuImage, "root",
+			"-v", emptyUsrLibDir+":/var/coder/usr/lib",
+			"--env", "CODER_ADD_GPU=true",
+			"--env", "CODER_USR_LIB_DIR=/var/coder/usr/lib",
+			"--runtime=nvidia",
+			"--gpus=all",
+		)
+
+		ofs := outerFiles(ctx, t, ctID, "/usr/lib/x86_64-linux-gnu/libnv*")
+		// Assert invariant: the outer container has the files we expect.
+		require.NotEmpty(t, ofs, "failed to list outer container files")
+		// Assert that expected files are available in the inner container.
+		assertInnerFiles(ctx, t, ctID, "/usr/lib/x86_64-linux-gnu/libnv*", ofs...)
+		assertInnerNvidiaSMI(ctx, t, ctID)
 	})
 }
 
@@ -99,6 +128,49 @@ func dockerRuntimes(t *testing.T) []string {
 	require.NoError(t, err, "failed to get docker runtimes: %s", out)
 	raw := strings.TrimSpace(string(out))
 	return strings.Split(raw, "\n")
+}
+
+// outerFiles returns the list of files in the outer container matching the
+// given pattern. It does this by running `ls -1` in the outer container.
+func outerFiles(ctx context.Context, t *testing.T, containerID, pattern string) []string {
+	t.Helper()
+	// We need to use /bin/sh -c to avoid the shell interpreting the glob.
+	out, err := execContainerCmd(ctx, t, containerID, "/bin/sh", "-c", "ls -1 "+pattern)
+	require.NoError(t, err, "failed to list outer container files")
+	files := strings.Split(strings.TrimSpace(out), "\n")
+	slices.Sort(files)
+	return files
+}
+
+// assertInnerFiles checks that all the files matching the given pattern exist in the
+// inner container.
+func assertInnerFiles(ctx context.Context, t *testing.T, containerID, pattern string, expected ...string) {
+	t.Helper()
+
+	// Get the list of files in the inner container.
+	// We need to use /bin/sh -c to avoid the shell interpreting the glob.
+	out, err := execContainerCmd(ctx, t, containerID, "docker", "exec", "workspace_cvm", "/bin/sh", "-c", "ls -1 "+pattern)
+	require.NoError(t, err, "failed to list inner container files")
+	innerFiles := strings.Split(strings.TrimSpace(out), "\n")
+
+	// Check that the expected files exist in the inner container.
+	missingFiles := make([]string, 0)
+	for _, expectedFile := range expected {
+		if !slices.Contains(innerFiles, expectedFile) {
+			missingFiles = append(missingFiles, expectedFile)
+		}
+	}
+	require.Empty(t, missingFiles, "missing files in inner container: %s", strings.Join(missingFiles, ", "))
+}
+
+// assertInnerNvidiaSMI checks that nvidia-smi runs successfully in the inner
+// container.
+func assertInnerNvidiaSMI(ctx context.Context, t *testing.T, containerID string) {
+	t.Helper()
+	// Assert that we can run nvidia-smi in the inner container.
+	out, err := execContainerCmd(ctx, t, containerID, "docker", "exec", "workspace_cvm", "nvidia-smi")
+	require.NoError(t, err, "failed to run nvidia-smi in the inner container")
+	require.Contains(t, out, "NVIDIA-SMI", "nvidia-smi output does not contain NVIDIA-SMI")
 }
 
 // startEnvboxCmd starts the envbox container with the given arguments.
