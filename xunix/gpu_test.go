@@ -62,11 +62,17 @@ func TestGPUs(t *testing.T) {
 				filepath.Join(usrLibMountpoint, "nvidia", "libglxserver_nvidia.so.1"),
 			}
 
-			// fakeUsrLibFiles are files that should be written to the "mounted"
-			// /usr/lib directory. It includes files that shouldn't be returned.
-			fakeUsrLibFiles = append([]string{
+			// fakeUsrLibFiles are files that we do not expect to be returned
+			// bind mounts for.
+			fakeUsrLibFiles = []string{
 				filepath.Join(usrLibMountpoint, "libcurl-gnutls.so"),
-			}, expectedUsrLibFiles...)
+				filepath.Join(usrLibMountpoint, "libglib.so"),
+			}
+
+			// allUsrLibFiles are all the files that should be written to the
+			// "mounted" /usr/lib directory. It includes files that shouldn't
+			// be returned.
+			allUsrLibFiles = append(expectedUsrLibFiles, fakeUsrLibFiles...)
 		)
 
 		ctx := xunix.WithFS(context.Background(), fs)
@@ -93,15 +99,19 @@ func TestGPUs(t *testing.T) {
 		err := fs.MkdirAll(filepath.Join(usrLibMountpoint, "nvidia"), 0o755)
 		require.NoError(t, err)
 
-		for _, file := range fakeUsrLibFiles {
+		for _, file := range allUsrLibFiles {
 			_, err = fs.Create(file)
+			require.NoError(t, err)
+		}
+		for _, mp := range mounter.MountPoints {
+			_, err = fs.Create(mp.Path)
 			require.NoError(t, err)
 		}
 
 		devices, binds, err := xunix.GPUs(ctx, log, usrLibMountpoint)
 		require.NoError(t, err)
 		require.Len(t, devices, 2, "unexpected 2 nvidia devices")
-		require.Len(t, binds, 4, "expected 4 nvidia binds")
+		require.Len(t, binds, 5, "expected 5 nvidia binds")
 		require.Contains(t, binds, mount.MountPoint{
 			Device: "/dev/sda1",
 			Path:   "/usr/local/nvidia",
@@ -109,6 +119,12 @@ func TestGPUs(t *testing.T) {
 		})
 		for _, file := range expectedUsrLibFiles {
 			require.Contains(t, binds, mount.MountPoint{
+				Path: file,
+				Opts: []string{"ro"},
+			})
+		}
+		for _, file := range fakeUsrLibFiles {
+			require.NotContains(t, binds, mount.MountPoint{
 				Path: file,
 				Opts: []string{"ro"},
 			})

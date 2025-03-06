@@ -18,10 +18,9 @@ import (
 )
 
 var (
-	gpuMountRegex     = regexp.MustCompile("(?i)(nvidia|vulkan|cuda)")
-	gpuExtraRegex     = regexp.MustCompile("(?i)(libgl|nvidia|vulkan|cuda)")
-	gpuEnvRegex       = regexp.MustCompile("(?i)nvidia")
-	sharedObjectRegex = regexp.MustCompile(`\.so(\.[0-9\.]+)?$`)
+	gpuMountRegex = regexp.MustCompile(`(?i)(nvidia|vulkan|cuda)`)
+	gpuExtraRegex = regexp.MustCompile(`(?i)(libgl(e|sx|\.)|nvidia|vulkan|cuda)`)
+	gpuEnvRegex   = regexp.MustCompile(`(?i)nvidia`)
 )
 
 func GPUEnvs(ctx context.Context) []string {
@@ -65,8 +64,12 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []m
 			}
 
 			// If it's not in /dev treat it as a bind mount.
-			links, err := SameDirSymlinks(afs, m.Path)
 			binds = append(binds, m)
+			// We also want to find any symlinks that point to the target.
+			// This is important for the nvidia driver as it mounts the driver
+			// files with the driver version appended to the end, and creates
+			// symlinks that point to the actual files.
+			links, err := SameDirSymlinks(afs, m.Path)
 			if err != nil {
 				log.Error(ctx, "find symlinks", slog.F("path", m.Path), slog.Error(err))
 			} else {
@@ -118,7 +121,7 @@ func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]mount
 				return nil
 			}
 
-			if !sharedObjectRegex.MatchString(path) || !gpuExtraRegex.MatchString(path) {
+			if !gpuExtraRegex.MatchString(path) {
 				return nil
 			}
 
