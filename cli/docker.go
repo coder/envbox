@@ -526,7 +526,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	// of the user so that we can chown directories to the namespaced UID inside
 	// the inner container as well as whether we should be starting the container
 	// with /sbin/init or something simple like 'sleep infinity'.
-	imgMeta, err := dockerutil.GetImageMetadata(ctx, client, flags.innerImage, flags.innerUsername)
+	imgMeta, err := dockerutil.GetImageMetadata(ctx, log, client, flags.innerImage, flags.innerUsername)
 	if err != nil {
 		return xerrors.Errorf("get image metadata: %w", err)
 	}

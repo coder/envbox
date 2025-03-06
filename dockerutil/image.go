@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"cdr.dev/slog"
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -180,7 +181,7 @@ type ImageMetadata struct {
 
 // GetImageMetadata returns metadata about an image such as the UID/GID of the
 // provided username and whether it contains an /sbin/init that we should run.
-func GetImageMetadata(ctx context.Context, client Client, img, username string) (ImageMetadata, error) {
+func GetImageMetadata(ctx context.Context, log slog.Logger, client Client, img, username string) (ImageMetadata, error) {
 	// Creating a dummy container to inspect the filesystem.
 	created, err := client.ContainerCreate(ctx,
 		&container.Config{
@@ -258,7 +259,11 @@ func GetImageMetadata(ctx context.Context, client Client, img, username string) 
 		Cmd:         "cat",
 		Args:        []string{etcOsRelease},
 	})
-	if err == nil {
+	if err != nil {
+		log.Error(ctx, "read os-release", slog.Error(err))
+		log.Error(ctx, "falling back to linux for os-release ID")
+		osReleaseID = "linux"
+	} else {
 		osReleaseID = GetOSReleaseID(out)
 	}
 
@@ -274,7 +279,7 @@ func GetImageMetadata(ctx context.Context, client Client, img, username string) 
 // UsrLibDir returns the path to the /usr/lib directory for the given
 // operating system determined by the /etc/os-release file.
 func (im ImageMetadata) UsrLibDir() string {
-	if val, ok := UsrLibDirs[im.OsReleaseID]; ok {
+	if val, ok := UsrLibDirs[im.OsReleaseID]; ok && val != "" {
 		return val
 	}
 	return UsrLibDirs["linux"] // fallback
