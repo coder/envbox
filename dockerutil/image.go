@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"cdr.dev/slog"
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"golang.org/x/xerrors"
+
+	"cdr.dev/slog"
 
 	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/xunix"
