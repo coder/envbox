@@ -22,7 +22,7 @@ import (
 func TestDocker(t *testing.T) {
 	t.Parallel()
 	if val, ok := os.LookupEnv("CODER_TEST_INTEGRATION"); !ok || val != "1" {
-		t.Skip("integration tests are skipped unless CODER_TEST_INTEGRATION=true")
+		t.Skip("integration tests are skipped unless CODER_TEST_INTEGRATION=1")
 	}
 
 	// Dockerd just tests that dockerd can spin up and function correctly.

@@ -17,7 +17,7 @@ import (
 func TestDocker_Nvidia(t *testing.T) {
 	t.Parallel()
 	if val, ok := os.LookupEnv("CODER_TEST_INTEGRATION"); !ok || val != "1" {
-		t.Skip("integration tests are skipped unless CODER_TEST_INTEGRATION=true")
+		t.Skip("integration tests are skipped unless CODER_TEST_INTEGRATION=1")
 	}
 	// Only run this test if the nvidia container runtime is detected.
 	// Check if the nvidia runtime is available using `docker info`.
@@ -44,6 +44,23 @@ func TestDocker_Nvidia(t *testing.T) {
 		require.NoError(t, err, "failed to run nvidia-smi in the inner container")
 	})
 
+	t.Run("Ubuntu_NoUsrLibDir", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+
+		// Start the envbox container.
+		ctID := startEnvboxCmd(ctx, t, integrationtest.UbuntuImage, "root",
+			"--env", "CODER_ADD_GPU=true",
+			"--runtime=nvidia",
+			"--gpus=all",
+		)
+
+		// Assert that we can run nvidia-smi in the inner container.
+		_, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "nvidia-smi")
+		require.NoError(t, err, "failed to run nvidia-smi in the inner container")
+	})
+
 	t.Run("Redhat", func(t *testing.T) {
 		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
@@ -53,6 +70,23 @@ func TestDocker_Nvidia(t *testing.T) {
 		ctID := startEnvboxCmd(ctx, t, integrationtest.UbuntuImage, "root",
 			"--env", "CODER_ADD_GPU=true",
 			"--env", "CODER_USR_LIB_DIR=/usr/lib/x86_64-linux-gnu",
+			"--runtime=nvidia",
+			"--gpus=all",
+		)
+
+		// Assert that we can run nvidia-smi in the inner container.
+		_, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "nvidia-smi")
+		require.NoError(t, err, "failed to run nvidia-smi in the inner container")
+	})
+
+	t.Run("Redhat_NoUsrLibDir", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+
+		// Start the envbox container.
+		ctID := startEnvboxCmd(ctx, t, integrationtest.RedhatImage, "root",
+			"--env", "CODER_ADD_GPU=true",
 			"--runtime=nvidia",
 			"--gpus=all",
 		)
@@ -78,6 +112,11 @@ func dockerRuntimes(t *testing.T) []string {
 	return strings.Split(raw, "\n")
 }
 
+// startEnvboxCmd starts the envbox container with the given arguments.
+// Ideally we would use ory/dockertest for this, but it doesn't support
+// specifying the runtime. We have alternatively used the docker client library,
+// but a nice property of using the docker cli is that if a test fails, you can
+// just run the command manually to debug!
 func startEnvboxCmd(ctx context.Context, t *testing.T, innerImage, innerUser string, addlArgs ...string) (containerID string) {
 	t.Helper()
 

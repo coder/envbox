@@ -532,21 +532,6 @@ func TestDocker(t *testing.T) {
 		require.True(t, called, "create function was not called for inner container")
 	})
 
-	t.Run("GPUNoUsrLibDir", func(t *testing.T) {
-		t.Parallel()
-
-		ctx, cmd := clitest.New(t, "docker",
-			"--image=ubuntu",
-			"--username=root",
-			"--agent-token=hi",
-			"--add-gpu=true",
-		)
-
-		err := cmd.ExecuteContext(ctx)
-		require.Error(t, err)
-		require.ErrorContains(t, err, fmt.Sprintf("when using GPUs, %q must be specified", cli.EnvUsrLibDir))
-	})
-
 	t.Run("GPU", func(t *testing.T) {
 		t.Parallel()
 

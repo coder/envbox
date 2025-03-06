@@ -29,13 +29,13 @@ var usrLibMultiarchDir = map[string]string{
 }
 
 // Adapted from https://github.com/NVIDIA/libnvidia-container/blob/v1.15.0/src/nvc_container.c#L152-L165
-var usrLibDirs = map[string]string{
+var UsrLibDirs = map[string]string{
 	// Debian-based distros use a multi-arch directory.
 	"debian": usrLibMultiarchDir[goruntime.GOARCH],
 	"ubuntu": usrLibMultiarchDir[goruntime.GOARCH],
 	// Fedora and Redhat use the standard /usr/lib64.
 	"fedora": "/usr/lib64",
-	"redhat": "/usr/lib64",
+	"rhel":   "/usr/lib64",
 	// Fall back to the standard /usr/lib.
 	"linux": "/usr/lib",
 }
@@ -259,18 +259,7 @@ func GetImageMetadata(ctx context.Context, client Client, img, username string) 
 		Args:        []string{etcOsRelease},
 	})
 	if err == nil {
-		for _, line := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(line, "ID=") {
-				osReleaseID = strings.TrimPrefix(line, "ID=")
-				// The value may be quoted.
-				osReleaseID = strings.Trim(osReleaseID, "\"")
-				break
-			}
-		}
-	}
-	if osReleaseID == "" {
-		// The default value is just "linux" if we can't find the ID.
-		osReleaseID = "linux"
+		osReleaseID = GetOSReleaseID(out)
 	}
 
 	return ImageMetadata{
@@ -285,10 +274,28 @@ func GetImageMetadata(ctx context.Context, client Client, img, username string) 
 // UsrLibDir returns the path to the /usr/lib directory for the given
 // operating system determined by the /etc/os-release file.
 func (im ImageMetadata) UsrLibDir() string {
-	if val, ok := usrLibDirs[im.OsReleaseID]; ok {
+	if val, ok := UsrLibDirs[im.OsReleaseID]; ok {
 		return val
 	}
-	return usrLibDirs["linux"] // fallback
+	return UsrLibDirs["linux"] // fallback
+}
+
+// GetOSReleaseID returns the ID of the operating system from the
+// raw contents of /etc/os-release.
+func GetOSReleaseID(raw []byte) string {
+	var osReleaseID string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "ID=") {
+			osReleaseID = strings.TrimPrefix(line, "ID=")
+			// The value may be quoted.
+			osReleaseID = strings.Trim(osReleaseID, "\"")
+			break
+		}
+	}
+	if osReleaseID == "" {
+		return "linux"
+	}
+	return osReleaseID
 }
 
 func DefaultLogImagePullFn(log buildlog.Logger) func(ImagePullEvent) error {

@@ -502,7 +502,27 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 
 	if flags.addGPU {
 		if flags.hostUsrLibDir == "" {
-			return xerrors.Errorf("when using GPUs, %q must be specified", EnvUsrLibDir)
+			// If the user didn't specify CODER_USR_LIB_DIR, try to default to a
+			// sensible value.
+			log.Info(ctx, EnvUsrLibDir+" not specified, determining from /etc/os-release (best-effort)")
+			osReleaseFile, err := fs.Open("/etc/os-release")
+			if err != nil {
+				return xerrors.Errorf("open /etc/os-release: %w", err)
+			}
+			defer osReleaseFile.Close()
+			contents, err := io.ReadAll(osReleaseFile)
+			if err != nil {
+				return xerrors.Errorf("read /etc/os-release: %w", err)
+			}
+			rid := dockerutil.GetOSReleaseID(contents)
+			found, ok := dockerutil.UsrLibDirs[rid]
+			if !ok {
+				// This should actually be impossible as GetOSReleaseID will return
+				// "linux" as a fallback.
+				return xerrors.Errorf("developer error: no UsrLibDir for os-release id %q", rid)
+			}
+			log.Info(ctx, "automatically set CODER_USR_LIB_DIR", slog.F("path", found))
+			flags.hostUsrLibDir = found
 		}
 
 		// Unmount GPU drivers in /proc as it causes issues when creating any
@@ -534,6 +554,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		slog.F("uid", imgMeta.UID),
 		slog.F("gid", imgMeta.GID),
 		slog.F("has_init", imgMeta.HasInit),
+		slog.F("os_release", imgMeta.OsReleaseID),
+		slog.F("home_dir", imgMeta.HomeDir),
 	)
 
 	uid, err := strconv.ParseInt(imgMeta.UID, 10, 32)
