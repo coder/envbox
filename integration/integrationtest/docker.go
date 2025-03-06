@@ -40,6 +40,8 @@ const (
 	// UbuntuImage is just vanilla ubuntu (80MB) but the user is set to a non-root
 	// user .
 	UbuntuImage = "gcr.io/coder-dev-1/sreya/ubuntu-coder"
+	// Redhat UBI9 image as of 2025-03-05
+	RedhatImage = "registry.access.redhat.com/ubi9/ubi:9.5"
 
 	// RegistryImage is used to assert that we add certs
 	// correctly to the docker daemon when pulling an image

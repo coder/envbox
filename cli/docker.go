@@ -98,6 +98,7 @@ var (
 	EnvMemory               = "CODER_MEMORY"
 	EnvAddGPU               = "CODER_ADD_GPU"
 	EnvUsrLibDir            = "CODER_USR_LIB_DIR"
+	EnvInnerUsrLibDir       = "CODER_INNER_USR_LIB_DIR"
 	EnvDockerConfig         = "CODER_DOCKER_CONFIG"
 	EnvDebug                = "CODER_DEBUG"
 	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
@@ -135,6 +136,7 @@ type flags struct {
 	boostrapScript       string
 	containerMounts      string
 	hostUsrLibDir        string
+	innerUsrLibDir       string
 	dockerConfig         string
 	cpus                 int
 	memory               int
@@ -370,6 +372,7 @@ func dockerCmd() *cobra.Command {
 	cliflag.StringVarP(cmd.Flags(), &flags.boostrapScript, "boostrap-script", "", EnvBootstrap, "", "The script to use to bootstrap the container. This should typically install and start the agent.")
 	cliflag.StringVarP(cmd.Flags(), &flags.containerMounts, "mounts", "", EnvMounts, "", "Comma separated list of mounts in the form of '<source>:<target>[:options]' (e.g. /var/lib/docker:/var/lib/docker:ro,/usr/src:/usr/src).")
 	cliflag.StringVarP(cmd.Flags(), &flags.hostUsrLibDir, "usr-lib-dir", "", EnvUsrLibDir, "", "The host /usr/lib mountpoint. Used to detect GPU drivers to mount into inner container.")
+	cliflag.StringVarP(cmd.Flags(), &flags.innerUsrLibDir, "inner-usr-lib-dir", "", EnvInnerUsrLibDir, "", "The inner /usr/lib mountpoint. This is automatically detected based on /etc/os-release in the inner image, but may optionally be overridden.")
 	cliflag.StringVarP(cmd.Flags(), &flags.dockerConfig, "docker-config", "", EnvDockerConfig, "/root/.docker/config.json", "The path to the docker config to consult when pulling an image.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.addTUN, "add-tun", "", EnvAddTun, false, "Add a TUN device to the inner container.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.addFUSE, "add-fuse", "", EnvAddFuse, false, "Add a FUSE device to the inner container.")
@@ -523,7 +526,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	// of the user so that we can chown directories to the namespaced UID inside
 	// the inner container as well as whether we should be starting the container
 	// with /sbin/init or something simple like 'sleep infinity'.
-	imgMeta, err := dockerutil.GetImageMetadata(ctx, client, flags.innerImage, flags.innerUsername)
+	imgMeta, err := dockerutil.GetImageMetadata(ctx, log, client, flags.innerImage, flags.innerUsername)
 	if err != nil {
 		return xerrors.Errorf("get image metadata: %w", err)
 	}
@@ -534,6 +537,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 		slog.F("uid", imgMeta.UID),
 		slog.F("gid", imgMeta.GID),
 		slog.F("has_init", imgMeta.HasInit),
+		slog.F("os_release", imgMeta.OsReleaseID),
+		slog.F("home_dir", imgMeta.HomeDir),
 	)
 
 	uid, err := strconv.ParseInt(imgMeta.UID, 10, 32)
@@ -614,15 +619,32 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 			})
 		}
 
+		innerUsrLibDir := imgMeta.UsrLibDir()
+		if flags.innerUsrLibDir != "" {
+			log.Info(ctx, "overriding auto-detected inner usr lib dir ",
+				slog.F("before", innerUsrLibDir),
+				slog.F("after", flags.innerUsrLibDir))
+			innerUsrLibDir = flags.innerUsrLibDir
+		}
 		for _, bind := range binds {
 			// If the bind has a path that points to the host-mounted /usr/lib
 			// directory we need to remap it to /usr/lib inside the container.
 			mountpoint := bind.Path
 			if strings.HasPrefix(mountpoint, flags.hostUsrLibDir) {
 				mountpoint = filepath.Join(
-					"/usr/lib",
+					// Note: we used to mount into /usr/lib, but this can change
+					// based on the distro inside the container.
+					innerUsrLibDir,
 					strings.TrimPrefix(mountpoint, strings.TrimSuffix(flags.hostUsrLibDir, "/")),
 				)
+			}
+			// Even though xunix.GPUs checks for duplicate mounts, we need to check
+			// for duplicates again here after remapping the path.
+			if slices.ContainsFunc(mounts, func(m xunix.Mount) bool {
+				return m.Mountpoint == mountpoint
+			}) {
+				log.Debug(ctx, "skipping duplicate mount", slog.F("path", mountpoint))
+				continue
 			}
 			mounts = append(mounts, xunix.Mount{
 				Source:     bind.Path,

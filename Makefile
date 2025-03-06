@@ -39,4 +39,4 @@ test:
 
 .PHONY: test-integration
 test-integration:
-	go test -v -count=1 -tags=integration ./integration/
+	CODER_TEST_INTEGRATION=1 go test -v -count=1 ./integration/

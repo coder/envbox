@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"cdr.dev/slog"
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -21,6 +22,23 @@ import (
 )
 
 const diskFullStorageDriver = "vfs"
+
+// Adapted from https://github.com/NVIDIA/libnvidia-container/blob/v1.15.0/src/nvc_container.c#L152-L165
+var UsrLibDirs = map[string]string{
+	// Debian-based distros use a multi-arch directory.
+	"debian": usrLibMultiarchDir,
+	"ubuntu": usrLibMultiarchDir,
+	// Fedora and Redhat use the standard /usr/lib64.
+	"fedora": "/usr/lib64",
+	"rhel":   "/usr/lib64",
+	// Fall back to the standard /usr/lib.
+	"linux": "/usr/lib",
+}
+
+// /etc/os-release is the standard location for system identification data on
+// Linux systems running systemd.
+// Ref: https://www.freedesktop.org/software/systemd/man/latest/os-release.html
+var etcOsRelease = "/etc/os-release"
 
 type PullImageConfig struct {
 	Client     Client
@@ -148,15 +166,16 @@ func processImagePullEvents(r io.Reader, fn ImagePullProgressFn) error {
 }
 
 type ImageMetadata struct {
-	UID     string
-	GID     string
-	HomeDir string
-	HasInit bool
+	UID         string
+	GID         string
+	HomeDir     string
+	HasInit     bool
+	OsReleaseID string
 }
 
 // GetImageMetadata returns metadata about an image such as the UID/GID of the
 // provided username and whether it contains an /sbin/init that we should run.
-func GetImageMetadata(ctx context.Context, client Client, img, username string) (ImageMetadata, error) {
+func GetImageMetadata(ctx context.Context, log slog.Logger, client Client, img, username string) (ImageMetadata, error) {
 	// Creating a dummy container to inspect the filesystem.
 	created, err := client.ContainerCreate(ctx,
 		&container.Config{
@@ -226,12 +245,56 @@ func GetImageMetadata(ctx context.Context, client Client, img, username string) 
 		return ImageMetadata{}, xerrors.Errorf("no users returned for username %s", username)
 	}
 
+	// Read the /etc/os-release file to get the ID of the OS.
+	// We only care about the ID field.
+	var osReleaseID string
+	out, err = ExecContainer(ctx, client, ExecConfig{
+		ContainerID: inspect.ID,
+		Cmd:         "cat",
+		Args:        []string{etcOsRelease},
+	})
+	if err != nil {
+		log.Error(ctx, "read os-release", slog.Error(err))
+		log.Error(ctx, "falling back to linux for os-release ID")
+		osReleaseID = "linux"
+	} else {
+		osReleaseID = GetOSReleaseID(out)
+	}
+
 	return ImageMetadata{
-		UID:     users[0].Uid,
-		GID:     users[0].Gid,
-		HomeDir: users[0].HomeDir,
-		HasInit: initExists,
+		UID:         users[0].Uid,
+		GID:         users[0].Gid,
+		HomeDir:     users[0].HomeDir,
+		HasInit:     initExists,
+		OsReleaseID: osReleaseID,
 	}, nil
+}
+
+// UsrLibDir returns the path to the /usr/lib directory for the given
+// operating system determined by the /etc/os-release file.
+func (im ImageMetadata) UsrLibDir() string {
+	if val, ok := UsrLibDirs[im.OsReleaseID]; ok && val != "" {
+		return val
+	}
+	return UsrLibDirs["linux"] // fallback
+}
+
+// GetOSReleaseID returns the ID of the operating system from the
+// raw contents of /etc/os-release.
+func GetOSReleaseID(raw []byte) string {
+	var osReleaseID string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "ID=") {
+			osReleaseID = strings.TrimPrefix(line, "ID=")
+			// The value may be quoted.
+			osReleaseID = strings.Trim(osReleaseID, "\"")
+			break
+		}
+	}
+	if osReleaseID == "" {
+		return "linux"
+	}
+	return osReleaseID
 }
 
 func DefaultLogImagePullFn(log buildlog.Logger) func(ImagePullEvent) error {
