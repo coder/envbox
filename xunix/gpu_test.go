@@ -111,7 +111,7 @@ func TestGPUs(t *testing.T) {
 		devices, binds, err := xunix.GPUs(ctx, log, usrLibMountpoint)
 		require.NoError(t, err)
 		require.Len(t, devices, 2, "unexpected 2 nvidia devices")
-		require.Len(t, binds, 5, "expected 5 nvidia binds")
+		require.Len(t, binds, 4, "expected 4 nvidia binds")
 		require.Contains(t, binds, mount.MountPoint{
 			Device: "/dev/sda1",
 			Path:   "/usr/local/nvidia",

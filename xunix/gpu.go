@@ -18,9 +18,10 @@ import (
 )
 
 var (
-	gpuMountRegex = regexp.MustCompile(`(?i)(nvidia|vulkan|cuda)`)
-	gpuExtraRegex = regexp.MustCompile(`(?i)(libgl(e|sx|\.)|nvidia|vulkan|cuda)`)
-	gpuEnvRegex   = regexp.MustCompile(`(?i)nvidia`)
+	gpuMountRegex     = regexp.MustCompile(`(?i)(nvidia|vulkan|cuda)`)
+	gpuExtraRegex     = regexp.MustCompile(`(?i)(libgl(e|sx|\.)|nvidia|vulkan|cuda)`)
+	gpuEnvRegex       = regexp.MustCompile(`(?i)nvidia`)
+	sharedObjectRegex = regexp.MustCompile(`\.so(\.[0-9\.]+)?$`)
 )
 
 func GPUEnvs(ctx context.Context) []string {
@@ -122,6 +123,10 @@ func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]mount
 			}
 
 			if !gpuExtraRegex.MatchString(path) {
+				return nil
+			}
+
+			if !sharedObjectRegex.MatchString(path) {
 				return nil
 			}
 
