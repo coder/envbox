@@ -628,7 +628,8 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 					strings.TrimPrefix(mountpoint, strings.TrimSuffix(flags.hostUsrLibDir, "/")),
 				)
 			}
-			// Avoid duplicate mounts.
+			// Even though xunix.GPUs checks for duplicate mounts, we need to check
+			// for duplicates again here after remapping the path.
 			if slices.ContainsFunc(mounts, func(m xunix.Mount) bool {
 				return m.Mountpoint == mountpoint
 			}) {
