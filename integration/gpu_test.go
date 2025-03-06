@@ -79,7 +79,7 @@ func TestDocker_Nvidia(t *testing.T) {
 			"--gpus=all",
 		)
 
-		// Assert that we can run nvidia-smi in the inner container.
+		// Assert that the libraries end up in the expected location in the inner container.
 		out, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "ls", "-l", "/usr/lib/coder")
 		require.NoError(t, err, "inner usr lib dir override failed")
 		require.Regexp(t, `(?i)(libgl|nvidia|vulkan|cuda)`, out)
