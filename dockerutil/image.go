@@ -251,22 +251,21 @@ func GetImageMetadata(ctx context.Context, client Client, img, username string) 
 	}
 
 	// Read the /etc/os-release file to get the ID of the OS.
+	// We only care about the ID field.
+	var osReleaseID string
 	out, err = ExecContainer(ctx, client, ExecConfig{
 		ContainerID: inspect.ID,
 		Cmd:         "cat",
 		Args:        []string{etcOsRelease},
 	})
-	if err != nil {
-		return ImageMetadata{}, xerrors.Errorf("read /etc/os-release: %w", err)
-	}
-	// We only care about the ID field.
-	osReleaseID := ""
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.HasPrefix(line, "ID=") {
-			osReleaseID = strings.TrimPrefix(line, "ID=")
-			// The value may be quoted.
-			osReleaseID = strings.Trim(osReleaseID, "\"")
-			break
+	if err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.HasPrefix(line, "ID=") {
+				osReleaseID = strings.TrimPrefix(line, "ID=")
+				// The value may be quoted.
+				osReleaseID = strings.Trim(osReleaseID, "\"")
+				break
+			}
 		}
 	}
 	if osReleaseID == "" {
