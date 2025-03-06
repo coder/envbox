@@ -22,6 +22,19 @@ import (
 
 const diskFullStorageDriver = "vfs"
 
+// Adapted from github.com/NVIDIA/nvidia-container-toolkit/internal/lookup/library.go
+// These are destination candidates for the /usr/lib directory in the container,
+// in order of priority.
+// Depending on the inner image, the desired location may vary.
+// Note that we are excluding some nvidia-specific directories here and also
+// include a fallback to /usr/lib.
+var usrLibCandidates = []string{
+	"/usr/lib/x86_64-linux-gnu",  // Debian uses a multiarch /usr/lib directory
+	"/usr/lib/aarch64-linux-gnu", // Above but for arm64.
+	"/usr/lib64",                 // Red Hat and friends.
+	"/usr/lib",                   // Fallback.
+}
+
 type PullImageConfig struct {
 	Client     Client
 	Image      string
@@ -148,10 +161,11 @@ func processImagePullEvents(r io.Reader, fn ImagePullProgressFn) error {
 }
 
 type ImageMetadata struct {
-	UID     string
-	GID     string
-	HomeDir string
-	HasInit bool
+	UID       string
+	GID       string
+	HomeDir   string
+	HasInit   bool
+	UsrLibDir string
 }
 
 // GetImageMetadata returns metadata about an image such as the UID/GID of the
@@ -226,11 +240,29 @@ func GetImageMetadata(ctx context.Context, client Client, img, username string) 
 		return ImageMetadata{}, xerrors.Errorf("no users returned for username %s", username)
 	}
 
+	// Find the "best" usr lib directory for the container.
+	var foundUsrLibDir string
+	for _, candidate := range usrLibCandidates {
+		_, err := ExecContainer(ctx, client, ExecConfig{
+			ContainerID: inspect.ID,
+			Cmd:         "stat",
+			Args:        []string{candidate},
+		})
+		if err == nil {
+			foundUsrLibDir = candidate
+			break
+		}
+	}
+	if foundUsrLibDir == "" {
+		return ImageMetadata{}, xerrors.Errorf("no eligible /usr/lib directory found in container")
+	}
+
 	return ImageMetadata{
-		UID:     users[0].Uid,
-		GID:     users[0].Gid,
-		HomeDir: users[0].HomeDir,
-		HasInit: initExists,
+		UID:       users[0].Uid,
+		GID:       users[0].Gid,
+		HomeDir:   users[0].HomeDir,
+		HasInit:   initExists,
+		UsrLibDir: foundUsrLibDir,
 	}, nil
 }
 
