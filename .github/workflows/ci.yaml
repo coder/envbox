@@ -8,7 +8,7 @@ on:
   pull_request:
 
   workflow_dispatch:
-    
+
 permissions:
   actions: read
   checks: none
@@ -209,7 +209,7 @@ jobs:
           category: "Trivy"
 
       - name: Upload Trivy scan results as an artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: trivy
           path: trivy-results.sarif
