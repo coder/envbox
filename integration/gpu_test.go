@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -14,6 +15,10 @@ import (
 )
 
 func TestDocker_Nvidia(t *testing.T) {
+	t.Parallel()
+	if val, ok := os.LookupEnv("CODER_TEST_INTEGRATION"); !ok || val != "1" {
+		t.Skip("integration tests are skipped unless CODER_TEST_INTEGRATION=true")
+	}
 	// Only run this test if the nvidia container runtime is detected.
 	// Check if the nvidia runtime is available using `docker info`.
 	// The docker client doesn't expose this information so we need to fetch it ourselves.
@@ -22,6 +27,7 @@ func TestDocker_Nvidia(t *testing.T) {
 	}
 
 	t.Run("Ubuntu", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
 
@@ -39,6 +45,7 @@ func TestDocker_Nvidia(t *testing.T) {
 	})
 
 	t.Run("Redhat", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
 
