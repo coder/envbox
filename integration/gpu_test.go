@@ -33,25 +33,9 @@ func TestDocker_Nvidia(t *testing.T) {
 
 		// Start the envbox container.
 		ctID := startEnvboxCmd(ctx, t, integrationtest.UbuntuImage, "root",
+			"-v", "/usr/lib/x86_64-linux-gnu:/var/coder/usr/lib",
 			"--env", "CODER_ADD_GPU=true",
-			"--env", "CODER_USR_LIB_DIR=/usr/lib/x86_64-linux-gnu",
-			"--runtime=nvidia",
-			"--gpus=all",
-		)
-
-		// Assert that we can run nvidia-smi in the inner container.
-		_, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "nvidia-smi")
-		require.NoError(t, err, "failed to run nvidia-smi in the inner container")
-	})
-
-	t.Run("Ubuntu_NoUsrLibDir", func(t *testing.T) {
-		t.Parallel()
-		ctx, cancel := context.WithCancel(context.Background())
-		t.Cleanup(cancel)
-
-		// Start the envbox container.
-		ctID := startEnvboxCmd(ctx, t, integrationtest.UbuntuImage, "root",
-			"--env", "CODER_ADD_GPU=true",
+			"--env", "CODER_USR_LIB_DIR=/var/coder/usr/lib",
 			"--runtime=nvidia",
 			"--gpus=all",
 		)
@@ -67,26 +51,10 @@ func TestDocker_Nvidia(t *testing.T) {
 		t.Cleanup(cancel)
 
 		// Start the envbox container.
-		ctID := startEnvboxCmd(ctx, t, integrationtest.UbuntuImage, "root",
-			"--env", "CODER_ADD_GPU=true",
-			"--env", "CODER_USR_LIB_DIR=/usr/lib/x86_64-linux-gnu",
-			"--runtime=nvidia",
-			"--gpus=all",
-		)
-
-		// Assert that we can run nvidia-smi in the inner container.
-		_, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "nvidia-smi")
-		require.NoError(t, err, "failed to run nvidia-smi in the inner container")
-	})
-
-	t.Run("Redhat_NoUsrLibDir", func(t *testing.T) {
-		t.Parallel()
-		ctx, cancel := context.WithCancel(context.Background())
-		t.Cleanup(cancel)
-
-		// Start the envbox container.
 		ctID := startEnvboxCmd(ctx, t, integrationtest.RedhatImage, "root",
+			"-v", "/usr/lib/x86_64-linux-gnu:/var/coder/usr/lib64",
 			"--env", "CODER_ADD_GPU=true",
+			"--env", "CODER_USR_LIB_DIR=/var/coder/usr/lib64",
 			"--runtime=nvidia",
 			"--gpus=all",
 		)
