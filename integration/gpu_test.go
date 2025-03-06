@@ -62,8 +62,10 @@ func TestDocker_Nvidia(t *testing.T) {
 		// Assert that we can run nvidia-smi in the inner container.
 		assertInnerNvidiaSMI(ctx, t, ctID)
 
-		// Make sure dnf still works.
-		out, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "dnf", "list")
+		// Make sure dnf still works. This checks for a regression due to
+		// gpuExtraRegex matching `libglib.so` in the outer container.
+		// This had a dependency on `libpcre.so.3` which would cause dnf to fail.
+		out, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "dnf")
 		if !assert.NoError(t, err, "failed to run dnf in the inner container") {
 			t.Logf("dnf output:\n%s", strings.TrimSpace(out))
 		}
@@ -112,6 +114,29 @@ func TestDocker_Nvidia(t *testing.T) {
 		// Assert that expected files are available in the inner container.
 		assertInnerFiles(ctx, t, ctID, "/usr/lib/x86_64-linux-gnu/libnv*", ofs...)
 		assertInnerNvidiaSMI(ctx, t, ctID)
+	})
+
+	t.Run("CUDASample", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+
+		// Start the envbox container.
+		ctID := startEnvboxCmd(ctx, t, integrationtest.CUDASampleImage, "root",
+			"-v", "/usr/lib/x86_64-linux-gnu:/var/coder/usr/lib",
+			"--env", "CODER_ADD_GPU=true",
+			"--env", "CODER_USR_LIB_DIR=/var/coder/usr/lib",
+			"--runtime=nvidia",
+			"--gpus=all",
+		)
+
+		// Assert that we can run nvidia-smi in the inner container.
+		assertInnerNvidiaSMI(ctx, t, ctID)
+
+		// Assert that /tmp/vectorAdd runs successfully in the inner container.
+		_, err := execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "/tmp/vectorAdd")
+		require.NoError(t, err, "failed to run /tmp/vectorAdd in the inner container")
 	})
 }
 
