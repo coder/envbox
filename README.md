@@ -98,8 +98,8 @@ Here's an example Docker command to run a GPU-enabled workload in Envbox. Note t
 
 1) The NVidia container runtime must be installed on the host (`--runtime=nvidia`).
 2) `CODER_ADD_GPU=true` must be set to enable GPU-specific functionality.
-3) When `CODER_ADD_GPU` is set, it is required to also set `CODER_USR_LIB_DIR` to a location where the relvant host directory has been mounted inside the outer container. In the below example, this is `/usr/lib/x86_64-linux-gnu` on the underlying host. It is mounted into the container under the path `/var/coder/usr/lib`. We then set `CODER_USR_LIB_DIR=/var/coder/usr/lib`. The actual location inside the container is not important **as long as it does not overwrite any pre-existing directories containing system libraries**.
-4) The location to mount the libraries in the inner container is determined by the distribution ID in the `/etc/os-release` of the inner container. If the automatically determined location is incorrect, you can set it manually via `CODER_INNER_USR_LIB_DIR`.
+3) When `CODER_ADD_GPU` is set, it is required to also set `CODER_USR_LIB_DIR` to a location where the relevant host directory has been mounted inside the outer container. In the below example, this is `/usr/lib/x86_64-linux-gnu` on the underlying host. It is mounted into the container under the path `/var/coder/usr/lib`. We then set `CODER_USR_LIB_DIR=/var/coder/usr/lib`. The actual location inside the container is not important **as long as it does not overwrite any pre-existing directories containing system libraries**.
+4) The location to mount the libraries in the inner container is determined by the distribution ID in the `/etc/os-release` of the inner container. If the automatically determined location is incorrect (e.g. `nvidia-smi` complains about not being able to find libraries), you can set it manually via `CODER_INNER_USR_LIB_DIR`.
 
    > Note: this step is required in case user workloads require libraries from the underlying host that are not added in by the container runtime.
 
