@@ -628,6 +628,13 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 					strings.TrimPrefix(mountpoint, strings.TrimSuffix(flags.hostUsrLibDir, "/")),
 				)
 			}
+			// Avoid duplicate mounts.
+			if slices.ContainsFunc(mounts, func(m xunix.Mount) bool {
+				return m.Mountpoint == mountpoint
+			}) {
+				log.Debug(ctx, "skipping duplicate mount", slog.F("path", mountpoint))
+				continue
+			}
 			mounts = append(mounts, xunix.Mount{
 				Source:     bind.Path,
 				Mountpoint: mountpoint,
