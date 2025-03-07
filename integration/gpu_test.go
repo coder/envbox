@@ -69,6 +69,12 @@ func TestDocker_Nvidia(t *testing.T) {
 		if !assert.NoError(t, err, "failed to run dnf in the inner container") {
 			t.Logf("dnf output:\n%s", strings.TrimSpace(out))
 		}
+
+		// Make sure libglib.so is not present in the inner container.
+		out, err = execContainerCmd(ctx, t, ctID, "docker", "exec", "workspace_cvm", "ls", "-1", "/usr/lib/x86_64-linux-gnu/libglib*")
+		// An error is expected here.
+		assert.Error(t, err, "libglib should not be present in the inner container")
+		assert.Contains(t, out, "No such file or directory", "libglib should not be present in the inner container")
 	})
 
 	t.Run("InnerUsrLibDirOverride", func(t *testing.T) {
