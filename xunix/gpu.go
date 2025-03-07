@@ -202,57 +202,64 @@ func recursiveSymlinks(afs FS, mountpoint string, path string) ([]string, error)
 // point to target, either indirectly or directly. Only symlinks in the same
 // directory as `target` are considered.
 func SameDirSymlinks(afs FS, target string) ([]string, error) {
+	// Get the list of files in the directory of the target.
+	fis, err := afero.ReadDir(afs, filepath.Dir(target))
+	if err != nil {
+		return nil, xerrors.Errorf("read dir %q: %w", filepath.Dir(target), err)
+	}
+
+	// Do an initial pass to map all symlinks to their destinations.
+	allLinks := make(map[string]string)
+	for _, fi := range fis {
+		// Ignore non-symlinks.
+		if fi.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+
+		absPath := filepath.Join(filepath.Dir(target), fi.Name())
+		link, err := afs.Readlink(filepath.Join(filepath.Dir(target), fi.Name()))
+		if err != nil {
+			return nil, xerrors.Errorf("readlink %q: %w", fi.Name(), err)
+		}
+
+		if !filepath.IsAbs(link) {
+			link = filepath.Join(filepath.Dir(target), link)
+		}
+		allLinks[absPath] = link
+	}
+
+	// Now we can start checking for symlinks that point to the target.
 	var (
-		found         = make([]string, 0)
-		maxIterations = 10 // arbitrary upper limit to prevent infinite loops
+		found = make([]string, 0)
+		// Set an arbitrary upper limit to prevent infinite loops.
+		maxIterations = 10
 	)
 	for range maxIterations {
-		foundThisTime := false
-		fis, err := afero.ReadDir(afs, filepath.Dir(target))
-		if err != nil {
-			return nil, xerrors.Errorf("read dir %q: %w", filepath.Dir(target), err)
-		}
-		for _, fi := range fis {
-			// Ignore the target itself.
-			if fi.Name() == filepath.Base(target) {
-				continue
-			}
-			// Ignore non-symlinks.
-			if fi.Mode()&os.ModeSymlink == 0 {
-				continue
-			}
-			// Get the target of the symlink.
-			link, err := afs.Readlink(filepath.Join(filepath.Dir(target), fi.Name()))
-			if err != nil {
-				return nil, xerrors.Errorf("readlink %q: %w", fi.Name(), err)
-			}
-			// Make the link absolute.
-			if !filepath.IsAbs(link) {
-				link = filepath.Join(filepath.Dir(target), link)
-			}
+		var foundThisTime bool
+		for linkName, linkDest := range allLinks {
 			// Ignore symlinks that point outside of target's directory.
-			if filepath.Dir(link) != filepath.Dir(target) {
+			if filepath.Dir(linkName) != filepath.Dir(target) {
 				continue
 			}
 
-			// Check if the symlink points to to the target, or if it points
-			// to one of the symlinks we've already found.
-			if link != target {
-				if !slices.Contains(found, link) {
-					continue
+			// If the symlink points to the target, add it to the list.
+			if linkDest == target {
+				if !slices.Contains(found, linkName) {
+					found = append(found, linkName)
+					foundThisTime = true
 				}
 			}
 
-			// Have we already seen this target?
-			fullPath := filepath.Join(filepath.Dir(target), fi.Name())
-			if slices.Contains(found, fullPath) {
-				continue
+			// If the symlink points to another symlink that we already determined
+			// points to the target, add it to the list.
+			if slices.Contains(found, linkDest) {
+				if !slices.Contains(found, linkName) {
+					found = append(found, linkName)
+					foundThisTime = true
+				}
 			}
-
-			found = append(found, filepath.Join(filepath.Dir(target), fi.Name()))
-			foundThisTime = true
 		}
-		// If we didn't find any symlinks this time, we're done.
+		// If we didn't find any new symlinks, we're done.
 		if !foundThisTime {
 			break
 		}
