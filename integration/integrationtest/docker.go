@@ -42,6 +42,9 @@ const (
 	UbuntuImage = "gcr.io/coder-dev-1/sreya/ubuntu-coder"
 	// Redhat UBI9 image as of 2025-03-05
 	RedhatImage = "registry.access.redhat.com/ubi9/ubi:9.5"
+	// CUDASampleImage is a CUDA sample image from NVIDIA's container registry.
+	// It contains a binary /tmp/vectorAdd which can be run to test the CUDA setup.
+	CUDASampleImage = "nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda10.2"
 
 	// RegistryImage is used to assert that we add certs
 	// correctly to the docker daemon when pulling an image

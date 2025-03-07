@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -17,9 +18,9 @@ import (
 )
 
 var (
-	gpuMountRegex     = regexp.MustCompile("(?i)(nvidia|vulkan|cuda)")
-	gpuExtraRegex     = regexp.MustCompile("(?i)(libgl|nvidia|vulkan|cuda)")
-	gpuEnvRegex       = regexp.MustCompile("(?i)nvidia")
+	gpuMountRegex     = regexp.MustCompile(`(?i)(nvidia|vulkan|cuda)`)
+	gpuExtraRegex     = regexp.MustCompile(`(?i)(libgl(e|sx|\.)|nvidia|vulkan|cuda)`)
+	gpuEnvRegex       = regexp.MustCompile(`(?i)nvidia`)
 	sharedObjectRegex = regexp.MustCompile(`\.so(\.[0-9\.]+)?$`)
 )
 
@@ -39,6 +40,7 @@ func GPUEnvs(ctx context.Context) []string {
 
 func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []mount.MountPoint, error) {
 	var (
+		afs     = GetFS(ctx)
 		mounter = Mounter(ctx)
 		devices = []Device{}
 		binds   = []mount.MountPoint{}
@@ -64,6 +66,22 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []m
 
 			// If it's not in /dev treat it as a bind mount.
 			binds = append(binds, m)
+			// We also want to find any symlinks that point to the target.
+			// This is important for the nvidia driver as it mounts the driver
+			// files with the driver version appended to the end, and creates
+			// symlinks that point to the actual files.
+			links, err := SameDirSymlinks(afs, m.Path)
+			if err != nil {
+				log.Error(ctx, "find symlinks", slog.F("path", m.Path), slog.Error(err))
+			} else {
+				for _, link := range links {
+					log.Debug(ctx, "found symlink", slog.F("link", link), slog.F("target", m.Path))
+					binds = append(binds, mount.MountPoint{
+						Path: link,
+						Opts: []string{"ro"},
+					})
+				}
+			}
 		}
 	}
 
@@ -104,7 +122,11 @@ func usrLibGPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]mount
 				return nil
 			}
 
-			if !sharedObjectRegex.MatchString(path) || !gpuExtraRegex.MatchString(path) {
+			if !gpuExtraRegex.MatchString(path) {
+				return nil
+			}
+
+			if !sharedObjectRegex.MatchString(path) {
 				return nil
 			}
 
@@ -174,6 +196,75 @@ func recursiveSymlinks(afs FS, mountpoint string, path string) ([]string, error)
 	}
 
 	return paths, nil
+}
+
+// SameDirSymlinks returns all links in the same directory as `target` that
+// point to target, either indirectly or directly. Only symlinks in the same
+// directory as `target` are considered.
+func SameDirSymlinks(afs FS, target string) ([]string, error) {
+	// Get the list of files in the directory of the target.
+	fis, err := afero.ReadDir(afs, filepath.Dir(target))
+	if err != nil {
+		return nil, xerrors.Errorf("read dir %q: %w", filepath.Dir(target), err)
+	}
+
+	// Do an initial pass to map all symlinks to their destinations.
+	allLinks := make(map[string]string)
+	for _, fi := range fis {
+		// Ignore non-symlinks.
+		if fi.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+
+		absPath := filepath.Join(filepath.Dir(target), fi.Name())
+		link, err := afs.Readlink(filepath.Join(filepath.Dir(target), fi.Name()))
+		if err != nil {
+			return nil, xerrors.Errorf("readlink %q: %w", fi.Name(), err)
+		}
+
+		if !filepath.IsAbs(link) {
+			link = filepath.Join(filepath.Dir(target), link)
+		}
+		allLinks[absPath] = link
+	}
+
+	// Now we can start checking for symlinks that point to the target.
+	var (
+		found = make([]string, 0)
+		// Set an arbitrary upper limit to prevent infinite loops.
+		maxIterations = 10
+	)
+	for range maxIterations {
+		var foundThisTime bool
+		for linkName, linkDest := range allLinks {
+			// Ignore symlinks that point outside of target's directory.
+			if filepath.Dir(linkName) != filepath.Dir(target) {
+				continue
+			}
+
+			// If the symlink points to the target, add it to the list.
+			if linkDest == target {
+				if !slices.Contains(found, linkName) {
+					found = append(found, linkName)
+					foundThisTime = true
+				}
+			}
+
+			// If the symlink points to another symlink that we already determined
+			// points to the target, add it to the list.
+			if slices.Contains(found, linkDest) {
+				if !slices.Contains(found, linkName) {
+					found = append(found, linkName)
+					foundThisTime = true
+				}
+			}
+		}
+		// If we didn't find any new symlinks, we're done.
+		if !foundThisTime {
+			break
+		}
+	}
+	return found, nil
 }
 
 // TryUnmountProcGPUDrivers unmounts any GPU-related mounts under /proc as it causes
