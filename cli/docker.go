@@ -399,14 +399,14 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	if err != nil {
 		return xerrors.Errorf("set oom score: %w", err)
 	}
-	ref, err := name.NewTag(flags.innerImage)
+	ref, err := name.ParseReference(flags.innerImage)
 	if err != nil {
 		return xerrors.Errorf("parse ref: %w", err)
 	}
 
 	var dockerAuth dockerutil.AuthConfig
 	if flags.imagePullSecret != "" {
-		dockerAuth, err = dockerutil.AuthConfigFromString(flags.imagePullSecret, ref.RegistryStr())
+		dockerAuth, err = dockerutil.AuthConfigFromString(flags.imagePullSecret, ref.Context().RegistryStr())
 		if err != nil {
 			return xerrors.Errorf("parse auth config: %w", err)
 		}
@@ -415,7 +415,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	log.Info(ctx, "checking for docker config file", slog.F("path", flags.dockerConfig))
 	if _, err := fs.Stat(flags.dockerConfig); err == nil {
 		log.Info(ctx, "detected file", slog.F("image", flags.innerImage))
-		dockerAuth, err = dockerutil.AuthConfigFromPath(flags.dockerConfig, ref.RegistryStr())
+		dockerAuth, err = dockerutil.AuthConfigFromPath(flags.dockerConfig, ref.Context().RegistryStr())
 		if err != nil && !xerrors.Is(err, os.ErrNotExist) {
 			return xerrors.Errorf("auth config from file: %w", err)
 		}
@@ -656,6 +656,13 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	}
 
 	blog.Info("Creating workspace...")
+	// If imgMeta.HasInit is true, we just use flags.boostrapScript as the entrypoint.
+	// But if it's false, we need to run /sbin/init as the entrypoint.
+	// We need to mount or run some exec command that injects a systemd service for starting
+	// the coder agent.
+
+	// We need to check that if PID1 is systemd (or /sbin/init) that systemd propagates SIGTERM
+	// to service units. If it doesn't then this solution doesn't help us.
 
 	// Create the inner container.
 	containerID, err := dockerutil.CreateContainer(ctx, client, &dockerutil.ContainerConfig{
