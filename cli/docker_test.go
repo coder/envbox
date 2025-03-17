@@ -110,6 +110,11 @@ func TestDocker(t *testing.T) {
 				image:   "gcr.io/ubuntu:24.04",
 				success: true,
 			},
+			{
+				name:    "RegistryRepositorySha",
+				image:   "gcr.io/images/helloworld@sha256:13e101dd511a26a2147e123456bdff5845c9461aaa53d856845745b063001234",
+				success: true,
+			},
 		}
 
 		for _, tc := range testcases {
