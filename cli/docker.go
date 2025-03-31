@@ -379,7 +379,6 @@ func dockerCmd() *cobra.Command {
 				<-signalCtx.Done()
 				log.Debug(ctx, "ctx canceled, forwarding signal to inner container")
 
-				time.Sleep(time.Second * 10)
 				if bootstrapExecID == "" {
 					log.Debug(ctx, "no bootstrap exec id, skipping")
 					return
