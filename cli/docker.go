@@ -167,7 +167,7 @@ func dockerCmd() *cobra.Command {
 			)
 
 			// We technically leak a context here, but it's impact is negligible.
-			signalCtx, signalCancel := context.WithCancel(cmd.Context())
+			signalCtx, signalCancel := context.WithCancel(ctx)
 			sigs := make(chan os.Signal, 1)
 			signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGWINCH)
 
@@ -178,8 +178,6 @@ func dockerCmd() *cobra.Command {
 				<-sigs
 				log.Info(ctx, "got signal, canceling context")
 			}()
-
-			cmd.SetContext(ctx)
 
 			if flags.noStartupLogs {
 				log = slog.Make(slogjson.Sink(io.Discard))
@@ -827,15 +825,19 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 
 	go func() {
 		defer resp.Close()
+		go func() {
+			// Also close the response reader when the context is canceled.
+			defer resp.Close()
+			<-ctx.Done()
+		}()
 		rd := io.LimitReader(resp.Reader, 1<<10)
 		_, err := io.Copy(blog, rd)
 		if err != nil {
 			log.Error(ctx, "copy bootstrap output", slog.Error(err))
 		}
+		log.Debug(ctx, "bootstrap output copied")
 	}()
 
-	// We can't just call ExecInspect because there's a race where the cmd
-	// hasn't been assigned a PID yet.
 	return bootstrapExec.ID, nil
 }
 
