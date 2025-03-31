@@ -106,7 +106,8 @@ func BootstrapContainer(ctx context.Context, client Client, conf BootstrapConfig
 
 	var err error
 	for r, n := retry.New(time.Second, time.Second*2), 0; r.Wait(ctx) && n < 10; n++ {
-		out, err := ExecContainer(ctx, client, ExecConfig{
+		var out []byte
+		out, err = ExecContainer(ctx, client, ExecConfig{
 			ContainerID: conf.ContainerID,
 			User:        conf.User,
 			Cmd:         "/bin/sh",

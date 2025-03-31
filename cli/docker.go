@@ -186,6 +186,7 @@ func dockerCmd() *cobra.Command {
 
 			httpClient, err := xhttp.Client(log, flags.extraCertsPath)
 			if err != nil {
+				//nolint
 				return xerrors.Errorf("http client: %w", err)
 			}
 
@@ -395,7 +396,7 @@ func dockerCmd() *cobra.Command {
 				log.Debug(ctx, "killing container", slog.F("bootstrap_pid", bootstrapPID))
 
 				// The PID returned is the PID _outside_ the container...
-				out, err := exec.Command("kill", "-TERM", strconv.Itoa(bootstrapPID)).CombinedOutput()
+				out, err := exec.Command("kill", "-TERM", strconv.Itoa(bootstrapPID)).CombinedOutput() //nolint:gosec
 				if err != nil {
 					log.Error(ctx, "kill bootstrap process", slog.Error(err), slog.F("output", string(out)))
 					return
