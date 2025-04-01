@@ -390,7 +390,7 @@ func TestDocker(t *testing.T) {
 
 		// This indicates we've made it all the way to end
 		// of the logs we attempt to push.
-		require.True(t, recorder.ContainsLog("Bootstrapping workspace..."))
+		require.True(t, recorder.ContainsLog("Envbox startup complete!"))
 	})
 
 	// This tests the inverse of SelfSignedCerts. We assert that
@@ -534,6 +534,59 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "hello\n", string(output))
 	})
+	t.Run("HandleSignals", func(t *testing.T) {
+		t.Parallel()
+
+		pool, err := dockertest.NewPool("")
+		require.NoError(t, err)
+
+		var (
+			tmpdir = integrationtest.TmpDir(t)
+			binds  = integrationtest.DefaultBinds(t, tmpdir)
+		)
+		homeDir := filepath.Join(tmpdir, "home")
+		err = os.MkdirAll(homeDir, 0o777)
+		require.NoError(t, err)
+
+		binds = append(binds, integrationtest.BindMount(homeDir, "/home/coder", false))
+
+		envs := []string{fmt.Sprintf("%s=%s:%s", cli.EnvMounts, "/home/coder", "/home/coder")}
+		// Run the envbox container.
+		resource := integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
+			Image:           integrationtest.UbuntuImage,
+			Username:        "root",
+			OuterMounts:     binds,
+			Envs:            envs,
+			BootstrapScript: sigtrapScript,
+		})
+
+		_, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+			ContainerID: resource.Container.ID,
+			Cmd:         []string{"/bin/sh", "-c", "stat /home/coder/foo"},
+		})
+		require.Error(t, err)
+
+		// Simulate a shutdown.
+		integrationtest.StopContainer(t, pool, resource.Container.ID, 30*time.Second)
+
+		err = resource.Close()
+		require.NoError(t, err)
+
+		t.Logf("envbox %q started successfully, recreating...", resource.Container.ID)
+		// Run the envbox container.
+		resource = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
+			Image:           integrationtest.UbuntuImage,
+			Username:        "root",
+			OuterMounts:     binds,
+			Envs:            envs,
+			BootstrapScript: sigtrapScript,
+		})
+		_, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+			ContainerID: resource.Container.ID,
+			Cmd:         []string{"/bin/sh", "-c", "stat /home/coder/foo"},
+		})
+		require.NoError(t, err)
+	})
 }
 
 func requireSliceNoContains(t *testing.T, ss []string, els ...string) {
@@ -566,3 +619,17 @@ func tcpAddr(t testing.TB, l net.Listener) *net.TCPAddr {
 	require.True(t, ok)
 	return tcpAddr
 }
+
+const sigtrapScript = `#!/bin/bash
+cleanup() {
+	echo "HANDLING A SIGNAL!" && touch /home/coder/foo && echo "touched file"
+    exit 0
+}
+
+trap 'cleanup' INT TERM
+
+while true; do
+    echo "Working..."
+    sleep 1
+done
+`

@@ -115,6 +115,7 @@ func BootstrapContainer(ctx context.Context, client Client, conf BootstrapConfig
 			Stdin:       strings.NewReader(conf.Script),
 			Env:         conf.Env,
 			StdOutErr:   conf.StdOutErr,
+			Detach:      conf.Detach,
 		})
 		if err != nil {
 			err = xerrors.Errorf("boostrap container (%s): %w", out, err)

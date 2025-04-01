@@ -14,7 +14,6 @@ func main() {
 		_, _ = fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
-
 	// We exit the main thread while keepin all the other procs goin strong.
 	runtime.Goexit()
 }
