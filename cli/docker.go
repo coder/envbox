@@ -226,15 +226,19 @@ func dockerCmd() *cobra.Command {
 				// Start sysbox-mgr and sysbox-fs in order to run
 				// sysbox containers.
 				case err := <-background.New(ctx, log, "sysbox-mgr", sysboxArgs...).Run():
-					blog.Info(sysboxErrMsg)
-					//nolint
-					log.Critical(ctx, "sysbox-mgr exited", slog.Error(err))
-					panic(err)
+					if ctx.Err() == nil {
+						blog.Info(sysboxErrMsg)
+						//nolint
+						log.Critical(ctx, "sysbox-mgr exited", slog.Error(err))
+						panic(err)
+					}
 				case err := <-background.New(ctx, log, "sysbox-fs").Run():
-					blog.Info(sysboxErrMsg)
-					//nolint
-					log.Critical(ctx, "sysbox-fs exited", slog.Error(err))
-					panic(err)
+					if ctx.Err() == nil {
+						blog.Info(sysboxErrMsg)
+						//nolint
+						log.Critical(ctx, "sysbox-fs exited", slog.Error(err))
+						panic(err)
+					}
 				}
 			}()
 
@@ -384,31 +388,31 @@ func dockerCmd() *cobra.Command {
 					return
 				}
 
-				ctx, cancel := context.WithTimeout(context.Background(), time.Second*90)
-				defer cancel()
+				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Second*90)
+				defer shutdownCancel()
 
-				bootstrapPID, err := dockerutil.GetExecPID(ctx, client, bootstrapExecID)
+				bootstrapPID, err := dockerutil.GetExecPID(shutdownCtx, client, bootstrapExecID)
 				if err != nil {
-					log.Error(ctx, "get exec pid", slog.Error(err))
+					log.Error(shutdownCtx, "get exec pid", slog.Error(err))
 				}
 
-				log.Debug(ctx, "killing container", slog.F("bootstrap_pid", bootstrapPID))
+				log.Debug(shutdownCtx, "killing container", slog.F("bootstrap_pid", bootstrapPID))
 
 				// The PID returned is the PID _outside_ the container...
-				out, err := exec.Command("kill", "-TERM", strconv.Itoa(bootstrapPID)).CombinedOutput() //nolint:gosec
+				out, err := exec.CommandContext(shutdownCtx, "kill", "-TERM", strconv.Itoa(bootstrapPID)).CombinedOutput() //nolint:gosec
 				if err != nil {
-					log.Error(ctx, "kill bootstrap process", slog.Error(err), slog.F("output", string(out)))
+					log.Error(shutdownCtx, "kill bootstrap process", slog.Error(err), slog.F("output", string(out)))
 					return
 				}
 
-				log.Debug(ctx, "sent kill signal waiting for process to exit")
-				err = dockerutil.WaitForExit(ctx, client, bootstrapExecID)
+				log.Debug(shutdownCtx, "sent kill signal waiting for process to exit")
+				err = dockerutil.WaitForExit(shutdownCtx, client, bootstrapExecID)
 				if err != nil {
-					log.Error(ctx, "wait for exit", slog.Error(err))
+					log.Error(shutdownCtx, "wait for exit", slog.Error(err))
 					return
 				}
 
-				log.Debug(ctx, "bootstrap process successfully exited")
+				log.Debug(shutdownCtx, "bootstrap process successfully exited")
 			}()
 
 			return nil
