@@ -219,7 +219,6 @@ linters:
     - errcheck
     - errname
     - errorlint
-    - exportloopref
     - forcetypeassert
     - gocritic
     - gocyclo
