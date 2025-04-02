@@ -5,8 +5,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/coder/envbox/xunix"
 	"golang.org/x/xerrors"
+
+	"github.com/coder/envbox/xunix"
 )
 
 const ManagerSocketPath = "/run/sysbox/sysmgr.sock"

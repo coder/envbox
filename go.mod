@@ -1,6 +1,7 @@
 module github.com/coder/envbox
 
-go 1.23.3
+go 1.24.1
+
 // There are a few minor changes we make to Tailscale that we're slowly upstreaming. Compare here:
 // https://github.com/tailscale/tailscale/compare/main...coder:tailscale:main
 replace tailscale.com => github.com/coder/tailscale v1.1.1-0.20240702054557-aa558fbe5374
