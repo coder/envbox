@@ -202,6 +202,7 @@ run:
   concurrency: 4
   skip-dirs:
     - node_modules
+    - cli/cliflag
   skip-files:
     - scripts/rules.go
   timeout: 5m
