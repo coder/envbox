@@ -393,6 +393,100 @@ func TestDocker(t *testing.T) {
 		require.True(t, recorder.ContainsLog("Envbox startup complete!"))
 	})
 
+	// This test provides backwards compatibility for older variants of envbox that may specify a
+	// Docker Auth config without a hostname key.
+	t.Run("NoHostnameAuthConfig", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			dir   = integrationtest.TmpDir(t)
+			binds = integrationtest.DefaultBinds(t, dir)
+		)
+
+		pool, err := dockertest.NewPool("")
+		require.NoError(t, err)
+
+		// Create some listeners for the Docker and Coder
+		// services we'll be running with self signed certs.
+		bridgeIP := integrationtest.DockerBridgeIP(t)
+		coderListener, err := net.Listen("tcp", fmt.Sprintf("%s:0", bridgeIP))
+		require.NoError(t, err)
+		defer coderListener.Close()
+		coderAddr := tcpAddr(t, coderListener)
+
+		registryListener, err := net.Listen("tcp", fmt.Sprintf("%s:0", bridgeIP))
+		require.NoError(t, err)
+		err = registryListener.Close()
+		require.NoError(t, err)
+		registryAddr := tcpAddr(t, registryListener)
+
+		coderCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", coderAddr.IP.String())
+		dockerCert := integrationtest.GenerateTLSCertificate(t, "host.docker.internal", registryAddr.IP.String())
+
+		// Startup our fake Coder "control-plane".
+		recorder := integrationtest.FakeBuildLogRecorder(t, coderListener, coderCert)
+
+		certDir := integrationtest.MkdirAll(t, dir, "certs")
+
+		// Write the Coder cert disk.
+		coderCertPath := filepath.Join(certDir, "coder_cert.pem")
+		coderKeyPath := filepath.Join(certDir, "coder_key.pem")
+		integrationtest.WriteCertificate(t, coderCert, coderCertPath, coderKeyPath)
+		coderCertMount := integrationtest.BindMount(certDir, "/tmp/certs", false)
+
+		// Write the Registry cert to disk.
+		regCertPath := filepath.Join(certDir, "registry_cert.crt")
+		regKeyPath := filepath.Join(certDir, "registry_key.pem")
+		integrationtest.WriteCertificate(t, dockerCert, regCertPath, regKeyPath)
+
+		username := "coder"
+		password := "helloworld"
+
+		// Start up the docker registry and push an image
+		// to it that we can reference.
+		image := integrationtest.RunLocalDockerRegistry(t, pool, integrationtest.RegistryConfig{
+			HostCertPath: regCertPath,
+			HostKeyPath:  regKeyPath,
+			Image:        integrationtest.UbuntuImage,
+			TLSPort:      strconv.Itoa(registryAddr.Port),
+			PasswordDir:  dir,
+			Username:     username,
+			Password:     password,
+		})
+
+		type authConfigs struct {
+			Auths map[string]dockerutil.AuthConfig `json:"auths"`
+		}
+
+		auths := authConfigs{
+			Auths: map[string]dockerutil.AuthConfig{
+				"": {Username: username, Password: password},
+			},
+		}
+
+		authStr, err := json.Marshal(auths)
+		require.NoError(t, err)
+
+		envs := []string{
+			integrationtest.EnvVar(cli.EnvAgentToken, "faketoken"),
+			integrationtest.EnvVar(cli.EnvAgentURL, fmt.Sprintf("https://%s:%d", "host.docker.internal", coderAddr.Port)),
+			integrationtest.EnvVar(cli.EnvExtraCertsPath, "/tmp/certs"),
+			integrationtest.EnvVar(cli.EnvBoxPullImageSecretEnvVar, string(authStr)),
+		}
+
+		// Run the envbox container.
+		_ = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
+			Image:       image.String(),
+			Username:    "coder",
+			Envs:        envs,
+			OuterMounts: append(binds, coderCertMount),
+		})
+
+		// This indicates we've made it all the way to end
+		// of the logs we attempt to push.
+		require.True(t, recorder.ContainsLog("Envbox startup complete!"))
+	})
+
 	// This tests the inverse of SelfSignedCerts. We assert that
 	// the container fails to startup since we don't have a valid
 	// cert for the registry. It mainly tests that we aren't
