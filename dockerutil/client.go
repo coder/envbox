@@ -85,24 +85,24 @@ func parseConfig(cfg dockercfg.Config, reg string) (AuthConfig, error) {
 		return toAuthConfig(username, secret), nil
 	}
 
-	// // This to preserve backwards compatibility with older variants of envbox
-	// // that didn't mandate a hostname key in the config file. We just take the
-	// // first valid auth config we find and use that.
-	// for _, auth := range cfg.AuthConfigs {
-	// 	if auth.IdentityToken != "" {
-	// 		return toAuthConfig("", auth.IdentityToken), nil
-	// 	}
+	// This to preserve backwards compatibility with older variants of envbox
+	// that didn't mandate a hostname key in the config file. We just take the
+	// first valid auth config we find and use that.
+	for _, auth := range cfg.AuthConfigs {
+		if auth.IdentityToken != "" {
+			return toAuthConfig("", auth.IdentityToken), nil
+		}
 
-	// 	if auth.Username != "" && auth.Password != "" {
-	// 		return toAuthConfig(auth.Username, auth.Password), nil
-	// 	}
+		if auth.Username != "" && auth.Password != "" {
+			return toAuthConfig(auth.Username, auth.Password), nil
+		}
 
-	// 	username, secret, err = dockercfg.DecodeBase64Auth(auth)
-	// 	if err == nil && secret != "" {
-	// 		return toAuthConfig(username, secret), nil
-	// 	}
-	// 	// Invalid auth config, skip it.
-	// }
+		username, secret, err = dockercfg.DecodeBase64Auth(auth)
+		if err == nil && secret != "" {
+			return toAuthConfig(username, secret), nil
+		}
+		// Invalid auth config, skip it.
+	}
 
 	return AuthConfig{}, xerrors.Errorf("no auth config found for registry %s: %w", reg, os.ErrNotExist)
 }
