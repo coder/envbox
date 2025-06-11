@@ -33,13 +33,13 @@ import (
 const (
 	// DockerdImage is a large image (~1GB) and should only be used to test
 	// dockerd.
-	DockerdImage = "gcr.io/coder-dev-1/sreya/enterprise-base:ubuntu"
+	DockerdImage = "us-docker.pkg.dev/coder-v2-images-public/public/envbox/enterprise-base:ubuntu"
 	// HelloWorldImage is useful for testing a CVM's dockerd is functioning
 	// correctly
-	HelloWorldImage = "gcr.io/coder-dev-1/sreya/hello-world"
+	HelloWorldImage = "us-docker.pkg.dev/coder-v2-images-public/public/envbox/hello-world"
 	// UbuntuImage is just vanilla ubuntu (80MB) but the user is set to a non-root
 	// user .
-	UbuntuImage = "gcr.io/coder-dev-1/sreya/ubuntu-coder"
+	UbuntuImage = "us-docker.pkg.dev/coder-v2-images-public/public/envbox/ubuntu-coder"
 	// Redhat UBI9 image as of 2025-03-05
 	RedhatImage = "registry.access.redhat.com/ubi9/ubi:9.5"
 	// CUDASampleImage is a CUDA sample image from NVIDIA's container registry.
@@ -49,7 +49,7 @@ const (
 	// RegistryImage is used to assert that we add certs
 	// correctly to the docker daemon when pulling an image
 	// from a registry with a self signed cert.
-	registryImage = "gcr.io/coder-dev-1/sreya/registry"
+	registryImage = "us-docker.pkg.dev/coder-v2-images-public/public/envbox/registry"
 	registryTag   = "2.8.3"
 )
 
