@@ -31,11 +31,11 @@ jobs:
         include:
           - os: ubuntu-22.04
             arch: linux/amd64
-            sha: 87cfa5cad97dc5dc1a243d6d88be1393be75b93a517dc1580ecd8a2801c2777a
+            sha: b7ac389e5a19592cadf16e0ca30e40919516128f6e1b7f99e1cb4ff64554172e
             arch-suffix: amd64
           - os: depot-ubuntu-22.04-arm
             arch: linux/arm64
-            sha: 640014411de589f4e09f8383dc53b3c7785575be13d5573d4addbd597f858d56
+            sha: 16d80123ba53058cf90f5a68686e297621ea97942602682e34b3352783908f91
             arch-suffix: arm64
     runs-on: ${{ matrix.os }}
     steps:

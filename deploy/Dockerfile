@@ -6,7 +6,7 @@ ARG TARGETARCH
 # We don't hardcode it here because we have to be able to build both
 # amd and arm
 ARG SYSBOX_SHA
-ARG SYSBOX_VERSION="0.6.6"
+ARG SYSBOX_VERSION="0.6.7"
 ARG SYSBOX_DEB="sysbox-ce_$SYSBOX_VERSION-0.linux_$TARGETARCH.deb"
 
 # Copy configuration files to appropriate locations
