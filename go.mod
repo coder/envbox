@@ -13,7 +13,7 @@ require (
 	github.com/coder/coder/v2 v2.14.4
 	github.com/coder/retry v1.5.1
 	github.com/cpuguy83/dockercfg v0.3.1
-	github.com/docker/docker v27.3.1+incompatible
+	github.com/docker/docker v28.0.0+incompatible
 	github.com/google/go-containerregistry v0.14.0
 	github.com/google/uuid v1.6.0
 	github.com/opencontainers/image-spec v1.1.0
