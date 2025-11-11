@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	dockertypes "github.com/docker/docker/api/types"
+	containertypes "github.com/docker/docker/api/types/container"
 	testingexec "k8s.io/utils/exec/testing"
 
 	"github.com/coder/envbox/dockerutil"
@@ -43,7 +44,7 @@ func NewFakeDockerClient() dockerutil.Client {
 		}, nil
 	}
 
-	client.ContainerExecAttachFn = func(_ context.Context, _ string, _ dockertypes.ExecStartCheck) (dockertypes.HijackedResponse, error) {
+	client.ContainerExecAttachFn = func(_ context.Context, _ string, _ containertypes.ExecAttachOptions) (dockertypes.HijackedResponse, error) {
 		return dockertypes.HijackedResponse{
 			Reader: bufio.NewReader(strings.NewReader("root:x:0:0:root:/root:/bin/bash")),
 			Conn:   &net.IPConn{},

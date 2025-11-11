@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	dockertypes "github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/common"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
@@ -311,7 +312,7 @@ func TestDocker(t *testing.T) {
 
 		// Set the exec response from inspecting the image to some ID
 		// greater than 0.
-		client.ContainerExecAttachFn = func(_ context.Context, _ string, _ dockertypes.ExecStartCheck) (dockertypes.HijackedResponse, error) {
+		client.ContainerExecAttachFn = func(_ context.Context, _ string, _ container.ExecAttachOptions) (dockertypes.HijackedResponse, error) {
 			return dockertypes.HijackedResponse{
 				Reader: bufio.NewReader(strings.NewReader("root:x:1001:1001:root:/root:/bin/bash")),
 				Conn:   &net.IPConn{},
@@ -444,23 +445,23 @@ func TestDocker(t *testing.T) {
 			statExecID = "hi"
 		)
 
-		client.ContainerExecCreateFn = func(_ context.Context, _ string, config dockertypes.ExecConfig) (dockertypes.IDResponse, error) {
+		client.ContainerExecCreateFn = func(_ context.Context, _ string, config container.ExecOptions) (common.IDResponse, error) {
 			if config.Cmd[0] == "stat" {
-				return dockertypes.IDResponse{
+				return common.IDResponse{
 					ID: statExecID,
 				}, nil
 			}
-			return dockertypes.IDResponse{}, nil
+			return common.IDResponse{}, nil
 		}
 
 		// Set the exec response from inspecting the image to some ID
 		// greater than 0.
-		client.ContainerExecInspectFn = func(_ context.Context, execID string) (dockertypes.ContainerExecInspect, error) {
+		client.ContainerExecInspectFn = func(_ context.Context, execID string) (container.ExecInspect, error) {
 			if execID == statExecID {
-				return dockertypes.ContainerExecInspect{ExitCode: 1}, nil
+				return container.ExecInspect{ExitCode: 1}, nil
 			}
 
-			return dockertypes.ContainerExecInspect{}, nil
+			return container.ExecInspect{}, nil
 		}
 
 		var called bool
