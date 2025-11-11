@@ -4,17 +4,37 @@
 
 This document helps AI coding agents work effectively with the envbox project. Read this first before making changes.
 
-## ⚠️ CRITICAL: Never Push to Main
+## ⚠️ CRITICAL: Always Start From Latest Main
 
-**ALWAYS work on a feature branch and push to your remote branch. NEVER push directly to main.**
+**ALWAYS pull latest main and create a feature branch. NEVER push directly to main.**
 
-When making changes:
-1. Create a feature branch: `git checkout -b your-branch-name`
-2. Make your changes and commit them
-3. Push to YOUR branch: `git push origin your-branch-name`
-4. Create a Pull Request for review
+### Starting Any New Task
 
-**DO NOT** run `git push origin main` - this pushes directly to main and bypasses code review.
+Before starting any work, **ALWAYS** do this:
+
+```bash
+# 1. Get latest main
+git checkout main
+git pull origin main
+
+# 2. Create feature branch from latest main
+git checkout -b your-branch-name
+
+# 3. Make your changes and commit them
+# ... do your work ...
+git add .
+git commit -m "your message"
+
+# 4. Push to YOUR branch (not main!)
+git push origin your-branch-name
+
+# 5. Create a Pull Request for review
+```
+
+**DO NOT:**
+- ❌ Start work without pulling latest main first
+- ❌ Run `git push origin main` - this pushes directly to main and bypasses code review
+- ❌ Create branches from stale/outdated main branches
 
 ## What is envbox?
 
