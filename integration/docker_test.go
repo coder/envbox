@@ -681,6 +681,106 @@ func TestDocker(t *testing.T) {
 		})
 		require.NoError(t, err)
 	})
+
+	t.Run("Stats", func(t *testing.T) {
+		t.Parallel()
+
+		pool, err := dockertest.NewPool("")
+		require.NoError(t, err)
+
+		var (
+			tmpdir              = integrationtest.TmpDir(t)
+			binds               = integrationtest.DefaultBinds(t, tmpdir)
+			expectedMemoryLimit = "536870912"  // 512MB
+			expectedCPULimit    = 2
+		)
+
+		homeDir := filepath.Join(tmpdir, "home")
+		err = os.MkdirAll(homeDir, 0o777)
+		require.NoError(t, err)
+
+		binds = append(binds, integrationtest.BindMount(homeDir, "/home/coder", false))
+
+		envs := []string{
+			integrationtest.EnvVar(cli.EnvMemory, expectedMemoryLimit),
+			integrationtest.EnvVar(cli.EnvCPUs, strconv.Itoa(expectedCPULimit)),
+		}
+
+		// Run the envbox container.
+		resource := integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
+			Image:       integrationtest.UbuntuImage,
+			Username:    "root",
+			OuterMounts: binds,
+			Envs:        envs,
+			Memory:      expectedMemoryLimit,
+			CPUs:        expectedCPULimit,
+		})
+
+		// Wait for the inner container's docker daemon.
+		integrationtest.WaitForCVMDocker(t, pool, resource, time.Minute)
+
+		// Get baseline outer container stats before workload
+		baselineStats, err := pool.Client.ContainerStats(resource.Container.ID, false)
+		require.NoError(t, err)
+		defer baselineStats.Body.Close()
+
+		var baselineData map[string]interface{}
+		err = json.NewDecoder(baselineStats.Body).Decode(&baselineData)
+		require.NoError(t, err)
+
+		t.Logf("Baseline outer container stats: %+v", baselineData)
+
+		// Start a CPU-intensive workload in the inner container
+		// We use 'yes > /dev/null' which will peg a CPU core
+		_, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+			ContainerID: resource.Container.ID,
+			Cmd:         []string{"/bin/sh", "-c", "yes > /dev/null & yes > /dev/null & sleep 5"},
+		})
+		require.NoError(t, err)
+
+		// Wait a bit for stats to accumulate
+		time.Sleep(3 * time.Second)
+
+		// Get outer container stats after workload
+		workloadStats, err := pool.Client.ContainerStats(resource.Container.ID, false)
+		require.NoError(t, err)
+		defer workloadStats.Body.Close()
+
+		var workloadData map[string]interface{}
+		err = json.NewDecoder(workloadStats.Body).Decode(&workloadData)
+		require.NoError(t, err)
+
+		t.Logf("Workload outer container stats: %+v", workloadData)
+
+		// Also get inner container stats for comparison
+		innerStats, err := integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+			ContainerID: resource.Container.ID,
+			Cmd:         []string{"docker", "stats", "--no-stream", "--format", "{{json .}}", cli.InnerContainerName},
+		})
+		require.NoError(t, err)
+
+		var innerData map[string]interface{}
+		err = json.Unmarshal(innerStats, &innerData)
+		require.NoError(t, err)
+
+		t.Logf("Inner container stats: %+v", innerData)
+
+		// The key assertion: outer container stats should reflect inner container usage
+		// This will likely FAIL initially, which is what we want to demonstrate the problem
+		// 
+		// TODO: Once fixed, this should pass. The outer container's CPU usage should
+		// include the inner container's CPU usage (which should be ~200% with 2 'yes' processes)
+		// 
+		// For now, we'll just log the values to see what's happening
+		t.Logf("=== STATS COMPARISON ===")
+		t.Logf("Expected behavior: Outer container stats should include inner container usage")
+		t.Logf("Inner container CPU: %v", innerData["CPUPerc"])
+		t.Logf("Outer container CPU (baseline): %v", baselineData)
+		t.Logf("Outer container CPU (workload): %v", workloadData)
+		
+		// TODO: Add proper assertion once fix is implemented
+		// For now, this test documents the expected behavior
+	})
 }
 
 func requireSliceNoContains(t *testing.T, ss []string, els ...string) {

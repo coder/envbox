@@ -42,23 +42,32 @@ type ContainerConfig struct {
 
 // CreateContainer creates a sysbox-runc container.
 func CreateContainer(ctx context.Context, client Client, conf *ContainerConfig) (string, error) {
+	resources := container.Resources{
+		Devices: conf.Devices,
+	}
+
+	// Set CPU/Memory limits if provided. With CgroupnsMode: "host", these limits
+	// are set within the outer container's cgroup hierarchy, allowing stats to
+	// propagate naturally while still providing resource isolation for the workload.
+	if conf.CPUs > 0 {
+		resources.CPUPeriod = int64(DefaultCPUPeriod)
+		resources.CPUQuota = conf.CPUs * int64(DefaultCPUPeriod)
+	}
+	if conf.MemoryLimit > 0 {
+		resources.Memory = conf.MemoryLimit
+	}
+
 	host := &container.HostConfig{
 		Runtime:    runtime,
 		AutoRemove: true,
-		Resources: container.Resources{
-			Devices: conf.Devices,
-			// Set resources for the inner container.
-			// This is important for processes inside the container to know what they
-			// have to work with.
-			// TODO: Sysbox does not copy cpu.cfs_{period,quota}_us into syscont-cgroup-root cgroup.
-			// These will not be visible inside the child container.
-			// See: https://github.com/nestybox/sysbox/issues/582
-			CPUPeriod: int64(DefaultCPUPeriod),
-			CPUQuota:  conf.CPUs * int64(DefaultCPUPeriod),
-			Memory:    conf.MemoryLimit,
-		},
+		Resources:  resources,
 		ExtraHosts: []string{"host.docker.internal:host-gateway"},
 		Binds:      generateBindMounts(conf.Mounts),
+		// Use host cgroup namespace mode so that the inner container's cgroup
+		// is a child of the outer container's cgroup. This allows resource usage
+		// stats to propagate naturally from inner to outer container, which is
+		// essential for Kubernetes metrics and autoscaling.
+		CgroupnsMode: container.CgroupnsMode("host"),
 	}
 
 	entrypoint := []string{"sleep", "infinity"}
