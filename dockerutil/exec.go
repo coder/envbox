@@ -6,7 +6,6 @@ import (
 	"io"
 	"time"
 
-	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"golang.org/x/xerrors"
 
@@ -41,7 +40,7 @@ func ExecContainer(ctx context.Context, client Client, config ExecConfig) ([]byt
 		return nil, xerrors.Errorf("exec create: %w", err)
 	}
 
-	resp, err := client.ContainerExecAttach(ctx, exec.ID, dockertypes.ExecStartCheck{})
+	resp, err := client.ContainerExecAttach(ctx, exec.ID, container.ExecAttachOptions{})
 	if err != nil {
 		return nil, xerrors.Errorf("attach to exec: %w", err)
 	}

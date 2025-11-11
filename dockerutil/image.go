@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
@@ -126,12 +125,12 @@ func PullImage(ctx context.Context, config *PullImageConfig) error {
 }
 
 // PruneImage runs a simple 'docker prune'.
-func PruneImages(ctx context.Context, client Client) (dockertypes.ImagesPruneReport, error) {
+func PruneImages(ctx context.Context, client Client) (image.PruneReport, error) {
 	report, err := client.ImagesPrune(ctx,
 		filters.NewArgs(filters.Arg("dangling", "false")),
 	)
 	if err != nil {
-		return dockertypes.ImagesPruneReport{}, xerrors.Errorf("images prune: %w", err)
+		return image.PruneReport{}, xerrors.Errorf("images prune: %w", err)
 	}
 
 	return report, nil
