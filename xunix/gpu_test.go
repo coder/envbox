@@ -108,7 +108,7 @@ func TestGPUs(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		devices, binds, err := xunix.GPUs(ctx, log, usrLibMountpoint)
+		devices, binds, err := xunix.GPUs(ctx, log, usrLibMountpoint, "")
 		require.NoError(t, err)
 		require.Len(t, devices, 2, "unexpected 2 nvidia devices")
 		require.Len(t, binds, 4, "expected 4 nvidia binds")

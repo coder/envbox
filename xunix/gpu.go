@@ -38,7 +38,7 @@ func GPUEnvs(ctx context.Context) []string {
 	return gpus
 }
 
-func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []mount.MountPoint, error) {
+func GPUs(ctx context.Context, log slog.Logger, usrLibDir string, additionalDevices string) ([]Device, []mount.MountPoint, error) {
 	var (
 		afs     = GetFS(ctx)
 		mounter = Mounter(ctx)
@@ -49,6 +49,22 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []m
 	mounts, err := mounter.List()
 	if err != nil {
 		return nil, nil, xerrors.Errorf("list mounts: %w", err)
+	}
+
+	// Append additional devices from the comma-separated list
+	if additionalDevices != "" {
+		devicePaths := strings.Split(additionalDevices, ",")
+		for _, devicePath := range devicePaths {
+			devicePath = strings.TrimSpace(devicePath)
+			if devicePath == "" {
+				continue
+			}
+			// Create a mount point for the additional device
+			mounts = append(mounts, mount.MountPoint{
+				Path: devicePath,
+				Opts: []string{"ro"},
+			})
+		}
 	}
 
 	for _, m := range mounts {

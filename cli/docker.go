@@ -107,6 +107,7 @@ var (
 	EnvDebug                = "CODER_DEBUG"
 	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
 	EnvExtraCertsPath       = "CODER_EXTRA_CERTS_PATH"
+	EnvAdditionalDevices    = "CODER_ADDITIONAL_DEVICES"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -146,6 +147,7 @@ type flags struct {
 	memory               int
 	disableIDMappedMount bool
 	extraCertsPath       string
+	additionalDevices    string
 
 	// Test flags.
 	noStartupLogs bool
@@ -443,6 +445,7 @@ func dockerCmd() *cobra.Command {
 	cliflag.IntVarP(cmd.Flags(), &flags.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.disableIDMappedMount, "disable-idmapped-mount", "", EnvDisableIDMappedMount, false, "Disable idmapped mounts in sysbox. Note that you may need an alternative (e.g. shiftfs).")
 	cliflag.StringVarP(cmd.Flags(), &flags.extraCertsPath, "extra-certs-path", "", EnvExtraCertsPath, "", "The path to a directory or file containing extra CA certificates.")
+	cliflag.StringVarP(cmd.Flags(), &flags.additionalDevices, "additional-devices", "", EnvAdditionalDevices, "", "Comma-separated list of additional device paths to append to the mounts list when detecting GPUs.")
 
 	// Test flags.
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")
@@ -665,7 +668,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	}
 
 	if flags.addGPU {
-		devs, binds, err := xunix.GPUs(ctx, log, flags.hostUsrLibDir)
+		devs, binds, err := xunix.GPUs(ctx, log, flags.hostUsrLibDir, flags.additionalDevices)
 		if err != nil {
 			return "", xerrors.Errorf("find gpus: %w", err)
 		}
