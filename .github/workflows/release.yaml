@@ -31,11 +31,11 @@ jobs:
         include:
           - os: ubuntu-22.04
             arch: linux/amd64
-            sha: b7ac389e5a19592cadf16e0ca30e40919516128f6e1b7f99e1cb4ff64554172e
+            sha: eeff273671467b8fa351ab3d40709759462dc03d9f7b50a1b207b37982ce40a9
             arch-suffix: amd64
           - os: depot-ubuntu-22.04-arm
             arch: linux/arm64
-            sha: 16d80123ba53058cf90f5a68686e297621ea97942602682e34b3352783908f91
+            sha: eae9c0e91ddd39bd1826d6a7a313a73d42a8449ef5113e9d6d118b559cb809ba
             arch-suffix: arm64
     runs-on: ${{ matrix.os }}
     steps:
@@ -79,10 +79,10 @@ jobs:
         run: make -j ARCH=${{ matrix.arch }} SYSBOX_SHA=${{ matrix.sha }} build/image/envbox
 
       - name: Tag Image
-        run: docker tag envbox ghcr.io/coder/envbox:${{ github.event.inputs.version }}-${{ matrix.arch-suffix }}
+        run: docker tag envbox ghcr.io/${{ github.repository_owner }}/envbox:${{ github.event.inputs.version }}-${{ matrix.arch-suffix }}
 
       - name: Push Image
-        run: docker push ghcr.io/coder/envbox:${{ github.event.inputs.version }}-${{ matrix.arch-suffix }}
+        run: docker push ghcr.io/${{ github.repository_owner }}/envbox:${{ github.event.inputs.version }}-${{ matrix.arch-suffix }}
   manifest:
     runs-on: ubuntu-22.04
     needs: release
@@ -100,12 +100,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Manifest
         run: |
-          docker manifest create ghcr.io/coder/envbox:${{ github.event.inputs.version }} \
-            --amend ghcr.io/coder/envbox:${{ github.event.inputs.version }}-amd64 \
-            --amend ghcr.io/coder/envbox:${{ github.event.inputs.version }}-arm64
+          docker manifest create ghcr.io/${{ github.repository_owner }}/envbox:${{ github.event.inputs.version }} \
+            --amend ghcr.io/${{ github.repository_owner }}/envbox:${{ github.event.inputs.version }}-amd64 \
+            --amend ghcr.io/${{ github.repository_owner }}/envbox:${{ github.event.inputs.version }}-arm64
       - name: Push Manifest
         run: |
-          docker manifest push ghcr.io/coder/envbox:${{ github.event.inputs.version }}
+          docker manifest push ghcr.io/${{ github.repository_owner }}/envbox:${{ github.event.inputs.version }}
 
   tag:
     runs-on: ubuntu-22.04
