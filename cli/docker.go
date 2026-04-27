@@ -256,7 +256,8 @@ func dockerCmd() *cobra.Command {
 			log.Debug(ctx, "starting dockerd", slog.F("args", args))
 
 			blog.Info("Waiting for sysbox processes to startup...")
-			dockerd := background.New(ctx, log, "dockerd", dargs...)
+			wrapCmd, wrapArgs := wrapDockerdCmd(dargs)
+			dockerd := background.New(ctx, log, wrapCmd, wrapArgs...)
 			err = dockerd.Start()
 			if err != nil {
 				return xerrors.Errorf("start dockerd: %w", err)
@@ -289,7 +290,8 @@ func dockerCmd() *cobra.Command {
 						log.Fatal(ctx, "dockerd exited, failed getting args for restart", slog.Error(err))
 					}
 
-					err = dockerd.Restart(ctx, "dockerd", args...)
+					wrapCmd, wrapArgs := wrapDockerdCmd(args)
+					err = dockerd.Restart(ctx, wrapCmd, wrapArgs...)
 					if err != nil {
 						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 						//nolint
@@ -357,7 +359,8 @@ func dockerCmd() *cobra.Command {
 
 					log.Debug(ctx, "restarting dockerd", slog.F("args", args))
 
-					err = dockerd.Restart(ctx, "dockerd", args...)
+					wrapCmd, wrapArgs := wrapDockerdCmd(args)
+					err = dockerd.Restart(ctx, wrapCmd, wrapArgs...)
 					if err != nil {
 						return xerrors.Errorf("restart dockerd: %w", err)
 					}
@@ -879,6 +882,55 @@ func dockerdArgs(link, cidr string, isNoSpace bool) ([]string, error) {
 	}
 
 	return args, nil
+}
+
+// wrapDockerdCmd wraps the dockerd invocation with `unshare --cgroup` +
+// cgroup2 remount + cgroupv2 delegation setup. This creates a new cgroup
+// namespace for dockerd and moves existing processes into a sibling `/init`
+// cgroup so the root cgroup can enable subtree_control. Without this, cgroupv2
+// "no internal processes" rule prevents Docker from creating child cgroups
+// with processes under a cgroup that already has processes.
+//
+// Note: the `umount /sys/fs/cgroup && mount -t cgroup2 ...` leaks back into
+// envbox's mount namespace because we don't use `--mount`. Using `--mount`
+// would break sysbox-fs propagation (its per-container mounts under
+// /var/lib/sysboxfs/ stop being visible to sysbox-runc in the dockerd NS).
+// The side effect of the leak is a non-fatal "Unable to read CPU quota"
+// warning when envbox later tries to read /sys/fs/cgroup/<host-path>/cpu.max
+// — that path no longer exists under the remounted view. The inner
+// container's CPU limits still flow through the parent pod's cgroup hierarchy,
+// but cgroup-aware tools inside the workspace may see the host CPU count.
+//
+// The cgroup delegation logic mirrors moby's `hack/dind` wrapper:
+// https://github.com/moby/moby/blob/master/hack/dind
+//
+// After this setup, inner container cgroups are placed under the envbox
+// container's cgroup on the host. Tetragon's cgtracker can then associate
+// these child cgroups with the parent pod for attribution.
+//
+// See also: https://github.com/moby/moby/issues/45378#issuecomment-2886261231
+func wrapDockerdCmd(dargs []string) (string, []string) {
+	shellCmd := `set -e
+umount /sys/fs/cgroup
+mount -t cgroup2 cgroup /sys/fs/cgroup
+if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+  mkdir -p /sys/fs/cgroup/init
+  while ! {
+    xargs -rn1 < /sys/fs/cgroup/cgroup.procs > /sys/fs/cgroup/init/cgroup.procs || :
+    sed -e 's/ / +/g' -e 's/^/+/' < /sys/fs/cgroup/cgroup.controllers > /sys/fs/cgroup/cgroup.subtree_control
+  }; do :; done
+fi
+exec "$0" "$@"
+`
+	wrapperArgs := []string{
+		"--cgroup",
+		"/bin/sh",
+		"-c",
+		shellCmd,
+		"dockerd",
+	}
+	wrapperArgs = append(wrapperArgs, dargs...)
+	return "unshare", wrapperArgs
 }
 
 // TODO This is bad code.
