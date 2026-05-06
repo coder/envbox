@@ -178,18 +178,23 @@ func TestDocker(t *testing.T) {
 			fmt.Sprintf("--bridge-cidr=%s", bridgeCIDR),
 		)
 
+		dockerdArgs := []string{
+			"--debug",
+			"--log-level=debug",
+			fmt.Sprintf("--mtu=%d", nl.Attrs().MTU),
+			"--userns-remap=coder",
+			"--storage-driver=overlay2",
+			fmt.Sprintf("--bip=%s", bridgeCIDR),
+		}
+		// dockerd is launched via an unshare wrapper that exec's into
+		// dockerd with these args; assert against the full wrapped argv.
+		wrapCmd, wrapArgs := cli.WrapDockerdCmd(dockerdArgs)
+		expectedArgv := append([]string{wrapCmd}, wrapArgs...)
+
 		execer := clitest.Execer(ctx)
 		execer.AddCommands(&xunixfake.FakeCmd{
 			FakeCmd: &testingexec.FakeCmd{
-				Argv: []string{
-					"dockerd",
-					"--debug",
-					"--log-level=debug",
-					fmt.Sprintf("--mtu=%d", nl.Attrs().MTU),
-					"--userns-remap=coder",
-					"--storage-driver=overlay2",
-					fmt.Sprintf("--bip=%s", bridgeCIDR),
-				},
+				Argv: expectedArgv,
 			},
 		})
 
@@ -739,6 +744,42 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 		execer.AssertCommandsCalled(t)
 	})
+}
+
+func TestWrapDockerdCmd(t *testing.T) {
+	t.Parallel()
+
+	dargs := []string{"--debug", "--mtu=1500"}
+	cmd, args := cli.WrapDockerdCmd(dargs)
+
+	// The wrapper invokes `unshare`, exec'ing through `/bin/sh -c <script>`
+	// and finally exec'ing dockerd. /proc/<pid>/cmdline ends up as "dockerd",
+	// which is what background.Process tracking should compare against.
+	require.Equal(t, "unshare", cmd)
+	require.Equal(t, "dockerd", cli.DockerdBinName)
+
+	// Argv prefix: --cgroup /bin/sh -c <script> dockerd <dargs...>
+	require.GreaterOrEqual(t, len(args), 6, "args=%v", args)
+	require.Equal(t, "--cgroup", args[0])
+	require.Equal(t, "/bin/sh", args[1])
+	require.Equal(t, "-c", args[2])
+	require.Equal(t, cli.DockerdBinName, args[4])
+	require.Equal(t, dargs, args[5:])
+
+	// The shell script should:
+	//  - guard the v2-only block on cgroup.controllers existing
+	//  - perform the umount/mount inside that guard (cgroupv1 hosts unaffected)
+	//  - delegate via /init + subtree_control
+	//  - bound the retry loop
+	//  - exec into dockerd
+	script := args[3]
+	require.Contains(t, script, "[ -f /sys/fs/cgroup/cgroup.controllers ]")
+	require.Contains(t, script, "umount /sys/fs/cgroup")
+	require.Contains(t, script, "mount -t cgroup2 cgroup /sys/fs/cgroup")
+	require.Contains(t, script, "mkdir -p /sys/fs/cgroup/init")
+	require.Contains(t, script, "/sys/fs/cgroup/cgroup.subtree_control")
+	require.Contains(t, script, fmt.Sprintf("ge %d ]", cli.DockerdSubtreeControlMaxAttempts))
+	require.Contains(t, script, `exec "$0" "$@"`)
 }
 
 // rawDockerAuth is sample input for a kubernetes secret to a gcr.io private

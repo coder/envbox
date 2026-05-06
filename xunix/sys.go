@@ -64,16 +64,18 @@ func readCPUQuotaCGroupV2(ctx context.Context) (CPUQuota, error) {
 	}
 
 	// Try the standard path (self-relative) first.
-	maxStr, err := afero.ReadFile(fs, filepath.Join("/sys/fs/cgroup/", self, "cpu.max"))
+	selfPath := filepath.Join("/sys/fs/cgroup/", self, "cpu.max")
+	maxStr, err := afero.ReadFile(fs, selfPath)
 	if err != nil {
 		// Fallback: read cpu.max at the mount root. This handles the case where
 		// `/sys/fs/cgroup/` has been remounted to be rooted at the current
 		// cgroup (e.g. after `unshare --cgroup` + `mount -t cgroup2`), so the
 		// self-relative path no longer exists — but the mount root IS the
 		// current cgroup and its cpu.max reflects the same limits.
-		rootMaxStr, rootErr := afero.ReadFile(fs, "/sys/fs/cgroup/cpu.max")
+		const rootPath = "/sys/fs/cgroup/cpu.max"
+		rootMaxStr, rootErr := afero.ReadFile(fs, rootPath)
 		if rootErr != nil {
-			return CPUQuota{}, xerrors.Errorf("read cpu.max outside container: %w", err)
+			return CPUQuota{}, xerrors.Errorf("read cpu.max outside container (tried %s: %v; fallback %s: %w)", selfPath, err, rootPath, rootErr)
 		}
 		maxStr = rootMaxStr
 	}

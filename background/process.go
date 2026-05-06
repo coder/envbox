@@ -56,6 +56,24 @@ func (d *Process) Start() error {
 	return d.startProcess()
 }
 
+// SetBinName overrides the binary name used to detect whether the running
+// process has exited (via the contents of /proc/<pid>/cmdline). By default
+// the binary name is the `cmd` argument passed to New or Restart. When the
+// command is a wrapper that exec's into a different binary (e.g.
+// `unshare ... -- /bin/sh -c 'exec dockerd ...'`), the post-exec cmdline
+// reflects the final binary rather than the wrapper, so the default
+// binary name will not match. Call SetBinName with the post-exec binary
+// name to keep exit detection accurate.
+//
+// SetBinName must be called again after each Restart since Restart resets
+// the binary name to its `cmd` argument.
+func (d *Process) SetBinName(name string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.binName = name
+}
+
 // Wait waits for the process to exit, returning the error on the provided
 // channel.
 func (d *Process) Wait() <-chan error {
