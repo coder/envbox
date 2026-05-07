@@ -7,6 +7,10 @@ on:
 
   pull_request:
 
+  schedule:
+    # Random time to avoid thundering herd, Monday-Friday.
+    - cron: "41 9 * * 1-5"
+
   workflow_dispatch:
 
 permissions:
@@ -189,30 +193,114 @@ jobs:
       - name: build image
         run: make -j build/image/envbox
 
-      # We don't want to run Trivy on pull requests.
-      - name: Exit if not on main
-        if: github.ref != 'refs/heads/main'
-        run: exit 0
+  osv-scan-scheduled:
+    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@43f380b8fc43a816831a9f5ee6fc91170809c7e9" # v2.3.5
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    with:
+      scan-args: |-
+        -r
+        --call-analysis=all
+        ./
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.34.2
+  osv-scan-pr:
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@43f380b8fc43a816831a9f5ee6fc91170809c7e9" # v2.3.5
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    with:
+      scan-args: |-
+        -r
+        --call-analysis=all
+        ./
+
+  osv-scan-alert:
+    name: OSV Source Scan Slack Alert
+    needs: [osv-scan-scheduled]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Slack Alert on Failure
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
-          image-ref: envbox:latest
-          format: sarif
-          output: trivy-results.sarif
-          severity: "CRITICAL,HIGH"
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: webhook-trigger
+          payload: |
+            content: ":rotating_light: OSV source scan failed. See run logs for more details."
+            run_url: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-      - name: Upload Trivy scan results to GitHub Security tab
+  osv-scan-image:
+    name: OSV Image Scanner
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "~1.24"
+
+      - name: Go Cache Paths
+        id: go-cache-paths
+        run: |
+          echo "GOMODCACHE=$(go env GOMODCACHE)" >> $GITHUB_OUTPUT
+
+      - name: Go Mod Cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.go-cache-paths.outputs.GOMODCACHE }}
+          key: ${{ runner.os }}-release-go-mod-${{ hashFiles('**/go.sum') }}
+
+      - name: Install yq
+        run: go run github.com/mikefarah/yq/v4@v4.30.6
+
+      - name: Build image
+        run: make -j build/image/envbox
+
+      - name: Install OSV Scanner
+        run: |
+          set -euxo pipefail
+          OSV_VERSION="v2.3.5"
+          OSV_SHA256="bb30c580afe5e757d3e959f4afd08a4795ea505ef84c46962b9a738aa573b41b"
+          curl -fsSL "https://github.com/google/osv-scanner/releases/download/${OSV_VERSION}/osv-scanner_linux_amd64" -o /usr/local/bin/osv-scanner
+          echo "${OSV_SHA256}  /usr/local/bin/osv-scanner" | sha256sum -c -
+          chmod +x /usr/local/bin/osv-scanner
+          osv-scanner --version
+
+      - name: Run OSV Image Scanner
+        run: |
+          set -euo pipefail
+          # Exit code 1 means vulnerabilities found (expected), anything else
+          # is a real error (e.g. 127=scan error, 128=no packages, 130=bad config).
+          osv-scanner scan image \
+            --format=sarif \
+            --output-file=osv-image-results.sarif \
+            "envbox:latest" || exit_code=$?
+          if [ "${exit_code:-0}" -ne 0 ] && [ "${exit_code}" -ne 1 ]; then
+            echo "::error::OSV scanner failed with exit code ${exit_code}"
+            exit "${exit_code}"
+          fi
+
+      - name: Upload OSV image scan results to GitHub Security tab
+        if: ${{ !cancelled() }}
         uses: github/codeql-action/upload-sarif@v2
         with:
-          sarif_file: trivy-results.sarif
-          category: "Trivy"
+          sarif_file: osv-image-results.sarif
+          category: "OSV Image Scanner"
 
-      - name: Upload Trivy scan results as an artifact
+      - name: Upload OSV image scan results as an artifact
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: trivy
-          path: trivy-results.sarif
+          name: osv-image-scan
+          path: osv-image-results.sarif
           retention-days: 7
 
   codeql:
