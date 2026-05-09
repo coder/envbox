@@ -14,7 +14,7 @@ import (
 	"golang.org/x/xerrors"
 	mount "k8s.io/mount-utils"
 
-	"cdr.dev/slog"
+	"cdr.dev/slog/v3"
 )
 
 var (

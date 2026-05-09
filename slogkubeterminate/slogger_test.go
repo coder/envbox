@@ -10,8 +10,8 @@ import (
 
 	"github.com/coder/envbox/slogkubeterminate"
 
-	"cdr.dev/slog"
-	"cdr.dev/slog/sloggers/sloghuman"
+	"cdr.dev/slog/v3"
+	"cdr.dev/slog/v3/sloggers/sloghuman"
 )
 
 func TestSlogKubeTerminate(t *testing.T) {

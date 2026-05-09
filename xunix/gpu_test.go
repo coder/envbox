@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/mount-utils"
 
-	"cdr.dev/slog/sloggers/slogtest"
+	"cdr.dev/slog/v3/sloggers/slogtest"
 
 	"github.com/coder/envbox/xunix"
 	"github.com/coder/envbox/xunix/xunixfake"
