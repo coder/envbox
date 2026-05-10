@@ -13,7 +13,7 @@ import (
 	"golang.org/x/xerrors"
 	"storj.io/drpc"
 
-	"cdr.dev/slog"
+	"cdr.dev/slog/v3"
 	"github.com/coder/coder/v2/agent/proto"
 	"github.com/coder/coder/v2/codersdk"
 	"github.com/coder/coder/v2/codersdk/agentsdk"
@@ -145,8 +145,7 @@ func newAgentClientV2(ctx context.Context, logger slog.Logger, client *agentsdk.
 }
 
 func OpenCoderClient(ctx context.Context, logger slog.Logger, accessURL *url.URL, hc *http.Client, token string) (CoderClient, error) {
-	client := agentsdk.New(accessURL)
-	client.SetSessionToken(token)
+	client := agentsdk.New(accessURL, agentsdk.WithFixedToken(token))
 	client.SDK.HTTPClient = hc
 
 	resp, err := client.SDK.BuildInfo(ctx)

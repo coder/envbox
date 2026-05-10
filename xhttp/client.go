@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/xerrors"
 
-	"cdr.dev/slog"
+	"cdr.dev/slog/v3"
 )
 
 func Client(log slog.Logger, extraCertsPath string) (*http.Client, error) {

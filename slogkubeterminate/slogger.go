@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"cdr.dev/slog"
+	"cdr.dev/slog/v3"
 )
 
 const defaultKubeTerminationLog = "/dev/termination-log"
