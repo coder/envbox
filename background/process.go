@@ -34,11 +34,10 @@ type Process struct {
 	mu         sync.Mutex
 }
 
-// New returns an instantiated daemon. binName is the binary name used to
-// detect process exit via /proc/<pid>/cmdline; for plain invocations it is
-// usually the same as cmd, but for wrappers that exec into a different
-// binary (e.g. `unshare ... -- /bin/sh -c 'exec dockerd ...'`) it must be
-// the post-exec binary name (e.g. "dockerd") so exit detection works.
+// New returns an instantiated daemon. binName is the expected
+// /proc/<pid>/cmdline value used for exit detection; pass cmd for plain
+// invocations, or the post-exec binary name for exec wrappers (e.g.
+// "dockerd" when cmd is "unshare ... -- sh -c 'exec dockerd ...'").
 func New(ctx context.Context, log slog.Logger, binName, cmd string, args ...string) *Process {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Process{

@@ -258,9 +258,6 @@ func dockerCmd() *cobra.Command {
 
 			blog.Info("Waiting for sysbox processes to startup...")
 			wrapCmd, wrapArgs := wrapDockerdCmd(dargs)
-			// dockerdBinName is what /proc/<pid>/cmdline reads as after the
-			// unshare -> sh -> dockerd exec chain; using it (not the literal
-			// `unshare` we invoke) keeps exit detection accurate.
 			dockerd := background.New(ctx, log, dockerdBinName, wrapCmd, wrapArgs...)
 			err = dockerd.Start()
 			if err != nil {
@@ -888,43 +885,29 @@ func dockerdArgs(link, cidr string, isNoSpace bool) ([]string, error) {
 	return args, nil
 }
 
-// dockerdBinName is the binary name reported by /proc/<pid>/cmdline once the
-// `unshare` -> `/bin/sh` -> dockerd exec chain set up by wrapDockerdCmd has
-// completed. background.Process tracking must use this name (not the literal
-// "unshare" command we invoke) so that exit detection compares against the
-// running cmdline correctly.
+// dockerdBinName is the post-exec cmdline of the wrapped dockerd (unshare ->
+// sh -> dockerd), used for background.Process exit detection.
 const dockerdBinName = "dockerd"
 
-// dockerdSubtreeControlMaxAttempts caps the cgroup-subtree-control retry loop
-// in wrap_dockerd.sh. moby's upstream hack/dind loop is unbounded; we bound
-// it so a stuck race can't block envbox startup indefinitely.
+// dockerdSubtreeControlMaxAttempts bounds the cgroup-subtree-control retry
+// loop in wrap_dockerd.sh. Diverges from moby's hack/dind (unbounded).
 const dockerdSubtreeControlMaxAttempts = 100
 
 //go:embed wrap_dockerd.sh
 var wrapDockerdScript string
 
-// wrapDockerdCmd wraps the dockerd invocation with `unshare --cgroup`, plus a
-// cgroup2 remount and cgroupv2 delegation setup (see wrap_dockerd.sh), so
-// that inner container cgroups become descendants of the envbox container's
-// own cgroup on the host. Without this the inner Docker daemon places
-// container cgroups at /sys/fs/cgroup/docker/<id>, which is a sibling of the
-// pod's cgroup tree rather than a descendant; host-level cgroup-aware tools
-// (Tetragon, Falco, custom eBPF agents) then cannot attribute processes
-// inside a workspace container back to the pod that's running them.
+// wrapDockerdCmd wraps dockerd with `unshare --cgroup` + cgroup2 remount and
+// delegation (see wrap_dockerd.sh) so inner container cgroups become
+// descendants of the envbox container's own cgroup on the host, restoring
+// pod attribution for cgroup-aware tools (Tetragon, Falco, etc.).
 //
-// Note: the `umount /sys/fs/cgroup && mount -t cgroup2 ...` leaks back into
-// envbox's mount namespace because we don't use `--mount` on unshare. Using
-// `--mount` would break sysbox-fs propagation (its per-container mounts
-// under /var/lib/sysboxfs/ stop being visible to sysbox-runc in the dockerd
-// namespace). The observable side effect of the leak is that envbox's later
-// cgroupv2 cpu.max read uses a different path; xunix.readCPUQuotaCGroupV2
-// has a fallback that handles this.
+// We do NOT pass --mount on unshare: the remount intentionally leaks into
+// envbox's mount namespace so sysbox-fs's /var/lib/sysboxfs/ mounts stay
+// visible to sysbox-runc. xunix.readCPUQuotaCGroupV2 has a fallback for
+// the resulting cpu.max path change.
 //
-// See also: https://github.com/moby/moby/issues/45378#issuecomment-2886261231
+// See: https://github.com/moby/moby/issues/45378#issuecomment-2886261231
 func wrapDockerdCmd(dargs []string) (string, []string) {
-	// Prepend the max-attempts value so wrap_dockerd.sh stays standalone and
-	// editor-friendly (no Go templating), while still letting the Go side
-	// own the constant.
 	shellCmd := fmt.Sprintf("envbox_max_attempts=%d\n%s", dockerdSubtreeControlMaxAttempts, wrapDockerdScript)
 	wrapperArgs := []string{
 		"--cgroup",

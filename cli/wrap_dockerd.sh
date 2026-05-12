@@ -1,15 +1,13 @@
-# cgroup v2: enable nesting
-#
-# Mirrors moby's hack/dind:
-# https://github.com/moby/moby/blob/8d9e3502aba39127e4d12196dae16d306f76993d/hack/dind#L61-L79
-#
-# Divergence from upstream: the inner retry loop is bounded by
-# envbox_max_attempts (set by the Go caller via a prepended variable
-# assignment) so a stuck race can't block envbox startup indefinitely.
+# shellcheck shell=sh
+# shellcheck disable=SC2154 # envbox_max_attempts is prepended by the Go caller
+
+# cgroup v2: enable nesting. Mirrors moby's hack/dind L61-79
+# (https://github.com/moby/moby/blob/8d9e3502aba39127e4d12196dae16d306f76993d/hack/dind#L61-L79),
+# bounded by envbox_max_attempts.
 if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
-	# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes
-	# the fs root. Inner container cgroups will then be created under the
-	# envbox container's cgroup on the host.
+	# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes the
+	# fs root; inner container cgroups end up under the envbox container's
+	# cgroup on the host.
 	umount /sys/fs/cgroup || { echo "envbox: failed to umount /sys/fs/cgroup" >&2; exit 1; }
 	mount -t cgroup2 cgroup /sys/fs/cgroup || { echo "envbox: failed to mount cgroup2 on /sys/fs/cgroup" >&2; exit 1; }
 
