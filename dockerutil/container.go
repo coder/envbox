@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/afero"
 	"golang.org/x/xerrors"
 
-	"cdr.dev/slog"
+	"cdr.dev/slog/v3"
 	"github.com/coder/envbox/xunix"
 	"github.com/coder/retry"
 )

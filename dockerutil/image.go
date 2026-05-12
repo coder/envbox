@@ -14,7 +14,7 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"golang.org/x/xerrors"
 
-	"cdr.dev/slog"
+	"cdr.dev/slog/v3"
 
 	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/xunix"

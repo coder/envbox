@@ -23,8 +23,8 @@ import (
 	"golang.org/x/exp/slices"
 	"golang.org/x/xerrors"
 
-	"cdr.dev/slog"
-	"cdr.dev/slog/sloggers/slogjson"
+	"cdr.dev/slog/v3"
+	"cdr.dev/slog/v3/sloggers/slogjson"
 	"github.com/coder/envbox/background"
 	"github.com/coder/envbox/buildlog"
 	"github.com/coder/envbox/cli/cliflag"

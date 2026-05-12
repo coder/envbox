@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 
-	"cdr.dev/slog/sloggers/slogtest"
+	"cdr.dev/slog/v3/sloggers/slogtest"
 
 	"github.com/coder/envbox/xunix"
 	"github.com/coder/envbox/xunix/xunixfake"
