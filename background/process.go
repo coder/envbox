@@ -34,8 +34,12 @@ type Process struct {
 	mu         sync.Mutex
 }
 
-// New returns an instantiated daemon.
-func New(ctx context.Context, log slog.Logger, cmd string, args ...string) *Process {
+// New returns an instantiated daemon. binName is the binary name used to
+// detect process exit via /proc/<pid>/cmdline; for plain invocations it is
+// usually the same as cmd, but for wrappers that exec into a different
+// binary (e.g. `unshare ... -- /bin/sh -c 'exec dockerd ...'`) it must be
+// the post-exec binary name (e.g. "dockerd") so exit detection works.
+func New(ctx context.Context, log slog.Logger, binName, cmd string, args ...string) *Process {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Process{
 		ctx:        ctx,
@@ -44,7 +48,7 @@ func New(ctx context.Context, log slog.Logger, cmd string, args ...string) *Proc
 		cmd:        xunix.GetExecer(ctx).CommandContext(ctx, cmd, args...),
 		log:        log.Named(cmd),
 		userKilled: i64ptr(0),
-		binName:    cmd,
+		binName:    binName,
 	}
 }
 
@@ -54,24 +58,6 @@ func (d *Process) Start() error {
 	defer d.mu.Unlock()
 
 	return d.startProcess()
-}
-
-// SetBinName overrides the binary name used to detect whether the running
-// process has exited (via the contents of /proc/<pid>/cmdline). By default
-// the binary name is the `cmd` argument passed to New or Restart. When the
-// command is a wrapper that exec's into a different binary (e.g.
-// `unshare ... -- /bin/sh -c 'exec dockerd ...'`), the post-exec cmdline
-// reflects the final binary rather than the wrapper, so the default
-// binary name will not match. Call SetBinName with the post-exec binary
-// name to keep exit detection accurate.
-//
-// SetBinName must be called again after each Restart since Restart resets
-// the binary name to its `cmd` argument.
-func (d *Process) SetBinName(name string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	d.binName = name
 }
 
 // Wait waits for the process to exit, returning the error on the provided
@@ -98,8 +84,8 @@ func (d *Process) Run() <-chan error {
 }
 
 // Restart kill the running process and reruns the command with the updated
-// cmd and args.
-func (d *Process) Restart(ctx context.Context, cmd string, args ...string) error {
+// binName, cmd and args. See New for the meaning of binName.
+func (d *Process) Restart(ctx context.Context, binName, cmd string, args ...string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -114,7 +100,7 @@ func (d *Process) Restart(ctx context.Context, cmd string, args ...string) error
 	d.cmd = xunix.GetExecer(ctx).CommandContext(ctx, cmd, args...)
 	d.waitCh = make(chan error, 1)
 	d.userKilled = i64ptr(0)
-	d.binName = cmd
+	d.binName = binName
 
 	return d.startProcess()
 }

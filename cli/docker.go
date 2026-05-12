@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -225,14 +226,14 @@ func dockerCmd() *cobra.Command {
 				select {
 				// Start sysbox-mgr and sysbox-fs in order to run
 				// sysbox containers.
-				case err := <-background.New(ctx, log, "sysbox-mgr", sysboxArgs...).Run():
+				case err := <-background.New(ctx, log, "sysbox-mgr", "sysbox-mgr", sysboxArgs...).Run():
 					if ctx.Err() == nil {
 						blog.Info(sysboxErrMsg)
 						//nolint
 						log.Critical(ctx, "sysbox-mgr exited", slog.Error(err))
 						panic(err)
 					}
-				case err := <-background.New(ctx, log, "sysbox-fs").Run():
+				case err := <-background.New(ctx, log, "sysbox-fs", "sysbox-fs").Run():
 					if ctx.Err() == nil {
 						blog.Info(sysboxErrMsg)
 						//nolint
@@ -257,11 +258,10 @@ func dockerCmd() *cobra.Command {
 
 			blog.Info("Waiting for sysbox processes to startup...")
 			wrapCmd, wrapArgs := wrapDockerdCmd(dargs)
-			dockerd := background.New(ctx, log, wrapCmd, wrapArgs...)
-			// The unshare wrapper exec's into dockerd, so /proc/<pid>/cmdline
-			// reflects "dockerd" not "unshare". Track exits against the
-			// post-exec name to keep Restart/kill detection accurate.
-			dockerd.SetBinName(dockerdBinName)
+			// dockerdBinName is what /proc/<pid>/cmdline reads as after the
+			// unshare -> sh -> dockerd exec chain; using it (not the literal
+			// `unshare` we invoke) keeps exit detection accurate.
+			dockerd := background.New(ctx, log, dockerdBinName, wrapCmd, wrapArgs...)
 			err = dockerd.Start()
 			if err != nil {
 				return xerrors.Errorf("start dockerd: %w", err)
@@ -295,15 +295,12 @@ func dockerCmd() *cobra.Command {
 					}
 
 					wrapCmd, wrapArgs := wrapDockerdCmd(args)
-					err = dockerd.Restart(ctx, wrapCmd, wrapArgs...)
+					err = dockerd.Restart(ctx, dockerdBinName, wrapCmd, wrapArgs...)
 					if err != nil {
 						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 						//nolint
 						log.Fatal(ctx, "restart dockerd", slog.Error(err))
 					}
-					// Restart resets the tracked binary name to its `cmd`
-					// argument; re-set it for the wrapped invocation.
-					dockerd.SetBinName(dockerdBinName)
 
 					err = <-dockerd.Wait()
 				}
@@ -367,13 +364,10 @@ func dockerCmd() *cobra.Command {
 					log.Debug(ctx, "restarting dockerd", slog.F("args", args))
 
 					wrapCmd, wrapArgs := wrapDockerdCmd(args)
-					err = dockerd.Restart(ctx, wrapCmd, wrapArgs...)
+					err = dockerd.Restart(ctx, dockerdBinName, wrapCmd, wrapArgs...)
 					if err != nil {
 						return xerrors.Errorf("restart dockerd: %w", err)
 					}
-					// Restart resets the tracked binary name to its `cmd`
-					// argument; re-set it for the wrapped invocation.
-					dockerd.SetBinName(dockerdBinName)
 					go func() {
 						err = <-dockerd.Wait()
 						blog.Errorf("restarted dockerd exited: %v", err)
@@ -902,28 +896,21 @@ func dockerdArgs(link, cidr string, isNoSpace bool) ([]string, error) {
 const dockerdBinName = "dockerd"
 
 // dockerdSubtreeControlMaxAttempts caps the cgroup-subtree-control retry loop
-// so a stuck race can't block envbox startup indefinitely.
+// in wrap_dockerd.sh. moby's upstream hack/dind loop is unbounded; we bound
+// it so a stuck race can't block envbox startup indefinitely.
 const dockerdSubtreeControlMaxAttempts = 100
 
+//go:embed wrap_dockerd.sh
+var wrapDockerdScript string
+
 // wrapDockerdCmd wraps the dockerd invocation with `unshare --cgroup`, plus a
-// cgroup2 remount and cgroupv2 delegation setup, so that inner container
-// cgroups become descendants of the envbox container's own cgroup on the
-// host. Without this the inner Docker daemon places container cgroups at
-// /sys/fs/cgroup/docker/<id>, which is a sibling of the pod's cgroup tree
-// rather than a descendant; host-level cgroup-aware tools (Tetragon, Falco,
-// custom eBPF agents) then cannot attribute processes inside a workspace
-// container back to the pod that's running them.
-//
-// On cgroupv2 the delegation block (move all current processes into
-// /sys/fs/cgroup/init, then enable cgroup.subtree_control on the root) is
-// required: cgroupv2's "no internal processes" rule otherwise prevents
-// dockerd from creating child cgroups with processes under a parent that
-// already has its own processes. The block is gated on
-// /sys/fs/cgroup/cgroup.controllers existing so that on cgroupv1 hosts the
-// wrapper is effectively a no-op around `unshare --cgroup -- exec dockerd`.
-//
-// The delegation logic mirrors moby's hack/dind wrapper (lines 61-79):
-// https://github.com/moby/moby/blob/8d9e3502aba39127e4d12196dae16d306f76993d/hack/dind#L61-L79
+// cgroup2 remount and cgroupv2 delegation setup (see wrap_dockerd.sh), so
+// that inner container cgroups become descendants of the envbox container's
+// own cgroup on the host. Without this the inner Docker daemon places
+// container cgroups at /sys/fs/cgroup/docker/<id>, which is a sibling of the
+// pod's cgroup tree rather than a descendant; host-level cgroup-aware tools
+// (Tetragon, Falco, custom eBPF agents) then cannot attribute processes
+// inside a workspace container back to the pod that's running them.
 //
 // Note: the `umount /sys/fs/cgroup && mount -t cgroup2 ...` leaks back into
 // envbox's mount namespace because we don't use `--mount` on unshare. Using
@@ -935,41 +922,10 @@ const dockerdSubtreeControlMaxAttempts = 100
 //
 // See also: https://github.com/moby/moby/issues/45378#issuecomment-2886261231
 func wrapDockerdCmd(dargs []string) (string, []string) {
-	shellCmd := fmt.Sprintf(`set -e
-# cgroup v2: enable nesting
-if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
-	# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes the
-	# fs root. Inner container cgroups will then be created under the envbox
-	# container's cgroup on the host.
-	umount /sys/fs/cgroup
-	mount -t cgroup2 cgroup /sys/fs/cgroup
-
-	# move the processes from the root group to the /init group,
-	# otherwise writing subtree_control fails with EBUSY.
-	# An error during moving non-existent process (i.e., "cat") is ignored.
-	mkdir -p /sys/fs/cgroup/init
-	# this happens in a loop because things like "docker exec" on our dind
-	# container will create new processes, which creates a race between our
-	# moving everything to "init" and enabling subtree_control
-	envbox_attempts=0
-	while ! {
-		# move the processes from the root group to the /init group,
-		# otherwise writing subtree_control fails with EBUSY.
-		# An error during moving non-existent process (i.e., "cat") is ignored.
-		xargs -rn1 < /sys/fs/cgroup/cgroup.procs > /sys/fs/cgroup/init/cgroup.procs || :
-		# enable controllers
-		sed -e 's/ / +/g' -e 's/^/+/' < /sys/fs/cgroup/cgroup.controllers \
-			> /sys/fs/cgroup/cgroup.subtree_control
-	}; do
-		envbox_attempts=$((envbox_attempts + 1))
-		if [ "$envbox_attempts" -ge %d ]; then
-			echo "envbox: failed to enable cgroup.subtree_control after $envbox_attempts attempts" >&2
-			exit 1
-		fi
-	done
-fi
-exec "$0" "$@"
-`, dockerdSubtreeControlMaxAttempts)
+	// Prepend the max-attempts value so wrap_dockerd.sh stays standalone and
+	// editor-friendly (no Go templating), while still letting the Go side
+	// own the constant.
+	shellCmd := fmt.Sprintf("envbox_max_attempts=%d\n%s", dockerdSubtreeControlMaxAttempts, wrapDockerdScript)
 	wrapperArgs := []string{
 		"--cgroup",
 		"/bin/sh",
