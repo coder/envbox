@@ -66,8 +66,8 @@ func TestReadCPUQuota(t *testing.T) {
 			Name:    "CGroupV2_RootFallback",
 			Subpath: "docker/dummy",
 			FS: map[string]string{
-				"/proc/self/cgroup":         "0::/kubepods/pod/container\n",
-				"/sys/fs/cgroup/cpu.max":    "150000 100000\n",
+				"/proc/self/cgroup":      "0::/kubepods/pod/container\n",
+				"/sys/fs/cgroup/cpu.max": "150000 100000\n",
 			},
 			Expected: xunix.CPUQuota{Quota: 150000, Period: 100000, CGroup: xunix.CGroupV2},
 		},
