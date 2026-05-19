@@ -178,18 +178,70 @@ func TestDocker(t *testing.T) {
 			fmt.Sprintf("--bridge-cidr=%s", bridgeCIDR),
 		)
 
+		// dockerd is launched via an unshare wrapper that exec's into
+		// dockerd with these args. The expected argv is specified inline
+		// (including the full shell script) so this test fails loudly if
+		// the wrapper changes; TestWrapDockerdCmd covers the wrapper
+		// structure independently.
+		const expectedShellScript = `envbox_max_attempts=100
+# shellcheck shell=sh
+# shellcheck disable=SC2154 # envbox_max_attempts is prepended by the Go caller
+
+# cgroup v2: enable nesting. Mirrors moby's hack/dind L61-79
+# (https://github.com/moby/moby/blob/8d9e3502aba39127e4d12196dae16d306f76993d/hack/dind#L61-L79),
+# bounded by envbox_max_attempts.
+if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+	# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes the
+	# fs root; inner container cgroups end up under the envbox container's
+	# cgroup on the host.
+	umount /sys/fs/cgroup || { echo "envbox: failed to umount /sys/fs/cgroup" >&2; exit 1; }
+	mount -t cgroup2 cgroup /sys/fs/cgroup || { echo "envbox: failed to mount cgroup2 on /sys/fs/cgroup" >&2; exit 1; }
+
+	# move the processes from the root group to the /init group,
+	# otherwise writing subtree_control fails with EBUSY.
+	# An error during moving non-existent process (i.e., "cat") is ignored.
+	mkdir -p /sys/fs/cgroup/init || { echo "envbox: failed to mkdir /sys/fs/cgroup/init" >&2; exit 1; }
+	# this happens in a loop because things like "docker exec" on our dind
+	# container will create new processes, which creates a race between our
+	# moving everything to "init" and enabling subtree_control
+	envbox_attempts=0
+	while ! {
+		# move the processes from the root group to the /init group,
+		# otherwise writing subtree_control fails with EBUSY.
+		# An error during moving non-existent process (i.e., "cat") is ignored.
+		xargs -rn1 < /sys/fs/cgroup/cgroup.procs > /sys/fs/cgroup/init/cgroup.procs || :
+		# enable controllers
+		sed -e 's/ / +/g' -e 's/^/+/' < /sys/fs/cgroup/cgroup.controllers \
+			> /sys/fs/cgroup/cgroup.subtree_control
+	}; do
+		envbox_attempts=$((envbox_attempts + 1))
+		if [ "$envbox_attempts" -ge "$envbox_max_attempts" ]; then
+			echo "envbox: failed to enable cgroup.subtree_control after $envbox_attempts attempts" >&2
+			exit 1
+		fi
+	done
+fi
+exec "$0" "$@"
+`
+		expectedArgv := []string{
+			"unshare",
+			"--cgroup",
+			"/bin/sh",
+			"-c",
+			expectedShellScript,
+			"dockerd",
+			"--debug",
+			"--log-level=debug",
+			fmt.Sprintf("--mtu=%d", nl.Attrs().MTU),
+			"--userns-remap=coder",
+			"--storage-driver=overlay2",
+			fmt.Sprintf("--bip=%s", bridgeCIDR),
+		}
+
 		execer := clitest.Execer(ctx)
 		execer.AddCommands(&xunixfake.FakeCmd{
 			FakeCmd: &testingexec.FakeCmd{
-				Argv: []string{
-					"dockerd",
-					"--debug",
-					"--log-level=debug",
-					fmt.Sprintf("--mtu=%d", nl.Attrs().MTU),
-					"--userns-remap=coder",
-					"--storage-driver=overlay2",
-					fmt.Sprintf("--bip=%s", bridgeCIDR),
-				},
+				Argv: expectedArgv,
 			},
 		})
 
@@ -739,6 +791,45 @@ func TestDocker(t *testing.T) {
 		require.NoError(t, err)
 		execer.AssertCommandsCalled(t)
 	})
+}
+
+func TestWrapDockerdCmd(t *testing.T) {
+	t.Parallel()
+
+	dargs := []string{"--debug", "--mtu=1500"}
+	cmd, args := cli.WrapDockerdCmd(dargs)
+
+	// The wrapper invokes `unshare`, exec'ing through `/bin/sh -c <script>`
+	// and finally exec'ing dockerd. /proc/<pid>/cmdline ends up as "dockerd",
+	// which is what background.Process tracking should compare against.
+	require.Equal(t, "unshare", cmd)
+	require.Equal(t, "dockerd", cli.DockerdBinName)
+
+	// Argv prefix: --cgroup /bin/sh -c <script> dockerd <dargs...>
+	require.GreaterOrEqual(t, len(args), 6, "args=%v", args)
+	require.Equal(t, "--cgroup", args[0])
+	require.Equal(t, "/bin/sh", args[1])
+	require.Equal(t, "-c", args[2])
+	require.Equal(t, cli.DockerdBinName, args[4])
+	require.Equal(t, dargs, args[5:])
+
+	// The shell script should:
+	//  - prepend the envbox_max_attempts value (so the embedded script can
+	//    reference it as a variable)
+	//  - guard the v2-only block on cgroup.controllers existing
+	//  - perform the umount/mount inside that guard (cgroupv1 hosts unaffected)
+	//  - delegate via /init + subtree_control
+	//  - bound the retry loop against envbox_max_attempts
+	//  - exec into dockerd
+	script := args[3]
+	require.Contains(t, script, fmt.Sprintf("envbox_max_attempts=%d", cli.DockerdSubtreeControlMaxAttempts))
+	require.Contains(t, script, "[ -f /sys/fs/cgroup/cgroup.controllers ]")
+	require.Contains(t, script, "umount /sys/fs/cgroup")
+	require.Contains(t, script, "mount -t cgroup2 cgroup /sys/fs/cgroup")
+	require.Contains(t, script, "mkdir -p /sys/fs/cgroup/init")
+	require.Contains(t, script, "/sys/fs/cgroup/cgroup.subtree_control")
+	require.Contains(t, script, `ge "$envbox_max_attempts" ]`)
+	require.Contains(t, script, `exec "$0" "$@"`)
 }
 
 // rawDockerAuth is sample input for a kubernetes secret to a gcr.io private

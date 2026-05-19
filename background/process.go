@@ -34,8 +34,11 @@ type Process struct {
 	mu         sync.Mutex
 }
 
-// New returns an instantiated daemon.
-func New(ctx context.Context, log slog.Logger, cmd string, args ...string) *Process {
+// New returns an instantiated daemon. binName is the expected
+// /proc/<pid>/cmdline value used for exit detection; pass cmd for plain
+// invocations, or the post-exec binary name for exec wrappers (e.g.
+// "dockerd" when cmd is "unshare ... -- sh -c 'exec dockerd ...'").
+func New(ctx context.Context, log slog.Logger, binName, cmd string, args ...string) *Process {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Process{
 		ctx:        ctx,
@@ -44,7 +47,7 @@ func New(ctx context.Context, log slog.Logger, cmd string, args ...string) *Proc
 		cmd:        xunix.GetExecer(ctx).CommandContext(ctx, cmd, args...),
 		log:        log.Named(cmd),
 		userKilled: i64ptr(0),
-		binName:    cmd,
+		binName:    binName,
 	}
 }
 
@@ -80,8 +83,8 @@ func (d *Process) Run() <-chan error {
 }
 
 // Restart kill the running process and reruns the command with the updated
-// cmd and args.
-func (d *Process) Restart(ctx context.Context, cmd string, args ...string) error {
+// binName, cmd and args. See New for the meaning of binName.
+func (d *Process) Restart(ctx context.Context, binName, cmd string, args ...string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -96,7 +99,7 @@ func (d *Process) Restart(ctx context.Context, cmd string, args ...string) error
 	d.cmd = xunix.GetExecer(ctx).CommandContext(ctx, cmd, args...)
 	d.waitCh = make(chan error, 1)
 	d.userKilled = i64ptr(0)
-	d.binName = cmd
+	d.binName = binName
 
 	return d.startProcess()
 }

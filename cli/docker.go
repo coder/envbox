@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -225,14 +226,14 @@ func dockerCmd() *cobra.Command {
 				select {
 				// Start sysbox-mgr and sysbox-fs in order to run
 				// sysbox containers.
-				case err := <-background.New(ctx, log, "sysbox-mgr", sysboxArgs...).Run():
+				case err := <-background.New(ctx, log, "sysbox-mgr", "sysbox-mgr", sysboxArgs...).Run():
 					if ctx.Err() == nil {
 						blog.Info(sysboxErrMsg)
 						//nolint
 						log.Critical(ctx, "sysbox-mgr exited", slog.Error(err))
 						panic(err)
 					}
-				case err := <-background.New(ctx, log, "sysbox-fs").Run():
+				case err := <-background.New(ctx, log, "sysbox-fs", "sysbox-fs").Run():
 					if ctx.Err() == nil {
 						blog.Info(sysboxErrMsg)
 						//nolint
@@ -256,7 +257,8 @@ func dockerCmd() *cobra.Command {
 			log.Debug(ctx, "starting dockerd", slog.F("args", args))
 
 			blog.Info("Waiting for sysbox processes to startup...")
-			dockerd := background.New(ctx, log, "dockerd", dargs...)
+			wrapCmd, wrapArgs := wrapDockerdCmd(dargs)
+			dockerd := background.New(ctx, log, dockerdBinName, wrapCmd, wrapArgs...)
 			err = dockerd.Start()
 			if err != nil {
 				return xerrors.Errorf("start dockerd: %w", err)
@@ -289,7 +291,8 @@ func dockerCmd() *cobra.Command {
 						log.Fatal(ctx, "dockerd exited, failed getting args for restart", slog.Error(err))
 					}
 
-					err = dockerd.Restart(ctx, "dockerd", args...)
+					wrapCmd, wrapArgs := wrapDockerdCmd(args)
+					err = dockerd.Restart(ctx, dockerdBinName, wrapCmd, wrapArgs...)
 					if err != nil {
 						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 						//nolint
@@ -357,7 +360,8 @@ func dockerCmd() *cobra.Command {
 
 					log.Debug(ctx, "restarting dockerd", slog.F("args", args))
 
-					err = dockerd.Restart(ctx, "dockerd", args...)
+					wrapCmd, wrapArgs := wrapDockerdCmd(args)
+					err = dockerd.Restart(ctx, dockerdBinName, wrapCmd, wrapArgs...)
 					if err != nil {
 						return xerrors.Errorf("restart dockerd: %w", err)
 					}
@@ -879,6 +883,41 @@ func dockerdArgs(link, cidr string, isNoSpace bool) ([]string, error) {
 	}
 
 	return args, nil
+}
+
+// dockerdBinName is the post-exec cmdline of the wrapped dockerd (unshare ->
+// sh -> dockerd), used for background.Process exit detection.
+const dockerdBinName = "dockerd"
+
+// dockerdSubtreeControlMaxAttempts bounds the cgroup-subtree-control retry
+// loop in wrap_dockerd.sh. Diverges from moby's hack/dind (unbounded).
+const dockerdSubtreeControlMaxAttempts = 100
+
+//go:embed wrap_dockerd.sh
+var wrapDockerdScript string
+
+// wrapDockerdCmd wraps dockerd with `unshare --cgroup` + cgroup2 remount and
+// delegation (see wrap_dockerd.sh) so inner container cgroups become
+// descendants of the envbox container's own cgroup on the host, restoring
+// pod attribution for cgroup-aware tools (Tetragon, Falco, etc.).
+//
+// We do NOT pass --mount on unshare: the remount intentionally leaks into
+// envbox's mount namespace so sysbox-fs's /var/lib/sysboxfs/ mounts stay
+// visible to sysbox-runc. xunix.readCPUQuotaCGroupV2 has a fallback for
+// the resulting cpu.max path change.
+//
+// See: https://github.com/moby/moby/issues/45378#issuecomment-2886261231
+func wrapDockerdCmd(dargs []string) (string, []string) {
+	shellCmd := fmt.Sprintf("envbox_max_attempts=%d\n%s", dockerdSubtreeControlMaxAttempts, wrapDockerdScript)
+	wrapperArgs := []string{
+		"--cgroup",
+		"/bin/sh",
+		"-c",
+		shellCmd,
+		dockerdBinName,
+	}
+	wrapperArgs = append(wrapperArgs, dargs...)
+	return "unshare", wrapperArgs
 }
 
 // TODO This is bad code.

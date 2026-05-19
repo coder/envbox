@@ -60,6 +60,18 @@ func TestReadCPUQuota(t *testing.T) {
 			Expected: xunix.CPUQuota{Quota: -1, Period: 100000, CGroup: xunix.CGroupV2},
 		},
 		{
+			// Simulates the cgroup namespace + remount the dockerd wrapper
+			// performs: the self-relative path no longer exists but cpu.max
+			// at the mount root reflects the same limits.
+			Name:    "CGroupV2_RootFallback",
+			Subpath: "docker/dummy",
+			FS: map[string]string{
+				"/proc/self/cgroup":      "0::/kubepods/pod/container\n",
+				"/sys/fs/cgroup/cpu.max": "150000 100000\n",
+			},
+			Expected: xunix.CPUQuota{Quota: 150000, Period: 100000, CGroup: xunix.CGroupV2},
+		},
+		{
 			Name:  "Empty",
 			FS:    map[string]string{},
 			Error: "file does not exist",
