@@ -1,23 +1,28 @@
 PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
 GO_FILES := $(shell git ls-files '*.go' '*.sum')
 IMAGE_FILES := $(shell find deploy)
-ARCH ?= linux/amd64
-SYSBOX_SHA ?= eeff273671467b8fa351ab3d40709759462dc03d9f7b50a1b207b37982ce40a9
+ARCH ?= linux/$(shell go env GOARCH)
+SYSBOX_SHA ?= $(shell ./scripts/sysbox_sha.sh $(ARCH))
+GOOS := $(word 1,$(subst /, ,$(ARCH)))
+GOARCH := $(word 2,$(subst /, ,$(ARCH)))
 
 .PHONY: clean
 clean:
 	rm -rf build
 
+.PHONY: build/envbox
 build/envbox: $(GO_FILES)
-	CGO_ENABLED=0 go build -o build/envbox ./cmd/envbox
+	mkdir -p $(@D)
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o build/envbox ./cmd/envbox
 
 .PHONY: build/image/envbox
-build/image/envbox: build/image/envbox/.ctx
+build/image/envbox: build/image/envbox/$(GOOS)_$(GOARCH)/.ctx
 
-build/image/envbox/.ctx: build/envbox $(IMAGE_FILES)
+build/image/envbox/$(GOOS)_$(GOARCH)/.ctx: build/envbox $(IMAGE_FILES) scripts/sysbox_sha.sh
+	rm -rf $(@D)
 	mkdir -p $(@D)
 	cp -r build/envbox deploy/. $(@D)
-	docker buildx build --build-arg SYSBOX_SHA=$(SYSBOX_SHA) -t envbox --platform $(ARCH) $(@D)
+	docker buildx build --build-arg SYSBOX_SHA=$(SYSBOX_SHA) --load -t envbox --platform $(ARCH) $(@D)
 	touch $@
 
 .PHONY: fmt
