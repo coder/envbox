@@ -46,6 +46,39 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []m
 		binds   = []mount.MountPoint{}
 	)
 
+	// Directly scan /dev/ for GPU device files since they don't appear in /proc/mounts.
+	// GPU device files like /dev/nvidia0 are character devices, not mount points.
+	devDirs := []string{"/dev", "/dev/nvidia-caps"}
+	for _, devDir := range devDirs {
+		devFiles, err := afero.ReadDir(afs, devDir)
+		if err != nil {
+			// /dev/nvidia-caps might not exist, which is OK
+			if devDir != "/dev" {
+				log.Debug(ctx, "gpu device directory not found", slog.F("dir", devDir))
+			} else {
+				log.Warn(ctx, "failed to read /dev directory", slog.Error(err))
+			}
+			continue
+		}
+		for _, devFile := range devFiles {
+			devPath := filepath.Join(devDir, devFile.Name())
+			if gpuMountRegex.MatchString(devPath) {
+				// Check if it's actually a device file
+				stat, err := afs.LStat(devPath)
+				if err != nil {
+					continue
+				}
+				mode := stat.Mode()
+				if mode&os.ModeCharDevice != 0 || mode&os.ModeDevice != 0 {
+					log.Debug(ctx, "found GPU device", slog.F("path", devPath))
+					devices = append(devices, Device{
+						Path: devPath,
+					})
+				}
+			}
+		}
+	}
+
 	mounts, err := mounter.List()
 	if err != nil {
 		return nil, nil, xerrors.Errorf("list mounts: %w", err)
@@ -64,7 +97,39 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []m
 				continue
 			}
 
-			// If it's not in /dev treat it as a bind mount.
+			// Check file type to ensure it's mountable with shiftfs.
+			// Sysbox has issues with bind-mounting individual files, and can only reliably
+			// apply shiftfs marking to directories. With GPU Operator 25.10.0+ using CDI
+			// by default, individual files should be injected via CDI, not manual mounts.
+			stat, err := afs.LStat(m.Path)
+			if err != nil {
+				log.Warn(ctx, "stat gpu mount path", slog.F("path", m.Path), slog.Error(err))
+				continue
+			}
+
+			mode := stat.Mode()
+			if mode&os.ModeSocket != 0 {
+				log.Debug(ctx, "skipping GPU socket file (not mountable)", slog.F("path", m.Path))
+				continue
+			}
+			if mode&os.ModeNamedPipe != 0 {
+				log.Debug(ctx, "skipping GPU named pipe (not mountable)", slog.F("path", m.Path))
+				continue
+			}
+			if mode&os.ModeCharDevice != 0 || mode&os.ModeDevice != 0 {
+				log.Debug(ctx, "skipping GPU device file (should be in /dev)", slog.F("path", m.Path))
+				continue
+			}
+
+			// Skip individual files from /proc/mounts - only mount directories.
+			// Sysbox has issues applying shiftfs marking to individual file bind mounts.
+			// With GPU Operator 25.10.0+, CDI should handle individual files automatically.
+			if !mode.IsDir() {
+				log.Debug(ctx, "skipping GPU file mount (only directories supported)", slog.F("path", m.Path))
+				continue
+			}
+
+			// If it's a directory, treat it as a bind mount.
 			binds = append(binds, m)
 			// We also want to find any symlinks that point to the target.
 			// This is important for the nvidia driver as it mounts the driver
@@ -91,6 +156,18 @@ func GPUs(ctx context.Context, log slog.Logger, usrLibDir string) ([]Device, []m
 	}
 
 	for _, gpu := range extraGPUS {
+		// Skip individual files from usrLibGPUs too - only directories work with shiftfs.
+		// With GPU Operator 25.10.0+, individual library files should be handled by CDI.
+		stat, err := afs.LStat(gpu.Path)
+		if err != nil {
+			log.Warn(ctx, "stat gpu library path", slog.F("path", gpu.Path), slog.Error(err))
+			continue
+		}
+		if !stat.Mode().IsDir() {
+			log.Debug(ctx, "skipping GPU library file (only directories supported)", slog.F("path", gpu.Path))
+			continue
+		}
+
 		var duplicate bool
 		for _, bind := range binds {
 			if gpu.Path == bind.Path {

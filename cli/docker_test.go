@@ -665,8 +665,9 @@ exec "$0" "$@"
 			// trimming correctly when remapping host-mounted /usr/lib dirs to
 			// /usr/lib inside the container.
 			usrLibMountpoint = "/var/coder/usr/lib/"
-			// expectedUsrLibFiles are files that we expect to be returned as bind mounts.
-			expectedUsrLibFiles = []string{
+			// usrLibFiles are individual GPU library files. The GPU Operator
+			// should inject these via CDI, not envbox bind mounts.
+			usrLibFiles = []string{
 				filepath.Join(usrLibMountpoint, "nvidia", "libglxserver_nvidia.so"),
 				filepath.Join(usrLibMountpoint, "libnvidia-ml.so"),
 			}
@@ -688,7 +689,7 @@ exec "$0" "$@"
 		ctx = xunix.WithEnvironFn(ctx, environ)
 
 		// Fake all the files.
-		for _, file := range append(expectedUsrLibFiles, procGPUDrivers...) {
+		for _, file := range append(usrLibFiles, procGPUDrivers...) {
 			_, err := afs.Create(file)
 			require.NoError(t, err)
 		}
@@ -717,7 +718,7 @@ exec "$0" "$@"
 			})
 		}
 
-		_, err := afs.Create("/usr/local/nvidia")
+		err := afs.MkdirAll("/usr/local/nvidia", 0o755)
 		require.NoError(t, err)
 
 		unmounts := []string{}
@@ -747,9 +748,10 @@ exec "$0" "$@"
 				// '/dev' is passed as a bind mount.
 				require.Contains(t, hostConfig.Binds, fmt.Sprintf("%s:%s", "/usr/local/nvidia", "/usr/local/nvidia"))
 
-				// Test that host /usr/lib bind mounts were passed through as read-only.
-				for _, file := range expectedUsrLibFiles {
-					require.Contains(t, hostConfig.Binds, fmt.Sprintf("%s:%s:ro",
+				// Test that host /usr/lib file mounts are skipped. The GPU
+				// Operator should inject these via CDI.
+				for _, file := range usrLibFiles {
+					require.NotContains(t, hostConfig.Binds, fmt.Sprintf("%s:%s:ro",
 						file,
 						strings.ReplaceAll(file, usrLibMountpoint, "/usr/lib/"),
 					))

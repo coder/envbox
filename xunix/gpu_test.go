@@ -54,25 +54,16 @@ func TestGPUs(t *testing.T) {
 			mounter          = &mount.FakeMounter{}
 			log              = slogtest.Make(t, nil)
 			usrLibMountpoint = "/var/coder/usr/lib"
-			// expectedUsrLibFiles are files that we expect to be returned bind mounts
-			// for.
-			expectedUsrLibFiles = []string{
+			// With GPU Operator 25.10.0+, envbox only mounts directories, not individual files.
+			// Individual library files should be handled by CDI.
+			// So we don't expect any bind mounts from usrLibGPUs since it only finds .so files.
+			usrLibFiles = []string{
 				filepath.Join(usrLibMountpoint, "nvidia", "libglxserver_nvidia.so"),
 				filepath.Join(usrLibMountpoint, "libnvidia-ml.so"),
 				filepath.Join(usrLibMountpoint, "nvidia", "libglxserver_nvidia.so.1"),
-			}
-
-			// fakeUsrLibFiles are files that we do not expect to be returned
-			// bind mounts for.
-			fakeUsrLibFiles = []string{
 				filepath.Join(usrLibMountpoint, "libcurl-gnutls.so"),
 				filepath.Join(usrLibMountpoint, "libglib.so"),
 			}
-
-			// allUsrLibFiles are all the files that should be written to the
-			// "mounted" /usr/lib directory. It includes files that shouldn't
-			// be returned.
-			allUsrLibFiles = append(expectedUsrLibFiles, fakeUsrLibFiles...)
 		)
 
 		ctx := xunix.WithFS(context.Background(), fs)
@@ -99,31 +90,35 @@ func TestGPUs(t *testing.T) {
 		err := fs.MkdirAll(filepath.Join(usrLibMountpoint, "nvidia"), 0o755)
 		require.NoError(t, err)
 
-		for _, file := range allUsrLibFiles {
+		// Create library files (though they won't be mounted individually with new behavior)
+		for _, file := range usrLibFiles {
 			_, err = fs.Create(file)
 			require.NoError(t, err)
 		}
+
 		for _, mp := range mounter.MountPoints {
-			_, err = fs.Create(mp.Path)
+			// Create directories for mount points that match GPU patterns (not in /dev)
+			// since envbox now only mounts directories, not individual files.
+			if filepath.Dir(mp.Path) == "/dev" {
+				_, err = fs.Create(mp.Path)
+			} else {
+				err = fs.MkdirAll(mp.Path, 0o755)
+			}
 			require.NoError(t, err)
 		}
 
 		devices, binds, err := xunix.GPUs(ctx, log, usrLibMountpoint)
 		require.NoError(t, err)
-		require.Len(t, devices, 2, "unexpected 2 nvidia devices")
-		require.Len(t, binds, 4, "expected 4 nvidia binds")
+		require.Len(t, devices, 2, "expected 2 nvidia devices")
+		// With new behavior, we only mount the directory from /proc/mounts, not individual library files
+		require.Len(t, binds, 1, "expected 1 nvidia directory bind (no individual files)")
 		require.Contains(t, binds, mount.MountPoint{
 			Device: "/dev/sda1",
 			Path:   "/usr/local/nvidia",
 			Opts:   []string{"ro"},
 		})
-		for _, file := range expectedUsrLibFiles {
-			require.Contains(t, binds, mount.MountPoint{
-				Path: file,
-				Opts: []string{"ro"},
-			})
-		}
-		for _, file := range fakeUsrLibFiles {
+		// Individual library files should NOT be in binds (filtered out)
+		for _, file := range usrLibFiles {
 			require.NotContains(t, binds, mount.MountPoint{
 				Path: file,
 				Opts: []string{"ro"},
