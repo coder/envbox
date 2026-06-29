@@ -260,21 +260,26 @@ func dockerCmd() *cobra.Command {
 				return xerrors.Errorf("dockerd args: %w", err)
 			}
 
+			blog.Info("Waiting for sysbox processes to startup...")
+			log.Debug(ctx, "waiting for sysbox-fs")
+			err = sysboxutil.WaitForFS(ctx)
+			if err != nil {
+				return xerrors.Errorf("wait for sysbox-fs: %w", err)
+			}
+
+			log.Debug(ctx, "waiting for manager")
+			err = sysboxutil.WaitForManager(ctx)
+			if err != nil {
+				return xerrors.Errorf("wait for sysbox-mgr: %w", err)
+			}
+
 			log.Debug(ctx, "starting dockerd", slog.F("args", args))
 
-			blog.Info("Waiting for sysbox processes to startup...")
 			wrapCmd, wrapArgs := wrapDockerdCmd(dargs)
 			dockerd := background.New(ctx, log, dockerdBinName, wrapCmd, wrapArgs...)
 			err = dockerd.Start()
 			if err != nil {
 				return xerrors.Errorf("start dockerd: %w", err)
-			}
-
-			log.Debug(ctx, "waiting for manager")
-
-			err = sysboxutil.WaitForManager(ctx)
-			if err != nil {
-				return xerrors.Errorf("wait for sysbox-mgr: %w", err)
 			}
 
 			client, err := dockerutil.ExtractClient(ctx)
@@ -957,10 +962,11 @@ var wrapDockerdScript string
 // descendants of the envbox container's own cgroup on the host, restoring
 // pod attribution for cgroup-aware tools (Tetragon, Falco, etc.).
 //
-// We do NOT pass --mount on unshare: the remount intentionally leaks into
-// envbox's mount namespace so sysbox-fs's /var/lib/sysboxfs/ mounts stay
-// visible to sysbox-runc. xunix.readCPUQuotaCGroupV2 has a fallback for
-// the resulting cpu.max path change.
+// We do NOT pass --mount on unshare: sysbox-fs creates per-container mounts
+// under /var/lib/sysboxfs after dockerd starts, and sysbox-runc must observe
+// those mounts through envbox's mount namespace. wrap_dockerd.sh lazily
+// unmounts /sys/fs/cgroup so parent processes holding that mount busy do not
+// block the cgroup2 remount.
 //
 // See: https://github.com/moby/moby/issues/45378#issuecomment-2886261231
 func wrapDockerdCmd(dargs []string) (string, []string) {

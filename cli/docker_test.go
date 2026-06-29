@@ -195,7 +195,7 @@ if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
 	# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes the
 	# fs root; inner container cgroups end up under the envbox container's
 	# cgroup on the host.
-	umount /sys/fs/cgroup || { echo "envbox: failed to umount /sys/fs/cgroup" >&2; exit 1; }
+	umount -l /sys/fs/cgroup || { echo "envbox: failed to umount /sys/fs/cgroup" >&2; exit 1; }
 	mount -t cgroup2 cgroup /sys/fs/cgroup || { echo "envbox: failed to mount cgroup2 on /sys/fs/cgroup" >&2; exit 1; }
 
 	# move the processes from the root group to the /init group,
@@ -895,7 +895,7 @@ func TestWrapDockerdCmd(t *testing.T) {
 	script := args[3]
 	require.Contains(t, script, fmt.Sprintf("envbox_max_attempts=%d", cli.DockerdSubtreeControlMaxAttempts))
 	require.Contains(t, script, "[ -f /sys/fs/cgroup/cgroup.controllers ]")
-	require.Contains(t, script, "umount /sys/fs/cgroup")
+	require.Contains(t, script, "umount -l /sys/fs/cgroup")
 	require.Contains(t, script, "mount -t cgroup2 cgroup /sys/fs/cgroup")
 	require.Contains(t, script, "mkdir -p /sys/fs/cgroup/init")
 	require.Contains(t, script, "/sys/fs/cgroup/cgroup.subtree_control")

@@ -11,8 +11,13 @@ import (
 )
 
 func FakeSysboxManagerReady(t *testing.T, fs afero.Fs) {
-	err := afero.WriteFile(fs, sysboxutil.ManagerSocketPath, []byte(""), 0o644)
-	require.NoError(t, err)
+	for _, path := range []string{
+		sysboxutil.ManagerSocketPath,
+		sysboxutil.FSSocketPath,
+	} {
+		err := afero.WriteFile(fs, path, []byte(""), 0o644)
+		require.NoError(t, err)
+	}
 }
 
 func FakeCPUGroups(t *testing.T, fs afero.Fs, quota, period string) {

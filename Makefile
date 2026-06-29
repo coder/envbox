@@ -1,5 +1,6 @@
 PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
 GO_FILES := $(shell git ls-files '*.go' '*.sum')
+EMBED_FILES := cli/wrap_dockerd.sh
 IMAGE_FILES := $(shell find deploy)
 ARCH ?= linux/$(shell go env GOARCH)
 SYSBOX_SHA ?= $(shell ./scripts/sysbox_sha.sh $(ARCH))
@@ -11,7 +12,7 @@ clean:
 	rm -rf build
 
 .PHONY: build/envbox
-build/envbox: $(GO_FILES)
+build/envbox: $(GO_FILES) $(EMBED_FILES)
 	mkdir -p $(@D)
 	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o build/envbox ./cmd/envbox
 
