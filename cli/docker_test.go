@@ -395,6 +395,41 @@ exec "$0" "$@"
 		require.Equal(t, cli.UserNamespaceOffset+1001, owner.GID)
 	})
 
+	t.Run("DataMountOwnedByInnerUser", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cmd := clitest.New(t, "docker",
+			"docker",
+			"--image=ubuntu",
+			"--username=coder",
+			"--agent-token=hi",
+			"--mounts=/data:/data",
+		)
+
+		var (
+			client = clitest.DockerClient(t, ctx)
+			fs     = clitest.FS(ctx)
+		)
+
+		err := fs.MkdirAll("/data", 0o777)
+		require.NoError(t, err)
+
+		client.ContainerExecAttachFn = func(_ context.Context, _ string, _ container.ExecAttachOptions) (dockertypes.HijackedResponse, error) {
+			return dockertypes.HijackedResponse{
+				Reader: bufio.NewReader(strings.NewReader("coder:x:1001:1002:coder:/home/coder:/bin/bash")),
+				Conn:   &net.IPConn{},
+			}, nil
+		}
+
+		err = cmd.ExecuteContext(ctx)
+		require.NoError(t, err)
+
+		owner, ok := fs.GetFileOwner("/data")
+		require.True(t, ok)
+		require.Equal(t, cli.UserNamespaceOffset+1001, owner.UID)
+		require.Equal(t, cli.UserNamespaceOffset+1002, owner.GID)
+	})
+
 	// Test that we remount /sys once we pull the image so that
 	// sysbox can use it properly.
 	t.Run("RemountSysfs", func(t *testing.T) {

@@ -1039,7 +1039,7 @@ func isPrivateMount(m xunix.Mount) bool {
 }
 
 func isHomeDir(fpath string) bool {
-	if fpath == "/root" {
+	if fpath == "/root" || fpath == "/data" {
 		return true
 	}
 
