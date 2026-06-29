@@ -160,6 +160,14 @@ type dockerCVMResult struct {
 	bootstrapExecID string
 }
 
+const (
+	dockerCVMShutdownTimeout       = 90 * time.Second
+	bootstrapExecShutdownTimeout   = 30 * time.Second
+	innerContainerStopTimeout      = 20
+	innerContainerAPICallTimeout   = 10 * time.Second
+	innerContainerStopContextSlack = 5 * time.Second
+)
+
 func dockerCmd() *cobra.Command {
 	var flags flags
 
@@ -396,10 +404,9 @@ func dockerCmd() *cobra.Command {
 				defer cancel()
 
 				<-signalCtx.Done()
-				log.Debug(ctx, "ctx canceled, forwarding signal to inner container")
+				log.Debug(ctx, "ctx canceled, shutting down docker CVM")
 
-				shutdownBootstrapExec(ctx, log, client, result.bootstrapExecID)
-				shutdownInnerContainer(ctx, log, client, result.containerID)
+				shutdownDockerCVM(log, client, result)
 			}()
 
 			return nil
@@ -835,13 +842,26 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	}, nil
 }
 
+func shutdownDockerCVM(log slog.Logger, client dockerutil.Client, result dockerCVMResult) {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), dockerCVMShutdownTimeout)
+	defer shutdownCancel()
+
+	log.Debug(shutdownCtx, "shutting down docker CVM", slog.F("timeout", dockerCVMShutdownTimeout))
+	shutdownBootstrapExec(shutdownCtx, log, client, result.bootstrapExecID)
+	if shutdownCtx.Err() != nil {
+		log.Error(shutdownCtx, "shutdown deadline exceeded before inner container shutdown", slog.Error(shutdownCtx.Err()))
+		return
+	}
+	shutdownInnerContainer(shutdownCtx, log, client, result.containerID)
+}
+
 func shutdownBootstrapExec(ctx context.Context, log slog.Logger, client dockerutil.Client, bootstrapExecID string) {
 	if bootstrapExecID == "" {
 		log.Debug(ctx, "no bootstrap exec id, skipping bootstrap shutdown")
 		return
 	}
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Second*90)
+	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, bootstrapExecShutdownTimeout)
 	defer shutdownCancel()
 
 	bootstrapPID, err := dockerutil.GetExecPID(shutdownCtx, client, bootstrapExecID)
@@ -875,8 +895,8 @@ func shutdownInnerContainer(ctx context.Context, log slog.Logger, client dockeru
 		return
 	}
 
-	stopSeconds := 20
-	stopCtx, stopCancel := context.WithTimeout(context.Background(), time.Duration(stopSeconds+5)*time.Second)
+	stopSeconds := innerContainerStopTimeout
+	stopCtx, stopCancel := context.WithTimeout(ctx, time.Duration(stopSeconds)*time.Second+innerContainerStopContextSlack)
 	defer stopCancel()
 
 	log.Debug(stopCtx, "stopping inner container", slog.F("container_id", containerID), slog.F("timeout_seconds", stopSeconds))
@@ -887,7 +907,7 @@ func shutdownInnerContainer(ctx context.Context, log slog.Logger, client dockeru
 	}
 	log.Error(stopCtx, "stop inner container", slog.Error(err), slog.F("container_id", containerID))
 
-	killCtx, killCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	killCtx, killCancel := context.WithTimeout(ctx, innerContainerAPICallTimeout)
 	defer killCancel()
 
 	log.Debug(killCtx, "force killing inner container", slog.F("container_id", containerID))
@@ -896,7 +916,7 @@ func shutdownInnerContainer(ctx context.Context, log slog.Logger, client dockeru
 		log.Error(killCtx, "kill inner container", slog.Error(err), slog.F("container_id", containerID))
 	}
 
-	removeCtx, removeCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	removeCtx, removeCancel := context.WithTimeout(ctx, innerContainerAPICallTimeout)
 	defer removeCancel()
 
 	err = client.ContainerRemove(removeCtx, containerID, container.RemoveOptions{
