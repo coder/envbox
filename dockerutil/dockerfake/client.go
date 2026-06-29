@@ -33,7 +33,9 @@ type MockClient struct {
 	ContainerExecStartFn   func(_ context.Context, execID string, config containertypes.ExecAttachOptions) error
 	ContainerExecInspectFn func(_ context.Context, execID string) (containertypes.ExecInspect, error)
 	ContainerInspectFn     func(_ context.Context, container string) (dockertypes.ContainerJSON, error)
+	ContainerKillFn        func(_ context.Context, container string, signal string) error
 	ContainerRemoveFn      func(_ context.Context, container string, options containertypes.RemoveOptions) error
+	ContainerStopFn        func(_ context.Context, container string, options containertypes.StopOptions) error
 	PingFn                 func(_ context.Context) (dockertypes.Ping, error)
 }
 
@@ -203,8 +205,11 @@ func (MockClient) ContainerInspectWithRaw(_ context.Context, _ string, _ bool) (
 	panic("not implemented")
 }
 
-func (MockClient) ContainerKill(_ context.Context, _ string, _ string) error {
-	panic("not implemented")
+func (m MockClient) ContainerKill(ctx context.Context, name string, signal string) error {
+	if m.ContainerKillFn == nil {
+		return nil
+	}
+	return m.ContainerKillFn(ctx, name, signal)
 }
 
 func (MockClient) ContainerList(_ context.Context, _ containertypes.ListOptions) ([]containertypes.Summary, error) {
@@ -253,8 +258,11 @@ func (m MockClient) ContainerStart(ctx context.Context, name string, options con
 	return m.ContainerStartFn(ctx, name, options)
 }
 
-func (MockClient) ContainerStop(_ context.Context, _ string, _ containertypes.StopOptions) error {
-	panic("not implemented")
+func (m MockClient) ContainerStop(ctx context.Context, name string, options containertypes.StopOptions) error {
+	if m.ContainerStopFn == nil {
+		return nil
+	}
+	return m.ContainerStopFn(ctx, name, options)
 }
 
 func (MockClient) ContainerTop(_ context.Context, _ string, _ []string) (containertypes.ContainerTopOKBody, error) {

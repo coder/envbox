@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/common"
@@ -332,6 +333,39 @@ exec "$0" "$@"
 		err := cmd.ExecuteContext(ctx)
 		require.NoError(t, err)
 		require.True(t, called, "create function was not called")
+	})
+
+	t.Run("BootstrapDir", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cmd := clitest.New(t, "docker",
+			"--image=ubuntu",
+			"--username=root",
+			"--agent-token=hi",
+			"--boostrap-script=echo hi",
+		)
+
+		client := clitest.DockerClient(t, ctx)
+		var bootstrapDir string
+		client.ContainerExecCreateFn = func(_ context.Context, _ string, config container.ExecOptions) (common.IDResponse, error) {
+			if len(config.Cmd) == 2 && config.Cmd[0] == "/bin/sh" && config.Cmd[1] == "-s" {
+				require.Len(t, config.Env, 1)
+				bootstrapDir = strings.TrimPrefix(config.Env[0], "BINARY_DIR=")
+			}
+			return common.IDResponse{ID: "exec-id"}, nil
+		}
+		client.ContainerExecAttachFn = func(_ context.Context, _ string, _ container.ExecAttachOptions) (dockertypes.HijackedResponse, error) {
+			return dockertypes.HijackedResponse{
+				Reader: bufio.NewReader(strings.NewReader("root:x:0:0:root:/root:/bin/bash")),
+				Conn:   &writeBufferConn{},
+			}, nil
+		}
+
+		err := cmd.ExecuteContext(ctx)
+		require.NoError(t, err)
+		require.NotEmpty(t, bootstrapDir)
+		require.True(t, strings.HasPrefix(bootstrapDir, "/root/.coder/agent-"), bootstrapDir)
+		require.NotEqual(t, "/root/.coder", bootstrapDir)
 	})
 
 	// Test that we parse mounts correctly.
@@ -868,6 +902,23 @@ func TestWrapDockerdCmd(t *testing.T) {
 	require.Contains(t, script, `ge "$envbox_max_attempts" ]`)
 	require.Contains(t, script, `exec "$0" "$@"`)
 }
+
+type writeBufferConn struct {
+	bytes.Buffer
+}
+
+func (c *writeBufferConn) Close() error                     { return nil }
+func (c *writeBufferConn) CloseWrite() error                { return nil }
+func (c *writeBufferConn) LocalAddr() net.Addr              { return testAddr("local") }
+func (c *writeBufferConn) RemoteAddr() net.Addr             { return testAddr("remote") }
+func (c *writeBufferConn) SetDeadline(time.Time) error      { return nil }
+func (c *writeBufferConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *writeBufferConn) SetWriteDeadline(time.Time) error { return nil }
+
+type testAddr string
+
+func (a testAddr) Network() string { return string(a) }
+func (a testAddr) String() string  { return string(a) }
 
 // rawDockerAuth is sample input for a kubernetes secret to a gcr.io private
 // registry.

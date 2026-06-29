@@ -129,16 +129,16 @@ func TestDocker(t *testing.T) {
 			}
 		)
 
-		// We touch /home/coder/.coder/foo because it asserts that we're
-		// making the directory that ultimately will host the agent for Coder.
-		// We set this as the BINARY_DIR that we pass to the startup script
-		// so that we can avoid the race that occurs where systemd is remounting
-		// /tmp while we are downloading the agent binary /tmp/coder.XXX.
+		// We touch $BINARY_DIR/foo because it asserts that we make the
+		// unique directory that ultimately hosts the agent for Coder. We keep
+		// this under the home directory to avoid the race where systemd
+		// remounts /tmp while the agent binary is downloading.
 		bootstrapScript := `#!/usr/bin/env bash
 
 			echo "hello" > /home/coder/bootstrap
+			echo "${BINARY_DIR}" > /home/coder/bootstrap-dir
 			mkdir /home/coder/bar
-			touch /home/coder/.coder/foo
+			touch "${BINARY_DIR}/foo"
 `
 
 		// Run the envbox container.
@@ -230,6 +230,21 @@ func TestDocker(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, "hello", strings.TrimSpace(string(out)))
+
+		out, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+			ContainerID: resource.Container.ID,
+			Cmd:         []string{"cat", "/home/coder/bootstrap-dir"},
+		})
+		require.NoError(t, err)
+		bootstrapDir := strings.TrimSpace(string(out))
+		require.True(t, strings.HasPrefix(bootstrapDir, "/home/coder/.coder/agent-"), bootstrapDir)
+		require.NotEqual(t, "/home/coder/.coder", bootstrapDir)
+
+		_, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
+			ContainerID: resource.Container.ID,
+			Cmd:         []string{"stat", filepath.Join(bootstrapDir, "foo")},
+		})
+		require.NoError(t, err)
 
 		// Validate that the bootstrap script ran.
 		out, err = integrationtest.ExecInnerContainer(t, pool, integrationtest.ExecConfig{
