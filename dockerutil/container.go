@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	runtime = "sysbox-runc"
+	runtime           = "sysbox-runc"
+	systemdStopSignal = "SIGRTMIN+3"
 	// Default CPU period for containers.
 	DefaultCPUPeriod uint64 = 1e5
 )
@@ -62,8 +63,10 @@ func CreateContainer(ctx context.Context, client Client, conf *ContainerConfig) 
 	}
 
 	entrypoint := []string{"sleep", "infinity"}
+	stopSignal := ""
 	if conf.HasInit {
 		entrypoint = []string{"/sbin/init"}
+		stopSignal = systemdStopSignal
 	}
 
 	if conf.Hostname == "" {
@@ -79,6 +82,7 @@ func CreateContainer(ctx context.Context, client Client, conf *ContainerConfig) 
 		WorkingDir: conf.WorkingDir,
 		Tty:        false,
 		User:       "root",
+		StopSignal: stopSignal,
 	}
 
 	c, err := client.ContainerCreate(ctx, cnt, host, nil, nil, conf.Name)
