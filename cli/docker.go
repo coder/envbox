@@ -55,9 +55,9 @@ const (
 
 	// noSpaceDataDir is the directory to use for the data directory
 	// for dockerd when the default directory (/var/lib/docker pointing
-	// to the user's pvc) is at capacity. This directory points to
-	// ephemeral storage allocated by the node and should be more likely
-	// to have capacity.
+	// to the user's pvc) is at capacity or unhealthy. This directory
+	// points to ephemeral storage allocated by the node and should be
+	// more likely to let the workspace start.
 	noSpaceDataDir = "/var/lib/docker.bak"
 	// noSpaceDockerDriver is the storage driver to use in cases where
 	// the default data dir (residing in the user's PVC) is at capacity.
@@ -96,19 +96,21 @@ var (
 	EnvAddFuse       = "CODER_ADD_FUSE"
 	EnvBridgeCIDR    = "CODER_DOCKER_BRIDGE_CIDR"
 	//nolint
-	EnvAgentToken           = "CODER_AGENT_TOKEN"
-	EnvAgentURL             = "CODER_AGENT_URL"
-	EnvBootstrap            = "CODER_BOOTSTRAP_SCRIPT"
-	EnvMounts               = "CODER_MOUNTS"
-	EnvCPUs                 = "CODER_CPUS"
-	EnvMemory               = "CODER_MEMORY"
-	EnvAddGPU               = "CODER_ADD_GPU"
-	EnvUsrLibDir            = "CODER_USR_LIB_DIR"
-	EnvInnerUsrLibDir       = "CODER_INNER_USR_LIB_DIR"
-	EnvDockerConfig         = "CODER_DOCKER_CONFIG"
-	EnvDebug                = "CODER_DEBUG"
-	EnvDisableIDMappedMount = "CODER_DISABLE_IDMAPPED_MOUNT"
-	EnvExtraCertsPath       = "CODER_EXTRA_CERTS_PATH"
+	EnvAgentToken                = "CODER_AGENT_TOKEN"
+	EnvAgentURL                  = "CODER_AGENT_URL"
+	EnvBootstrap                 = "CODER_BOOTSTRAP_SCRIPT"
+	EnvMounts                    = "CODER_MOUNTS"
+	EnvCPUs                      = "CODER_CPUS"
+	EnvMemory                    = "CODER_MEMORY"
+	EnvAddGPU                    = "CODER_ADD_GPU"
+	EnvUsrLibDir                 = "CODER_USR_LIB_DIR"
+	EnvInnerUsrLibDir            = "CODER_INNER_USR_LIB_DIR"
+	EnvDockerConfig              = "CODER_DOCKER_CONFIG"
+	EnvDebug                     = "CODER_DEBUG"
+	EnvDisableIDMappedMount      = "CODER_DISABLE_IDMAPPED_MOUNT"
+	EnvExtraCertsPath            = "CODER_EXTRA_CERTS_PATH"
+	EnvInnerContainerStopTimeout = "CODER_INNER_CONTAINER_STOP_TIMEOUT"
+	EnvRecoverDockerDataRoot     = "CODER_RECOVER_DOCKER_DATA_ROOT"
 )
 
 var envboxPrivateMounts = map[string]struct{}{
@@ -130,24 +132,26 @@ type flags struct {
 	agentToken    string
 
 	// Optional flags.
-	innerEnvs            string
-	innerWorkDir         string
-	innerHostname        string
-	imagePullSecret      string
-	coderURL             string
-	addTUN               bool
-	addFUSE              bool
-	addGPU               bool
-	dockerdBridgeCIDR    string
-	boostrapScript       string
-	containerMounts      string
-	hostUsrLibDir        string
-	innerUsrLibDir       string
-	dockerConfig         string
-	cpus                 int
-	memory               int
-	disableIDMappedMount bool
-	extraCertsPath       string
+	innerEnvs                 string
+	innerWorkDir              string
+	innerHostname             string
+	imagePullSecret           string
+	coderURL                  string
+	addTUN                    bool
+	addFUSE                   bool
+	addGPU                    bool
+	dockerdBridgeCIDR         string
+	boostrapScript            string
+	containerMounts           string
+	hostUsrLibDir             string
+	innerUsrLibDir            string
+	dockerConfig              string
+	cpus                      int
+	memory                    int
+	disableIDMappedMount      bool
+	extraCertsPath            string
+	innerContainerStopTimeout time.Duration
+	recoverDockerDataRoot     bool
 
 	// Test flags.
 	noStartupLogs bool
@@ -161,11 +165,11 @@ type dockerCVMResult struct {
 }
 
 const (
-	dockerCVMShutdownTimeout       = 90 * time.Second
-	bootstrapExecShutdownTimeout   = 30 * time.Second
-	innerContainerStopTimeout      = 20
-	innerContainerAPICallTimeout   = 10 * time.Second
-	innerContainerStopContextSlack = 5 * time.Second
+	dockerCVMShutdownTimeout         = 90 * time.Second
+	bootstrapExecShutdownTimeout     = 30 * time.Second
+	defaultInnerContainerStopTimeout = 20 * time.Second
+	innerContainerAPICallTimeout     = 10 * time.Second
+	innerContainerStopContextSlack   = 5 * time.Second
 )
 
 func dockerCmd() *cobra.Command {
@@ -230,6 +234,10 @@ func dockerCmd() *cobra.Command {
 					blog.Errorf("Failed to run envbox: %v", *err)
 				}
 			}(&err)
+
+			if flags.innerContainerStopTimeout < time.Second {
+				return xerrors.Errorf("inner container stop timeout must be at least 1s")
+			}
 
 			sysboxArgs := []string{}
 			if flags.disableIDMappedMount {
@@ -302,16 +310,10 @@ func dockerCmd() *cobra.Command {
 				// it and point it to an ephemeral directory. Since this
 				// directory is going to be on top of an overlayfs filesystem
 				// we have to use the vfs storage driver.
-				if xunix.IsNoSpaceErr(err) {
-					args, err = dockerdArgs(flags.ethlink, cidr, true)
-					if err != nil {
-						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
-						//nolint
-						log.Fatal(ctx, "dockerd exited, failed getting args for restart", slog.Error(err))
-					}
-
-					wrapCmd, wrapArgs := wrapDockerdCmd(args)
-					err = dockerd.Restart(ctx, dockerdBinName, wrapCmd, wrapArgs...)
+				if reason, ok := dockerdFallbackDataRootReason(err, flags.recoverDockerDataRoot); ok {
+					blog.Info(dockerdFallbackDataRootMessage(reason))
+					log.Debug(ctx, "restarting dockerd with fallback data root", slog.F("reason", reason), slog.Error(err))
+					err = restartDockerdWithFallbackDataRoot(ctx, log, dockerd, flags.ethlink, cidr)
 					if err != nil {
 						blog.Info("Failed to create Container-based Virtual Machine: " + err.Error())
 						//nolint
@@ -369,18 +371,10 @@ func dockerCmd() *cobra.Command {
 				// the vfs storage driver to try to get the container up so that
 				// a user can access their workspace and try to delete whatever
 				// is causing their disk to fill up.
-				if xunix.IsNoSpaceErr(err) {
-					blog.Info("Insufficient space to start inner container. Restarting dockerd using the vfs driver. Your performance will be degraded. Clean up your home volume and then restart the workspace to improve performance.")
-					log.Debug(ctx, "encountered 'no space left on device' error while starting workspace", slog.Error(err))
-					args, err := dockerdArgs(flags.ethlink, cidr, true)
-					if err != nil {
-						return xerrors.Errorf("dockerd args for restart: %w", err)
-					}
-
-					log.Debug(ctx, "restarting dockerd", slog.F("args", args))
-
-					wrapCmd, wrapArgs := wrapDockerdCmd(args)
-					err = dockerd.Restart(ctx, dockerdBinName, wrapCmd, wrapArgs...)
+				if reason, ok := dockerdFallbackDataRootReason(err, flags.recoverDockerDataRoot); ok {
+					blog.Info(dockerdFallbackDataRootMessage(reason))
+					log.Debug(ctx, "restarting dockerd with fallback data root", slog.F("reason", reason), slog.Error(err))
+					err = restartDockerdWithFallbackDataRoot(ctx, log, dockerd, flags.ethlink, cidr)
 					if err != nil {
 						return xerrors.Errorf("restart dockerd: %w", err)
 					}
@@ -406,7 +400,7 @@ func dockerCmd() *cobra.Command {
 				<-signalCtx.Done()
 				log.Debug(ctx, "ctx canceled, shutting down docker CVM")
 
-				shutdownDockerCVM(log, client, result)
+				shutdownDockerCVM(log, client, result, flags.innerContainerStopTimeout)
 			}()
 
 			return nil
@@ -437,6 +431,8 @@ func dockerCmd() *cobra.Command {
 	cliflag.IntVarP(cmd.Flags(), &flags.memory, "memory", "", EnvMemory, 0, "Max memory to allocate to the inner container in bytes.")
 	cliflag.BoolVarP(cmd.Flags(), &flags.disableIDMappedMount, "disable-idmapped-mount", "", EnvDisableIDMappedMount, false, "Disable idmapped mounts in sysbox. Note that you may need an alternative (e.g. shiftfs).")
 	cliflag.StringVarP(cmd.Flags(), &flags.extraCertsPath, "extra-certs-path", "", EnvExtraCertsPath, "", "The path to a directory or file containing extra CA certificates.")
+	cliflag.DurationVarP(cmd.Flags(), &flags.innerContainerStopTimeout, "inner-container-stop-timeout", "", EnvInnerContainerStopTimeout, defaultInnerContainerStopTimeout, "The time to wait for the inner container to stop gracefully before forcing shutdown.")
+	cliflag.BoolVarP(cmd.Flags(), &flags.recoverDockerDataRoot, "recover-docker-data-root", "", EnvRecoverDockerDataRoot, false, "Restart dockerd with an ephemeral vfs data-root when the mounted Docker data-root returns input/output errors.")
 
 	// Test flags.
 	cliflag.BoolVarP(cmd.Flags(), &flags.noStartupLogs, "no-startup-log", "", "", false, "Do not log startup logs. Useful for testing.")
@@ -842,7 +838,7 @@ func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client
 	}, nil
 }
 
-func shutdownDockerCVM(log slog.Logger, client dockerutil.Client, result dockerCVMResult) {
+func shutdownDockerCVM(log slog.Logger, client dockerutil.Client, result dockerCVMResult, innerContainerStopTimeout time.Duration) {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), dockerCVMShutdownTimeout)
 	defer shutdownCancel()
 
@@ -852,7 +848,7 @@ func shutdownDockerCVM(log slog.Logger, client dockerutil.Client, result dockerC
 		log.Error(shutdownCtx, "shutdown deadline exceeded before inner container shutdown", slog.Error(shutdownCtx.Err()))
 		return
 	}
-	shutdownInnerContainer(shutdownCtx, log, client, result.containerID)
+	shutdownInnerContainer(shutdownCtx, log, client, result.containerID, innerContainerStopTimeout)
 }
 
 func shutdownBootstrapExec(ctx context.Context, log slog.Logger, client dockerutil.Client, bootstrapExecID string) {
@@ -889,13 +885,13 @@ func shutdownBootstrapExec(ctx context.Context, log slog.Logger, client dockerut
 	log.Debug(shutdownCtx, "bootstrap process successfully exited")
 }
 
-func shutdownInnerContainer(ctx context.Context, log slog.Logger, client dockerutil.Client, containerID string) {
+func shutdownInnerContainer(ctx context.Context, log slog.Logger, client dockerutil.Client, containerID string, innerContainerStopTimeout time.Duration) {
 	if containerID == "" {
 		log.Debug(ctx, "no inner container id, skipping container shutdown")
 		return
 	}
 
-	stopSeconds := innerContainerStopTimeout
+	stopSeconds := durationSecondsCeil(innerContainerStopTimeout)
 	stopCtx, stopCancel := context.WithTimeout(ctx, time.Duration(stopSeconds)*time.Second+innerContainerStopContextSlack)
 	defer stopCancel()
 
@@ -928,6 +924,48 @@ func shutdownInnerContainer(ctx context.Context, log slog.Logger, client dockeru
 		return
 	}
 	log.Debug(removeCtx, "inner container removed", slog.F("container_id", containerID))
+}
+
+func durationSecondsCeil(d time.Duration) int {
+	seconds := int(d / time.Second)
+	if d%time.Second != 0 {
+		seconds++
+	}
+	return seconds
+}
+
+func dockerdFallbackDataRootReason(err error, recoverDockerDataRoot bool) (string, bool) {
+	if xunix.IsNoSpaceErr(err) {
+		return "no space left on device", true
+	}
+	if recoverDockerDataRoot && xunix.IsInputOutputErr(err) {
+		return "input/output error", true
+	}
+	return "", false
+}
+
+func dockerdFallbackDataRootMessage(reason string) string {
+	if reason == "input/output error" {
+		return "Docker data-root returned input/output errors. Restarting dockerd with an ephemeral vfs data-root so the workspace can start. Mounted workspace data such as /home/coder is preserved, but outer Docker images and containers will be rebuilt for this pod. Ask an infrastructure administrator to repair or reset the persistent Docker data-root."
+	}
+	return "Insufficient space to start workspace. Restarting dockerd with an ephemeral vfs data-root. Performance will be degraded. Clean up the workspace volume and restart the workspace to improve performance."
+}
+
+func restartDockerdWithFallbackDataRoot(ctx context.Context, log slog.Logger, dockerd *background.Process, ethlink, cidr string) error {
+	args, err := dockerdArgs(ethlink, cidr, true)
+	if err != nil {
+		return xerrors.Errorf("dockerd args for fallback restart: %w", err)
+	}
+
+	log.Debug(ctx, "restarting dockerd", slog.F("args", args), slog.F("data_root", noSpaceDataDir), slog.F("storage_driver", noSpaceDockerDriver))
+
+	wrapCmd, wrapArgs := wrapDockerdCmd(args)
+	err = dockerd.Restart(ctx, dockerdBinName, wrapCmd, wrapArgs...)
+	if err != nil {
+		return xerrors.Errorf("restart dockerd: %w", err)
+	}
+
+	return nil
 }
 
 //nolint:revive

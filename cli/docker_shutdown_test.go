@@ -23,10 +23,10 @@ func TestShutdownInnerContainer(t *testing.T) {
 		client := dockerfake.MockClient{
 			ContainerStopFn: func(ctx context.Context, name string, options container.StopOptions) error {
 				stopped = true
-				requireContextDeadlineWithin(t, ctx, time.Duration(innerContainerStopTimeout)*time.Second+innerContainerStopContextSlack)
+				requireContextDeadlineWithin(t, ctx, defaultInnerContainerStopTimeout+innerContainerStopContextSlack)
 				require.Equal(t, "container-id", name)
 				require.NotNil(t, options.Timeout)
-				require.Equal(t, innerContainerStopTimeout, *options.Timeout)
+				require.Equal(t, int(defaultInnerContainerStopTimeout/time.Second), *options.Timeout)
 				return nil
 			},
 			ContainerKillFn: func(context.Context, string, string) error {
@@ -39,7 +39,36 @@ func TestShutdownInnerContainer(t *testing.T) {
 			},
 		}
 
-		shutdownInnerContainer(context.Background(), slogtest.Make(t, nil), client, "container-id")
+		shutdownInnerContainer(context.Background(), slogtest.Make(t, nil), client, "container-id", defaultInnerContainerStopTimeout)
+		require.True(t, stopped)
+	})
+
+	t.Run("ConfiguredStopTimeout", func(t *testing.T) {
+		t.Parallel()
+
+		const configuredTimeout = 75 * time.Second
+
+		var stopped bool
+		client := dockerfake.MockClient{
+			ContainerStopFn: func(ctx context.Context, name string, options container.StopOptions) error {
+				stopped = true
+				requireContextDeadlineWithin(t, ctx, configuredTimeout+innerContainerStopContextSlack)
+				require.Equal(t, "container-id", name)
+				require.NotNil(t, options.Timeout)
+				require.Equal(t, 75, *options.Timeout)
+				return nil
+			},
+			ContainerKillFn: func(context.Context, string, string) error {
+				t.Fatal("container should not be killed after clean stop")
+				return nil
+			},
+			ContainerRemoveFn: func(context.Context, string, container.RemoveOptions) error {
+				t.Fatal("container should not be force removed after clean stop")
+				return nil
+			},
+		}
+
+		shutdownInnerContainer(context.Background(), slogtest.Make(t, nil), client, "container-id", configuredTimeout)
 		require.True(t, stopped)
 	})
 
@@ -68,7 +97,7 @@ func TestShutdownInnerContainer(t *testing.T) {
 
 		log := slogtest.Make(t, &slogtest.Options{IgnoreErrors: true})
 
-		shutdownInnerContainer(context.Background(), log, client, "container-id")
+		shutdownInnerContainer(context.Background(), log, client, "container-id", defaultInnerContainerStopTimeout)
 		require.True(t, killed)
 		require.True(t, removed)
 	})
@@ -102,14 +131,62 @@ func TestShutdownDockerCVMUsesBoundedContext(t *testing.T) {
 			stopped = true
 			require.Equal(t, "container-id", name)
 			require.NotNil(t, options.Timeout)
-			require.Equal(t, innerContainerStopTimeout, *options.Timeout)
-			requireContextDeadlineWithin(t, ctx, time.Duration(innerContainerStopTimeout)*time.Second+innerContainerStopContextSlack)
+			require.Equal(t, int(defaultInnerContainerStopTimeout/time.Second), *options.Timeout)
+			requireContextDeadlineWithin(t, ctx, defaultInnerContainerStopTimeout+innerContainerStopContextSlack)
 			return nil
 		},
 	}
 
-	shutdownDockerCVM(slogtest.Make(t, nil), client, dockerCVMResult{containerID: "container-id"})
+	shutdownDockerCVM(slogtest.Make(t, nil), client, dockerCVMResult{containerID: "container-id"}, defaultInnerContainerStopTimeout)
 	require.True(t, stopped)
+}
+
+func TestDockerdFallbackDataRootReason(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                  string
+		err                   error
+		recoverDockerDataRoot bool
+		wantReason            string
+		wantOK                bool
+	}{
+		{
+			name:       "NoSpace",
+			err:        errors.New("failed to start daemon: no space left on device"),
+			wantReason: "no space left on device",
+			wantOK:     true,
+		},
+		{
+			name:                  "InputOutputRecoveryDisabled",
+			err:                   errors.New("failed to start daemon: chmod /var/lib/docker: input/output error"),
+			recoverDockerDataRoot: false,
+			wantOK:                false,
+		},
+		{
+			name:                  "InputOutputRecoveryEnabled",
+			err:                   errors.New("failed to start daemon: chmod /var/lib/docker: input/output error"),
+			recoverDockerDataRoot: true,
+			wantReason:            "input/output error",
+			wantOK:                true,
+		},
+		{
+			name:   "Other",
+			err:    errors.New("permission denied"),
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			reason, ok := dockerdFallbackDataRootReason(tt.err, tt.recoverDockerDataRoot)
+			require.Equal(t, tt.wantOK, ok)
+			require.Equal(t, tt.wantReason, reason)
+		})
+	}
 }
 
 func requireContextDeadlineWithin(t *testing.T, ctx context.Context, max time.Duration) {

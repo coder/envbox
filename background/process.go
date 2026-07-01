@@ -89,7 +89,7 @@ func (d *Process) Restart(ctx context.Context, binName, cmd string, args ...stri
 	defer d.mu.Unlock()
 
 	err := d.kill(syscall.SIGTERM)
-	if err != nil {
+	if err != nil && !isProcessAlreadyFinishedErr(err) {
 		return xerrors.Errorf("kill cmd: %w", err)
 	}
 
@@ -121,6 +121,9 @@ func (d *Process) startProcess() error {
 
 		mw  = io.MultiWriter(w, out)
 		cmd = d.cmd
+
+		cancel = d.cancel
+		waitCh = d.waitCh
 	)
 
 	cmd.SetStdout(mw)
@@ -136,8 +139,8 @@ func (d *Process) startProcess() error {
 	userKilled := d.userKilled
 
 	go func() {
-		defer d.cancel()
-		defer close(d.waitCh)
+		defer cancel()
+		defer close(waitCh)
 
 		err := cmd.Wait()
 		_ = psw.Flush()
@@ -145,17 +148,21 @@ func (d *Process) startProcess() error {
 		// If the user killed the application the actual error returned
 		// from wait doesn't really matter.
 		if atomic.LoadInt64(userKilled) == 1 {
-			d.waitCh <- ErrUserKilled
+			waitCh <- ErrUserKilled
 			return
 		}
 
 		if err == nil {
-			d.waitCh <- nil
+			waitCh <- nil
 		} else {
-			d.waitCh <- xerrors.Errorf("%s: %w", buf.Bytes(), err)
+			waitCh <- xerrors.Errorf("%s: %w", buf.Bytes(), err)
 		}
 	}()
 	return nil
+}
+
+func isProcessAlreadyFinishedErr(err error) bool {
+	return strings.Contains(err.Error(), "process already finished")
 }
 
 func (d *Process) kill(sig syscall.Signal) error {
@@ -212,7 +219,7 @@ func isProcExited(fs afero.Fs, pid int, cmd string) (bool, error) {
 		return false, xerrors.Errorf("read file: %w", err)
 	}
 
-	args := bytes.Split(cmdline, []byte{'0'})
+	args := bytes.Split(cmdline, []byte{0})
 	if len(args) < 1 {
 		// Honestly idk.
 		return false, xerrors.Errorf("cmdline has no output (%s)?", cmdline)
