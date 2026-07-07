@@ -165,11 +165,12 @@ type dockerCVMResult struct {
 }
 
 const (
-	dockerCVMShutdownTimeout         = 90 * time.Second
+	dockerCVMShutdownTimeout         = 110 * time.Second
 	bootstrapExecShutdownTimeout     = 30 * time.Second
 	defaultInnerContainerStopTimeout = 20 * time.Second
 	innerContainerAPICallTimeout     = 10 * time.Second
 	innerContainerStopContextSlack   = 5 * time.Second
+	innerContainerForceCleanupBudget = 2 * innerContainerAPICallTimeout
 )
 
 func dockerCmd() *cobra.Command {
@@ -237,6 +238,13 @@ func dockerCmd() *cobra.Command {
 
 			if flags.innerContainerStopTimeout < time.Second {
 				return xerrors.Errorf("inner container stop timeout must be at least 1s")
+			}
+
+			// Set this before spawning sysbox and dockerd so critical child daemons
+			// inherit protection from the pod cgroup OOM killer.
+			err = xunix.SetOOMScore(ctx, "self", "-1000")
+			if err != nil {
+				return xerrors.Errorf("set oom score: %w", err)
 			}
 
 			sysboxArgs := []string{}
@@ -444,10 +452,6 @@ func dockerCmd() *cobra.Command {
 
 func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client, blog buildlog.Logger, flags flags) (dockerCVMResult, error) {
 	fs := xunix.GetFS(ctx)
-	err := xunix.SetOOMScore(ctx, "self", "-1000")
-	if err != nil {
-		return dockerCVMResult{}, xerrors.Errorf("set oom score: %w", err)
-	}
 	ref, err := name.ParseReference(flags.innerImage)
 	if err != nil {
 		return dockerCVMResult{}, xerrors.Errorf("parse ref: %w", err)
@@ -891,17 +895,22 @@ func shutdownInnerContainer(ctx context.Context, log slog.Logger, client dockeru
 		return
 	}
 
-	stopSeconds := durationSecondsCeil(innerContainerStopTimeout)
-	stopCtx, stopCancel := context.WithTimeout(ctx, time.Duration(stopSeconds)*time.Second+innerContainerStopContextSlack)
-	defer stopCancel()
+	var err error
+	stopSeconds := boundedStopSeconds(ctx, innerContainerStopTimeout)
+	if stopSeconds > 0 {
+		stopCtx, stopCancel := context.WithTimeout(ctx, time.Duration(stopSeconds)*time.Second+innerContainerStopContextSlack)
+		defer stopCancel()
 
-	log.Debug(stopCtx, "stopping inner container", slog.F("container_id", containerID), slog.F("timeout_seconds", stopSeconds))
-	err := client.ContainerStop(stopCtx, containerID, container.StopOptions{Timeout: &stopSeconds})
-	if err == nil || errdefs.IsNotFound(err) {
-		log.Debug(stopCtx, "inner container stopped", slog.F("container_id", containerID))
-		return
+		log.Debug(stopCtx, "stopping inner container", slog.F("container_id", containerID), slog.F("timeout_seconds", stopSeconds))
+		err = client.ContainerStop(stopCtx, containerID, container.StopOptions{Timeout: &stopSeconds})
+		if err == nil || errdefs.IsNotFound(err) {
+			log.Debug(stopCtx, "inner container stopped", slog.F("container_id", containerID))
+			return
+		}
+		log.Error(stopCtx, "stop inner container", slog.Error(err), slog.F("container_id", containerID))
+	} else {
+		log.Debug(ctx, "skipping graceful inner container stop; shutdown deadline is reserved for forced cleanup", slog.F("container_id", containerID))
 	}
-	log.Error(stopCtx, "stop inner container", slog.Error(err), slog.F("container_id", containerID))
 
 	killCtx, killCancel := context.WithTimeout(ctx, innerContainerAPICallTimeout)
 	defer killCancel()
@@ -924,6 +933,20 @@ func shutdownInnerContainer(ctx context.Context, log slog.Logger, client dockeru
 		return
 	}
 	log.Debug(removeCtx, "inner container removed", slog.F("container_id", containerID))
+}
+
+func boundedStopSeconds(ctx context.Context, requested time.Duration) int {
+	stopTimeout := requested
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline) - innerContainerForceCleanupBudget - innerContainerStopContextSlack
+		if remaining < time.Second {
+			return 0
+		}
+		if remaining < stopTimeout {
+			stopTimeout = remaining
+		}
+	}
+	return durationSecondsCeil(stopTimeout)
 }
 
 func durationSecondsCeil(d time.Duration) int {

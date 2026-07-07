@@ -101,6 +101,72 @@ func TestShutdownInnerContainer(t *testing.T) {
 		require.True(t, killed)
 		require.True(t, removed)
 	})
+
+	t.Run("ReservesForceCleanupBudget", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(80*time.Second))
+		defer cancel()
+
+		var killed, removed bool
+		client := dockerfake.MockClient{
+			ContainerStopFn: func(ctx context.Context, name string, options container.StopOptions) error {
+				require.Equal(t, "container-id", name)
+				require.NotNil(t, options.Timeout)
+				require.GreaterOrEqual(t, *options.Timeout, 54)
+				require.LessOrEqual(t, *options.Timeout, 55)
+				requireContextDeadlineWithin(t, ctx, 55*time.Second+innerContainerStopContextSlack)
+				return errors.New("stop timed out")
+			},
+			ContainerKillFn: func(ctx context.Context, name string, signal string) error {
+				killed = true
+				require.Equal(t, "container-id", name)
+				require.Equal(t, "SIGKILL", signal)
+				requireContextDeadlineWithin(t, ctx, innerContainerAPICallTimeout)
+				return nil
+			},
+			ContainerRemoveFn: func(ctx context.Context, name string, options container.RemoveOptions) error {
+				removed = true
+				require.Equal(t, "container-id", name)
+				require.True(t, options.Force)
+				requireContextDeadlineWithin(t, ctx, innerContainerAPICallTimeout)
+				return nil
+			},
+		}
+
+		log := slogtest.Make(t, &slogtest.Options{IgnoreErrors: true})
+
+		shutdownInnerContainer(ctx, log, client, "container-id", 75*time.Second)
+		require.True(t, killed)
+		require.True(t, removed)
+	})
+
+	t.Run("SkipsStopWhenOnlyForceCleanupBudgetRemains", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(innerContainerForceCleanupBudget+innerContainerStopContextSlack))
+		defer cancel()
+
+		var killed, removed bool
+		client := dockerfake.MockClient{
+			ContainerStopFn: func(context.Context, string, container.StopOptions) error {
+				t.Fatal("container stop should be skipped")
+				return nil
+			},
+			ContainerKillFn: func(context.Context, string, string) error {
+				killed = true
+				return nil
+			},
+			ContainerRemoveFn: func(context.Context, string, container.RemoveOptions) error {
+				removed = true
+				return nil
+			},
+		}
+
+		shutdownInnerContainer(ctx, slogtest.Make(t, nil), client, "container-id", defaultInnerContainerStopTimeout)
+		require.True(t, killed)
+		require.True(t, removed)
+	})
 }
 
 func TestShutdownBootstrapExecUsesStepDeadline(t *testing.T) {
