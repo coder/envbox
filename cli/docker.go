@@ -173,7 +173,7 @@ const (
 	innerContainerForceCleanupBudget = 2 * innerContainerAPICallTimeout
 )
 
-func dockerCmd() *cobra.Command {
+func dockerCmd(lifecycle *lifecycle) *cobra.Command {
 	var flags flags
 
 	cmd := &cobra.Command{
@@ -402,8 +402,12 @@ func dockerCmd() *cobra.Command {
 				}
 			}
 
+			lifecycle.arm()
 			go func() {
-				defer cancel()
+				defer func() {
+					cancel()
+					lifecycle.finish()
+				}()
 
 				<-signalCtx.Done()
 				log.Debug(ctx, "ctx canceled, shutting down docker CVM")
