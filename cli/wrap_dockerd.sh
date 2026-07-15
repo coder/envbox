@@ -5,11 +5,17 @@
 # (https://github.com/moby/moby/blob/8d9e3502aba39127e4d12196dae16d306f76993d/hack/dind#L61-L79),
 # bounded by envbox_max_attempts.
 if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
-	# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes the
-	# fs root; inner container cgroups end up under the envbox container's
-	# cgroup on the host.
-	umount /sys/fs/cgroup || { echo "envbox: failed to umount /sys/fs/cgroup" >&2; exit 1; }
-	mount -t cgroup2 cgroup /sys/fs/cgroup || { echo "envbox: failed to mount cgroup2 on /sys/fs/cgroup" >&2; exit 1; }
+	# Some runtimes already root /sys/fs/cgroup at "/" after unsharing the
+	# cgroup namespace; remounting it again fails with EBUSY. Only remount
+	# when it's still rooted at a nested host path.
+	cgroup_mount_root=$(awk '$5 == "/sys/fs/cgroup" { print $4; exit }' /proc/self/mountinfo)
+	if [ "$cgroup_mount_root" != "/" ]; then
+		# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes the
+		# fs root; inner container cgroups end up under the envbox container's
+		# cgroup on the host.
+		umount /sys/fs/cgroup || { echo "envbox: failed to umount /sys/fs/cgroup" >&2; exit 1; }
+		mount -t cgroup2 cgroup /sys/fs/cgroup || { echo "envbox: failed to mount cgroup2 on /sys/fs/cgroup" >&2; exit 1; }
+	fi
 
 	# move the processes from the root group to the /init group,
 	# otherwise writing subtree_control fails with EBUSY.
