@@ -194,7 +194,13 @@ if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
 	# Some runtimes already root /sys/fs/cgroup at "/" after unsharing the
 	# cgroup namespace; remounting it again fails with EBUSY. Only remount
 	# when it's still rooted at a nested host path.
-	cgroup_mount_root=$(awk '$5 == "/sys/fs/cgroup" { print $4; exit }' /proc/self/mountinfo)
+	# When mounts are stacked at /sys/fs/cgroup, the visible mount is the
+	# one whose ID is not another same-location mount's parent (see
+	# proc_pid_mountinfo(5)).
+	cgroup_mount_root=$(awk '
+		$5 == "/sys/fs/cgroup" { root[$1] = $4; isparent[$2] = 1 }
+		END { for (id in root) if (!(id in isparent)) print root[id] }
+	' /proc/self/mountinfo)
 	if [ "$cgroup_mount_root" != "/" ]; then
 		# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes the
 		# fs root; inner container cgroups end up under the envbox container's
@@ -830,7 +836,8 @@ func TestWrapDockerdCmd(t *testing.T) {
 	script := args[3]
 	require.Contains(t, script, fmt.Sprintf("envbox_max_attempts=%d", cli.DockerdSubtreeControlMaxAttempts))
 	require.Contains(t, script, "[ -f /sys/fs/cgroup/cgroup.controllers ]")
-	require.Contains(t, script, `awk '$5 == "/sys/fs/cgroup" { print $4; exit }' /proc/self/mountinfo`)
+	require.Contains(t, script, `$5 == "/sys/fs/cgroup" { root[$1] = $4; isparent[$2] = 1 }`)
+	require.Contains(t, script, `END { for (id in root) if (!(id in isparent)) print root[id] }`)
 	require.Contains(t, script, `if [ "$cgroup_mount_root" != "/" ]; then`)
 	require.Contains(t, script, "umount /sys/fs/cgroup")
 	require.Contains(t, script, "mount -t cgroup2 cgroup /sys/fs/cgroup")
