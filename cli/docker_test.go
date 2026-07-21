@@ -191,11 +191,23 @@ func TestDocker(t *testing.T) {
 # (https://github.com/moby/moby/blob/8d9e3502aba39127e4d12196dae16d306f76993d/hack/dind#L61-L79),
 # bounded by envbox_max_attempts.
 if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
-	# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes the
-	# fs root; inner container cgroups end up under the envbox container's
-	# cgroup on the host.
-	umount /sys/fs/cgroup || { echo "envbox: failed to umount /sys/fs/cgroup" >&2; exit 1; }
-	mount -t cgroup2 cgroup /sys/fs/cgroup || { echo "envbox: failed to mount cgroup2 on /sys/fs/cgroup" >&2; exit 1; }
+	# Some runtimes already root /sys/fs/cgroup at "/" after unsharing the
+	# cgroup namespace; remounting it again fails with EBUSY. Only remount
+	# when it's still rooted at a nested host path.
+	# When mounts are stacked at /sys/fs/cgroup, the visible mount is the
+	# one whose ID is not another same-location mount's parent (see
+	# proc_pid_mountinfo(5)).
+	cgroup_mount_root=$(awk '
+		$5 == "/sys/fs/cgroup" { root[$1] = $4; isparent[$2] = 1 }
+		END { for (id in root) if (!(id in isparent)) print root[id] }
+	' /proc/self/mountinfo)
+	if [ "$cgroup_mount_root" != "/" ]; then
+		# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes the
+		# fs root; inner container cgroups end up under the envbox container's
+		# cgroup on the host.
+		umount /sys/fs/cgroup || { echo "envbox: failed to umount /sys/fs/cgroup" >&2; exit 1; }
+		mount -t cgroup2 cgroup /sys/fs/cgroup || { echo "envbox: failed to mount cgroup2 on /sys/fs/cgroup" >&2; exit 1; }
+	fi
 
 	# move the processes from the root group to the /init group,
 	# otherwise writing subtree_control fails with EBUSY.
@@ -817,13 +829,16 @@ func TestWrapDockerdCmd(t *testing.T) {
 	//  - prepend the envbox_max_attempts value (so the embedded script can
 	//    reference it as a variable)
 	//  - guard the v2-only block on cgroup.controllers existing
-	//  - perform the umount/mount inside that guard (cgroupv1 hosts unaffected)
+	//  - only remount when /sys/fs/cgroup is still rooted at a nested path
 	//  - delegate via /init + subtree_control
 	//  - bound the retry loop against envbox_max_attempts
 	//  - exec into dockerd
 	script := args[3]
 	require.Contains(t, script, fmt.Sprintf("envbox_max_attempts=%d", cli.DockerdSubtreeControlMaxAttempts))
 	require.Contains(t, script, "[ -f /sys/fs/cgroup/cgroup.controllers ]")
+	require.Contains(t, script, `$5 == "/sys/fs/cgroup" { root[$1] = $4; isparent[$2] = 1 }`)
+	require.Contains(t, script, `END { for (id in root) if (!(id in isparent)) print root[id] }`)
+	require.Contains(t, script, `if [ "$cgroup_mount_root" != "/" ]; then`)
 	require.Contains(t, script, "umount /sys/fs/cgroup")
 	require.Contains(t, script, "mount -t cgroup2 cgroup /sys/fs/cgroup")
 	require.Contains(t, script, "mkdir -p /sys/fs/cgroup/init")
