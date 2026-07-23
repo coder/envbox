@@ -1,0 +1,89 @@
+# "envbox v2" workspace pod: no envbox, no sysbox, no privileged.
+#
+# The pod is unprivileged. It requests /dev/kvm (and /dev/net/tun) from the
+# device plugin and boots a microVM whose guest kernel runs the user's
+# dockerd/systemd workspace. Contrast with today's envbox, which requires
+# `privileged: true`, bind-mounts host /lib/modules + /usr/src, and runs an
+# inner dockerd under sysbox-runc on the shared host kernel.
+#
+# This is a SKETCH. The `coder/workspace-vmm` image referenced below does not
+# exist yet -- it stands in for the in-pod supervisor + guest rootfs described
+# in README.md / NOTES.md.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: workspace-vmm-example
+  labels:
+    app.kubernetes.io/name: coder-workspace
+spec:
+  # Land on a KVM-capable node and tolerate its taint.
+  nodeSelector:
+    coder.com/kvm: "true"
+  tolerations:
+    - key: coder.com/workspace-kvm
+      operator: Exists
+      effect: NoSchedule
+  restartPolicy: Never
+  # No hostPID/hostNetwork/hostIPC. No privileged. Compatible with the
+  # Pod Security "baseline" profile (the device request is the only elevated
+  # bit, and it is mediated by the device plugin).
+  securityContext:
+    runAsNonRoot: false # the VMM currently needs uid 0 in-pod; revisit.
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: workspace
+      # In-pod supervisor: launches cloud-hypervisor/firecracker, wires the
+      # guest's virtio-net + vsock, injects CODER_AGENT_TOKEN into the guest,
+      # and streams the boot/build log. Analog of today's cli/docker.go.
+      image: REPLACE_ME/coder-workspace-vmm:latest
+      args:
+        - --vmm=cloud-hypervisor
+        - --guest-image=/var/lib/coder/guest/rootfs.img
+        - --inner-image=$(CODER_INNER_IMAGE)
+      env:
+        - name: CODER_INNER_IMAGE
+          value: codercom/enterprise-base:ubuntu
+        - name: CODER_INNER_USERNAME
+          value: coder
+        - name: CODER_AGENT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: workspace-agent-token
+              key: token
+      resources:
+        # KVM is requested here instead of `privileged: true`.
+        requests:
+          devices.kubevirt.io/kvm: "1"
+          devices.kubevirt.io/tun: "1"
+          cpu: "2"
+          memory: 4Gi
+        limits:
+          devices.kubevirt.io/kvm: "1"
+          devices.kubevirt.io/tun: "1"
+          cpu: "4"
+          memory: 8Gi
+      volumeMounts:
+        # The guest rootfs (kernel + init + agent + dockerd), shipped read-only.
+        - name: guest-image
+          mountPath: /var/lib/coder/guest
+          readOnly: true
+        # Persistent docker data dir for the guest -> fixes the cold-cache
+        # problem. Survives restarts and can be pre-seeded per node/zone.
+        - name: docker-cache
+          mountPath: /var/lib/coder/docker
+        # User's home / workspace PVC, passed through to the guest.
+        - name: home
+          mountPath: /home/coder
+  volumes:
+    - name: guest-image
+      # Ship the guest rootfs as an OCI image mounted read-only via an image
+      # volume / CSI image driver so the kubelet's node cache is reused.
+      emptyDir: {} # placeholder; real impl uses an image/CSI volume.
+    - name: docker-cache
+      persistentVolumeClaim:
+        claimName: workspace-docker-cache
+    - name: home
+      persistentVolumeClaim:
+        claimName: workspace-home

@@ -1,0 +1,73 @@
+# KVM device plugin
+#
+# Exposes /dev/kvm (and /dev/net/tun) as *schedulable* resources so that
+# workspace pods can request them WITHOUT running as privileged and without
+# the pod having to mknod its own devices (as envbox does today in
+# xunix/device.go).
+#
+# This is the piece that lets us drop `privileged: true`: a device plugin adds
+# a specific device to the pod's cgroup allow-list and bind-mounts it, which is
+# exactly the "one device, not all devices" grant that a Kubernetes
+# securityContext cannot express on its own.
+#
+# Reference implementation: kubevirt/kubernetes-device-plugins (kvm, tun).
+# Replace the image below with a built/pinned image.
+#
+# NOTE: the device plugin DaemonSet itself needs host device access (and, on
+# Bottlerocket, the super_t SELinux label). That privilege is confined to this
+# small, auditable component -- not to every workspace.
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kvm-device-plugin
+  namespace: kube-system
+  labels:
+    app: kvm-device-plugin
+spec:
+  selector:
+    matchLabels:
+      app: kvm-device-plugin
+  template:
+    metadata:
+      labels:
+        app: kvm-device-plugin
+    spec:
+      # Only schedule onto nodes that actually expose /dev/kvm. Label your
+      # KVM-capable node group (e.g. *.metal or c8i/m8i/r8i w/ nested virt)
+      # with `coder.com/kvm=true`.
+      nodeSelector:
+        coder.com/kvm: "true"
+      tolerations:
+        - key: coder.com/workspace-kvm
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: kvm-device-plugin
+          image: REPLACE_ME/kvm-device-plugin:latest
+          args:
+            - --devices=kvm,tun
+          securityContext:
+            # Device plugins need host device access. On Bottlerocket this also
+            # requires the super_t SELinux label (see NOTES.md); on general
+            # node OSes privileged is the pragmatic setting for the plugin.
+            privileged: true
+            # Bottlerocket equivalent (instead of privileged) -- uncomment and
+            # test which is sufficient:
+            # seLinuxOptions:
+            #   user: system_u
+            #   role: system_r
+            #   type: super_t
+            #   level: s0
+          volumeMounts:
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+            - name: dev
+              mountPath: /dev
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+        - name: dev
+          hostPath:
+            path: /dev
