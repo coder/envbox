@@ -1,4 +1,4 @@
-# "envbox v2" workspace pod: no envbox, no sysbox, no privileged.
+# No-envbox KVM workspace pod: no envbox, no sysbox, no privileged.
 #
 # The pod is unprivileged. It requests /dev/kvm (and /dev/net/tun) from the
 # device plugin and boots a microVM whose guest kernel runs the user's

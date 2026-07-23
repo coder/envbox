@@ -51,5 +51,4 @@ changes underneath; the template surface should not.
 ## Not doing (yet)
 
 No code wired into the envbox build. This branch is a deployment-surface
-sketch to evaluate feasibility and node/OS constraints before scoping the
-"envbox v2" epic.
+sketch to explore options and evaluate feasibility and node/OS constraints.

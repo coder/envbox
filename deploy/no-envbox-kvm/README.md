@@ -80,7 +80,7 @@ exposed to the pod.
 | File | Purpose |
 | --- | --- |
 | `manifests/kvm-device-plugin.yaml` | DaemonSet exposing `/dev/kvm` (+ `/dev/net/tun`) as schedulable resources, pinned to KVM-capable nodes. Not privileged for workloads; the plugin itself needs host device access. |
-| `manifests/workspace-pod.yaml` | An "envbox v2" workspace pod: unprivileged, requests the device resources, boots a microVM, mounts a persistent `/var/lib/docker` cache disk. |
+| `manifests/workspace-pod.yaml` | A no-envbox workspace pod: unprivileged, requests the device resources, boots a microVM, mounts a persistent `/var/lib/docker` cache disk. |
 | `manifests/coder-template.tf` | Terraform `kubernetes_pod` sketch for the equivalent Coder template. |
 | `NOTES.md` | Open questions, the make-or-break tests, and mapping to the existing envbox code that would need to change. |
 
