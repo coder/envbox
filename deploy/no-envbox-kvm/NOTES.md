@@ -26,7 +26,7 @@
 | `xunix/device.go` `mknod`s `/dev/net/tun`, `/dev/fuse` under privileged | Devices come from the device plugin as pod resource requests. |
 | `envboxPrivateMounts`: `/lib/modules`, `/usr/src`, `/var/lib/sysbox` | Not needed. The guest ships its own kernel/modules; no host kernel matrix. |
 | `--privileged` outer pod | Unprivileged pod + scoped device request. |
-| Inner dockerd image store (cold cache) | Persistent guest `/var/lib/docker` PVC + registry mirror. |
+| Inner dockerd image store (cold cache) | Node pull-through mirror (new pods warm) + CSI-mounted inner image; ephemeral guest data dir. |
 | `xunix/gpu.go` host-lib bind mounts + `CODER_ADD_GPU` | GPU passthrough into the guest (open question; `*.metal` likely first). |
 | `CODER_INNER_*` env contract | Preserved at the supervisor boundary so templates barely change. |
 
@@ -47,6 +47,42 @@ changes underneath; the template surface should not.
    ownership (virtiofs).
 4. GPU passthrough into a nested-virt guest on non-metal families.
 5. Graceful shutdown / signal + agent-token lifecycle into the guest.
+
+## Cache design (first-boot warmth for new pods)
+
+Goal: a brand-new workspace pod on a node that already has the layers must
+**not** hit the remote registry. We do not care about fast restarts, so no
+persistence. The blocker is that the inner dockerd's store is private and
+format-incompatible with the node's containerd store, so you cannot bind-mount
+the node store into dockerd. Two levers instead:
+
+**Lever 1 -- node-local pull-through mirror (arbitrary in-workspace pulls).**
+Run a registry mirror as a DaemonSet with node-local storage and point every
+guest dockerd at it (`CODER_REGISTRY_MIRROR`). The first pod on the node to
+pull image X populates the mirror; every new pod after that pulls X from the
+node at loopback/LAN speed. Pre-seed the mirror with a pre-pull Job/DaemonSet
+if the very first pod on a cold node must also be warm. Format-agnostic and
+safe (no node socket, no shared graph).
+
+**Lever 2 -- CSI image-mount for the inner workspace image.**
+The biggest single first-boot cost is `CODER_INNER_IMAGE`, which envbox today
+pulls with the inner dockerd (never touching the node cache). Instead, mount it
+from the node's containerd store via a CSI image driver (e.g. warm-metal
+`csi-image`), which pulls via CRI and mounts the image snapshot. A new pod gets
+the already-present rootfs with no pull. This is the one clean way to actually
+reuse the kubelet/containerd cache.
+
+**Why not just mount the store:** dockerd has no shared/read-only "additional
+image store" concept, so mounting the node's layers read-only does nothing for
+a fresh dockerd. Podman *does* have this (`additionalimagestores`); if the
+inner runtime were podman/buildah, "mount a node-local read-only store and new
+pods reuse it" would be first-class. Bigger change than the mirror; noted as an
+option, not the plan.
+
+**Applies to both paths.** The guest in this KVM sketch points its dockerd at
+the same node mirror (Lever 1) and consumes the CSI-mounted inner image
+(Lever 2); the guest docker data dir is deliberately ephemeral. The identical
+pattern works for the sysbox/vanilla outer pod.
 
 ## Not doing (yet)
 

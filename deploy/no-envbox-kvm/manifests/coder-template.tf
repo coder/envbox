@@ -59,23 +59,29 @@ resource "kubernetes_pod" "workspace" {
         name  = "CODER_INNER_IMAGE"
         value = data.coder_parameter.inner_image.value
       }
+      # Point the guest dockerd at the node-local pull-through mirror so new
+      # pods pull from the node (warm), not the remote registry. See NOTES.md.
+      env {
+        name  = "CODER_REGISTRY_MIRROR"
+        value = "http://kube-registry-mirror.kube-system.svc:5000"
+      }
       env {
         name  = "CODER_AGENT_TOKEN"
         value = coder_agent.main.token
       }
 
       volume_mount {
-        name       = "docker-cache"
+        # Ephemeral guest docker data dir. Warmth comes from the mirror +
+        # CSI-mounted inner image, not from persistence (see NOTES.md).
+        name       = "docker-data"
         mount_path = "/var/lib/coder/docker"
       }
     }
 
-    # Persistent guest docker cache -> fixes cold pulls.
+    # Ephemeral: we do not need fast restarts.
     volume {
-      name = "docker-cache"
-      persistent_volume_claim {
-        claim_name = kubernetes_persistent_volume_claim.docker_cache.metadata.0.name
-      }
+      name = "docker-data"
+      empty_dir {}
     }
   }
 }

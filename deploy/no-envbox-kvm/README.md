@@ -80,7 +80,8 @@ exposed to the pod.
 | File | Purpose |
 | --- | --- |
 | `manifests/kvm-device-plugin.yaml` | DaemonSet exposing `/dev/kvm` (+ `/dev/net/tun`) as schedulable resources, pinned to KVM-capable nodes. Not privileged for workloads; the plugin itself needs host device access. |
-| `manifests/workspace-pod.yaml` | A no-envbox workspace pod: unprivileged, requests the device resources, boots a microVM, mounts a persistent `/var/lib/docker` cache disk. |
+| `manifests/registry-mirror.yaml` | Node-local pull-through registry mirror (cache Lever 1): new pods pull already-fetched layers from the node instead of the remote registry. |
+| `manifests/workspace-pod.yaml` | A no-envbox workspace pod: unprivileged, requests the device resources, boots a microVM, points its dockerd at the node mirror, and CSI-mounts the inner image (ephemeral docker data dir). |
 | `manifests/coder-template.tf` | Terraform `kubernetes_pod` sketch for the equivalent Coder template. |
 | `NOTES.md` | Open questions, the make-or-break tests, and mapping to the existing envbox code that would need to change. |
 

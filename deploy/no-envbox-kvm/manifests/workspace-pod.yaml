@@ -47,6 +47,11 @@ spec:
           value: codercom/enterprise-base:ubuntu
         - name: CODER_INNER_USERNAME
           value: coder
+        # Lever 1: point the guest's dockerd at the node-local pull-through
+        # mirror so a NEW pod pulls layers from the node (warm) instead of the
+        # remote registry. See NOTES.md "Cache design".
+        - name: CODER_REGISTRY_MIRROR
+          value: http://kube-registry-mirror.kube-system.svc:5000
         - name: CODER_AGENT_TOKEN
           valueFrom:
             secretKeyRef:
@@ -69,9 +74,17 @@ spec:
         - name: guest-image
           mountPath: /var/lib/coder/guest
           readOnly: true
-        # Persistent docker data dir for the guest -> fixes the cold-cache
-        # problem. Survives restarts and can be pre-seeded per node/zone.
-        - name: docker-cache
+        # Lever 2: the inner workspace image (CODER_INNER_IMAGE) is mounted
+        # from the node's containerd store via a CSI image driver instead of
+        # being pulled by the guest's dockerd -> warm on first boot by reusing
+        # what the kubelet already cached. See NOTES.md "Cache design".
+        - name: inner-image
+          mountPath: /var/lib/coder/inner
+          readOnly: true
+        # Guest docker data dir. Intentionally EPHEMERAL: we do not need fast
+        # restarts. First-boot warmth comes from the mirror (Lever 1) and the
+        # CSI-mounted inner image (Lever 2), not from persisting this dir.
+        - name: docker-data
           mountPath: /var/lib/coder/docker
         # User's home / workspace PVC, passed through to the guest.
         - name: home
@@ -81,9 +94,18 @@ spec:
       # Ship the guest rootfs as an OCI image mounted read-only via an image
       # volume / CSI image driver so the kubelet's node cache is reused.
       emptyDir: {} # placeholder; real impl uses an image/CSI volume.
-    - name: docker-cache
-      persistentVolumeClaim:
-        claimName: workspace-docker-cache
+    - name: inner-image
+      # CSI image-mount (e.g. warm-metal csi-image): pulls via CRI and mounts
+      # the image snapshot, sharing the node containerd store. A new pod gets
+      # the already-present rootfs with no pull.
+      csi:
+        driver: csi-image.warm-metal.tech
+        readOnly: true
+        volumeAttributes:
+          image: codercom/enterprise-base:ubuntu
+    - name: docker-data
+      # Ephemeral on purpose (see volumeMount comment). No PVC.
+      emptyDir: {}
     - name: home
       persistentVolumeClaim:
         claimName: workspace-home
