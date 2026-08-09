@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-docker-second
+  namespace: direct-sysbox
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: direct-sysbox-gp3
+  resources:
+    requests:
+      storage: 30Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: direct-sysbox-workspace-second
+  namespace: direct-sysbox
+  labels:
+    app.kubernetes.io/name: direct-sysbox-workspace-second
+spec:
+  runtimeClassName: sysbox-runc
+  hostUsers: false
+  restartPolicy: Never
+  nodeSelector:
+    kubernetes.io/hostname: ip-192-168-87-106.us-east-2.compute.internal
+  containers:
+    - name: workspace
+      image: registry.nestybox.com/nestybox/ubuntu-focal-systemd-docker@sha256:e451ce586ea5c0224c511d4c87b9aa215173db0d1eac6473d0e4b3b5abe41ba5
+      imagePullPolicy: IfNotPresent
+      command:
+        - /sbin/init
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests:
+          cpu: 100m
+          memory: 1Gi
+        limits:
+          cpu: "1"
+          memory: 3Gi
+      volumeMounts:
+        - name: docker-data
+          mountPath: /var/lib/docker
+  volumes:
+    - name: docker-data
+      persistentVolumeClaim:
+        claimName: workspace-docker-second

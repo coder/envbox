@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: coder-tun-device-plugin
+  namespace: kube-system
+  labels:
+    app: coder-tun-device-plugin
+spec:
+  selector:
+    matchLabels:
+      app: coder-tun-device-plugin
+  template:
+    metadata:
+      labels:
+        app: coder-tun-device-plugin
+    spec:
+      nodeSelector:
+        coder.com/kvm: "true"
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: nested-virt
+          effect: NoSchedule
+      containers:
+        - name: tun-device-plugin
+          image: 849808308023.dkr.ecr.us-east-2.amazonaws.com/nested-virt-kvm-device-plugin:test-4
+          env:
+            - name: DEVICE_PLUGIN_RESOURCE
+              value: "devices.coder.com/tun"
+            - name: DEVICE_PLUGIN_ENDPOINT
+              value: "coder-tun.sock"
+            - name: DEVICE_PLUGIN_DEVICE_PATH
+              value: "/dev/net/tun"
+            - name: KVM_DEVICE_COUNT
+              value: "1"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+            - name: tun
+              mountPath: /dev/net/tun
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+            type: Directory
+        - name: tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice

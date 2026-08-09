@@ -1,0 +1,11 @@
+NAMESPACE     NAME                                READY   STATUS    RESTARTS   AGE   IP               NODE                                           NOMINATED NODE   READINESS GATES
+kube-system   aws-node-wwtfk                      2/2     Running   0          23m   192.168.87.106   ip-192-168-87-106.us-east-2.compute.internal   <none>           <none>
+kube-system   coredns-69b7bc7c76-twnsg            1/1     Running   0          26m   192.168.71.137   ip-192-168-87-106.us-east-2.compute.internal   <none>           <none>
+kube-system   coredns-69b7bc7c76-xksc5            1/1     Running   0          26m   192.168.66.238   ip-192-168-87-106.us-east-2.compute.internal   <none>           <none>
+kube-system   ebs-csi-controller-59d5f99b-4hhrp   6/6     Running   0          21m   192.168.81.204   ip-192-168-87-106.us-east-2.compute.internal   <none>           <none>
+kube-system   ebs-csi-controller-59d5f99b-k89m7   6/6     Running   0          21m   192.168.82.200   ip-192-168-87-106.us-east-2.compute.internal   <none>           <none>
+kube-system   ebs-csi-node-rmfp7                  3/3     Running   0          21m   192.168.80.15    ip-192-168-87-106.us-east-2.compute.internal   <none>           <none>
+kube-system   kube-proxy-jhfdj                    1/1     Running   0          23m   192.168.87.106   ip-192-168-87-106.us-east-2.compute.internal   <none>           <none>
+kube-system   metrics-server-fb5c8cd58-26cjr      1/1     Running   0          20m   192.168.93.79    ip-192-168-87-106.us-east-2.compute.internal   <none>           <none>
+kube-system   metrics-server-fb5c8cd58-97dwb      1/1     Running   0          20m   192.168.85.175   ip-192-168-87-106.us-east-2.compute.internal   <none>           <none>
+kube-system   sysbox-deploy-k8s-2ftcj             1/1     Running   0          58s   192.168.90.147   ip-192-168-87-106.us-east-2.compute.internal   <none>           <none>

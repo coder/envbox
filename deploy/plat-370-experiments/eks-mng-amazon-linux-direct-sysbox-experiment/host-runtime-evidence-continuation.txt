@@ -1,0 +1,16 @@
+=== containerd ===
+active
+ExecStart={ path=/usr/bin/containerd ; argv[]=/usr/bin/containerd ; ignore_errors=no ; start_time=[Sun 2026-08-09 00:52:02 UTC] ; stop_time=[n/a] ; pid=14326 ; code=(null) ; status=0/0 }
+=== sysbox-runc configuration ===
+41-    [plugins."io.containerd.grpc.v1.cri".containerd]
+42-
+43-      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]
+44-
+45:        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.sysbox-runc]
+46-          runtime_type = "io.containerd.runc.v2"
+47-
+48:          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.sysbox-runc.options]
+49:            BinaryName = "/usr/bin/sysbox-runc"
+50-            SystemdCgroup = true
+=== CRI-O ===
+passed: CRI-O is not active

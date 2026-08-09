@@ -1,0 +1,16 @@
++ echo '--- CPU virtualization flags ---'
+--- CPU virtualization flags ---
++ grep -Eo 'vmx|svm' /proc/cpuinfo
++ sort -u
+vmx
+--- /dev/kvm ---
++ echo '--- /dev/kvm ---'
++ ls -l /dev/kvm
+ls: cannot access '/dev/kvm': No such file or directory
++ true
++ echo '--- /dev/net/tun ---'
++ ls -l /dev/net/tun
+--- /dev/net/tun ---
+ls: cannot access '/dev/net/tun': No such file or directory
++ true
++ sleep 30

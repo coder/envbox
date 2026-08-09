@@ -1,0 +1,8 @@
+CpuOptions:
+  CoreCount: 4
+  ThreadsPerCore: 2
+ImageId: ami-05a6c95f5f2773fbf
+InstanceId: i-01bbde7ccca753f6a
+InstanceType: c8i.2xlarge
+LaunchTime: '2026-07-29T05:05:46+00:00'
+State: running

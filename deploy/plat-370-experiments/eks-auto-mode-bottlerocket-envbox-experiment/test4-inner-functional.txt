@@ -1,0 +1,88 @@
+Defaulted container "envbox" out of: envbox, initialize-workspace-volume (init)
+=== child container ===
+Unable to find image 'alpine:3.21' locally
+3.21: Pulling from library/alpine
+897d797d2723: Pulling fs layer
+897d797d2723: Verifying Checksum
+897d797d2723: Download complete
+897d797d2723: Pull complete
+Digest: sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+Status: Downloaded newer image for alpine:3.21
+uid=0(root) gid=0(root) groups=0(root),1(bin),2(daemon),3(sys),4(adm),6(disk),10(wheel),11(floppy),20(dialout),26(tape),27(video)
+=== BuildKit ===
+#1 [internal] load .dockerignore
+#1 transferring context: 2B done
+#1 DONE 0.1s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 161B done
+#2 DONE 0.1s
+
+#3 [internal] load metadata for docker.io/library/alpine:3.21
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/alpine:3.21
+#4 DONE 0.0s
+
+#5 [2/2] RUN id
+#5 0.284 uid=0(root) gid=0(root) groups=0(root),1(bin),2(daemon),3(sys),4(adm),6(disk),10(wheel),11(floppy),20(dialout),26(tape),27(video)
+#5 DONE 0.3s
+
+#6 exporting to image
+#6 exporting layers
+#6 exporting layers 0.4s done
+#6 writing image sha256:8f9e33dce0e5f45315b2c199415680375d184e1c5abfad90642a690e3df21a31 done
+#6 naming to docker.io/library/envbox-inner-smoke:1 done
+#6 DONE 0.4s
+envbox-build-ok
+=== bridge DNS and HTTP ===
+41f7b11418221abee5ae9c479e68f9a4454f82725bcaf452e4342614dcc10b06
+Unable to find image 'nginx:1.27-alpine' locally
+1.27-alpine: Pulling from library/nginx
+f18232174bc9: Pulling fs layer
+61ca4f733c80: Pulling fs layer
+b464cfdf2a63: Pulling fs layer
+d7e507024086: Pulling fs layer
+81bd8ed7ec67: Pulling fs layer
+197eb75867ef: Pulling fs layer
+34a64644b756: Pulling fs layer
+39c2ddfd6010: Pulling fs layer
+d7e507024086: Waiting
+81bd8ed7ec67: Waiting
+197eb75867ef: Waiting
+34a64644b756: Waiting
+39c2ddfd6010: Waiting
+b464cfdf2a63: Verifying Checksum
+b464cfdf2a63: Download complete
+61ca4f733c80: Verifying Checksum
+61ca4f733c80: Download complete
+f18232174bc9: Verifying Checksum
+f18232174bc9: Download complete
+d7e507024086: Download complete
+81bd8ed7ec67: Download complete
+197eb75867ef: Verifying Checksum
+197eb75867ef: Download complete
+34a64644b756: Verifying Checksum
+34a64644b756: Download complete
+f18232174bc9: Pull complete
+39c2ddfd6010: Verifying Checksum
+39c2ddfd6010: Download complete
+61ca4f733c80: Pull complete
+b464cfdf2a63: Pull complete
+d7e507024086: Pull complete
+81bd8ed7ec67: Pull complete
+197eb75867ef: Pull complete
+34a64644b756: Pull complete
+39c2ddfd6010: Pull complete
+Digest: sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+Status: Downloaded newer image for nginx:1.27-alpine
+4763d923d605c9603385f4c7ad3a5dd9644fcbe2cc9b190cd26a392fa82aefd2
+bridge-dns-http-ok
+=== outbound networking ===
+outbound-network-ok
+=== published port ===
+published-port-ok
+=== child cgroup limits ===
+memory.max=67108864
+cpu.max=50000 100000
+envbox-nested-docker-suite-ok

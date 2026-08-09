@@ -1,0 +1,6 @@
+{
+  "InstanceType": "c8i.2xlarge",
+  "CpuOptions": {
+    "NestedVirtualization": "enabled"
+  }
+}

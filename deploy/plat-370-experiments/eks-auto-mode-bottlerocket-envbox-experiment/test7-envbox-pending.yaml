@@ -1,0 +1,186 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"Pod","metadata":{"annotations":{},"labels":{"app.kubernetes.io/name":"envbox-smoke","experiment.coder.com/role":"workspace"},"name":"envbox-smoke","namespace":"envbox-auto"},"spec":{"containers":[{"command":["/envbox","docker"],"env":[{"name":"CODER_INNER_IMAGE","value":"us-docker.pkg.dev/coder-v2-images-public/public/envbox/enterprise-base:ubuntu"},{"name":"CODER_INNER_USERNAME","value":"coder"},{"name":"CODER_INNER_HOSTNAME","value":"envbox-smoke"},{"name":"CODER_MOUNTS","value":"/home/coder:/home/coder"},{"name":"CODER_CPUS","value":"1"},{"name":"CODER_MEMORY","value":"4294967296"},{"name":"CODER_DEBUG","value":"true"}],"image":"ghcr.io/coder/envbox:0.6.7","imagePullPolicy":"Always","name":"envbox","resources":{"limits":{"cpu":"2","memory":"7Gi"},"requests":{"cpu":"1","memory":"3Gi"}},"securityContext":{"allowPrivilegeEscalation":true,"privileged":true,"seccompProfile":{"type":"Unconfined"}},"volumeMounts":[{"mountPath":"/home/coder","name":"workspace","subPath":"home"},{"mountPath":"/var/lib/coder/docker","name":"workspace","subPath":"cache/docker"},{"mountPath":"/var/lib/coder/containers","name":"workspace","subPath":"cache/containers"},{"mountPath":"/var/lib/sysbox","name":"sysbox"},{"mountPath":"/var/lib/containers","name":"workspace","subPath":"envbox/containers"},{"mountPath":"/var/lib/docker","name":"workspace","subPath":"envbox/docker"},{"mountPath":"/usr/src","name":"usr-src","readOnly":true},{"mountPath":"/lib/modules","name":"lib-modules","readOnly":true}]}],"initContainers":[{"command":["/bin/sh","-ec","mkdir -p \\\n  /workspace-volume/home \\\n  /workspace-volume/cache/docker \\\n  /workspace-volume/cache/containers \\\n  /workspace-volume/envbox/containers \\\n  /workspace-volume/envbox/docker\n"],"image":"public.ecr.aws/docker/library/alpine:3.21","imagePullPolicy":"IfNotPresent","name":"initialize-workspace-volume","resources":{"limits":{"memory":"64Mi"},"requests":{"cpu":"10m","memory":"16Mi"}},"securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsGroup":0,"runAsUser":0,"seccompProfile":{"type":"RuntimeDefault"}},"volumeMounts":[{"mountPath":"/workspace-volume","name":"workspace"}]}],"nodeSelector":{"experiment.coder.com/envbox-auto":"true"},"restartPolicy":"Never","terminationGracePeriodSeconds":300,"tolerations":[{"effect":"NoSchedule","key":"experiment.coder.com/envbox-auto","operator":"Equal","value":"true"}],"volumes":[{"name":"workspace","persistentVolumeClaim":{"claimName":"envbox-workspace"}},{"emptyDir":{},"name":"sysbox"},{"hostPath":{"path":"/usr/src","type":""},"name":"usr-src"},{"hostPath":{"path":"/lib/modules","type":""},"name":"lib-modules"}]}}
+  creationTimestamp: "2026-08-08T19:33:39Z"
+  generation: 1
+  labels:
+    app.kubernetes.io/name: envbox-smoke
+    experiment.coder.com/role: workspace
+  name: envbox-smoke
+  namespace: envbox-auto
+  resourceVersion: "36907"
+  uid: 5decce97-5634-4039-9d36-552750ad3b2b
+spec:
+  containers:
+  - command:
+    - /envbox
+    - docker
+    env:
+    - name: CODER_INNER_IMAGE
+      value: us-docker.pkg.dev/coder-v2-images-public/public/envbox/enterprise-base:ubuntu
+    - name: CODER_INNER_USERNAME
+      value: coder
+    - name: CODER_INNER_HOSTNAME
+      value: envbox-smoke
+    - name: CODER_MOUNTS
+      value: /home/coder:/home/coder
+    - name: CODER_CPUS
+      value: "1"
+    - name: CODER_MEMORY
+      value: "4294967296"
+    - name: CODER_DEBUG
+      value: "true"
+    image: ghcr.io/coder/envbox:0.6.7
+    imagePullPolicy: Always
+    name: envbox
+    resources:
+      limits:
+        cpu: "2"
+        memory: 7Gi
+      requests:
+        cpu: "1"
+        memory: 3Gi
+    securityContext:
+      allowPrivilegeEscalation: true
+      privileged: true
+      seccompProfile:
+        type: Unconfined
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /home/coder
+      name: workspace
+      subPath: home
+    - mountPath: /var/lib/coder/docker
+      name: workspace
+      subPath: cache/docker
+    - mountPath: /var/lib/coder/containers
+      name: workspace
+      subPath: cache/containers
+    - mountPath: /var/lib/sysbox
+      name: sysbox
+    - mountPath: /var/lib/containers
+      name: workspace
+      subPath: envbox/containers
+    - mountPath: /var/lib/docker
+      name: workspace
+      subPath: envbox/docker
+    - mountPath: /usr/src
+      name: usr-src
+      readOnly: true
+    - mountPath: /lib/modules
+      name: lib-modules
+      readOnly: true
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-rklmm
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  initContainers:
+  - command:
+    - /bin/sh
+    - -ec
+    - |
+      mkdir -p \
+        /workspace-volume/home \
+        /workspace-volume/cache/docker \
+        /workspace-volume/cache/containers \
+        /workspace-volume/envbox/containers \
+        /workspace-volume/envbox/docker
+    image: public.ecr.aws/docker/library/alpine:3.21
+    imagePullPolicy: IfNotPresent
+    name: initialize-workspace-volume
+    resources:
+      limits:
+        memory: 64Mi
+      requests:
+        cpu: 10m
+        memory: 16Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      runAsGroup: 0
+      runAsUser: 0
+      seccompProfile:
+        type: RuntimeDefault
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /workspace-volume
+      name: workspace
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-rklmm
+      readOnly: true
+  nodeSelector:
+    experiment.coder.com/envbox-auto: "true"
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  restartPolicy: Never
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 300
+  tolerations:
+  - effect: NoSchedule
+    key: experiment.coder.com/envbox-auto
+    operator: Equal
+    value: "true"
+  - effect: NoExecute
+    key: node.kubernetes.io/not-ready
+    operator: Exists
+    tolerationSeconds: 300
+  - effect: NoExecute
+    key: node.kubernetes.io/unreachable
+    operator: Exists
+    tolerationSeconds: 300
+  volumes:
+  - name: workspace
+    persistentVolumeClaim:
+      claimName: envbox-workspace
+  - emptyDir: {}
+    name: sysbox
+  - hostPath:
+      path: /usr/src
+      type: ""
+    name: usr-src
+  - hostPath:
+      path: /lib/modules
+      type: ""
+    name: lib-modules
+  - name: kube-api-access-rklmm
+    projected:
+      defaultMode: 420
+      sources:
+      - serviceAccountToken:
+          expirationSeconds: 3607
+          path: token
+      - configMap:
+          items:
+          - key: ca.crt
+            path: ca.crt
+          name: kube-root-ca.crt
+      - downwardAPI:
+          items:
+          - fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+            path: namespace
+status:
+  conditions:
+  - lastProbeTime: null
+    lastTransitionTime: "2026-08-08T19:33:39Z"
+    message: '0/2 nodes are available: 2 node(s) had untolerated taint(s). no new
+      claims to deallocate, preemption: 0/2 nodes are available: 2 Preemption is not
+      helpful for scheduling.'
+    observedGeneration: 1
+    reason: Unschedulable
+    status: "False"
+    type: PodScheduled
+  phase: Pending
+  qosClass: Burstable

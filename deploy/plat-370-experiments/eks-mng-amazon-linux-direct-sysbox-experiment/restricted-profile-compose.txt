@@ -1,0 +1,115 @@
++ compose='docker compose -p restricted-smoke -f /tmp/compose-smoke.yaml'
++ docker compose -p restricted-smoke -f /tmp/compose-smoke.yaml up -d
+server Pulling 
+f18232174bc9 Pulling fs layer 
+61ca4f733c80 Pulling fs layer 
+b464cfdf2a63 Pulling fs layer 
+d7e507024086 Pulling fs layer 
+81bd8ed7ec67 Pulling fs layer 
+197eb75867ef Pulling fs layer 
+34a64644b756 Pulling fs layer 
+39c2ddfd6010 Pulling fs layer 
+197eb75867ef Waiting 
+34a64644b756 Waiting 
+39c2ddfd6010 Waiting 
+d7e507024086 Waiting 
+81bd8ed7ec67 Waiting 
+b464cfdf2a63 Downloading [==================================================>]     629B/629B
+b464cfdf2a63 Verifying Checksum 
+b464cfdf2a63 Download complete 
+61ca4f733c80 Downloading [>                                                  ]  32.77kB/1.791MB
+f18232174bc9 Downloading [>                                                  ]  48.51kB/3.642MB
+61ca4f733c80 Downloading [==================================================>]  1.791MB/1.791MB
+61ca4f733c80 Verifying Checksum 
+61ca4f733c80 Download complete 
+f18232174bc9 Verifying Checksum 
+f18232174bc9 Download complete 
+f18232174bc9 Extracting [>                                                  ]  65.54kB/3.642MB
+d7e507024086 Downloading [==================================================>]     955B/955B
+d7e507024086 Verifying Checksum 
+d7e507024086 Download complete 
+81bd8ed7ec67 Downloading [==================================================>]     402B/402B
+81bd8ed7ec67 Verifying Checksum 
+81bd8ed7ec67 Download complete 
+197eb75867ef Downloading [==================================================>]  1.209kB/1.209kB
+197eb75867ef Verifying Checksum 
+197eb75867ef Download complete 
+f18232174bc9 Extracting [========>                                          ]  655.4kB/3.642MB
+34a64644b756 Downloading [==================================================>]  1.397kB/1.397kB
+34a64644b756 Verifying Checksum 
+34a64644b756 Download complete 
+39c2ddfd6010 Downloading [>                                                  ]  163.8kB/15.52MB
+f18232174bc9 Extracting [====================================>              ]  2.687MB/3.642MB
+39c2ddfd6010 Downloading [=========================>                         ]  7.992MB/15.52MB
+f18232174bc9 Extracting [==================================================>]  3.642MB/3.642MB
+39c2ddfd6010 Verifying Checksum 
+39c2ddfd6010 Download complete 
+f18232174bc9 Pull complete 
+61ca4f733c80 Extracting [>                                                  ]  32.77kB/1.791MB
+61ca4f733c80 Extracting [====================>                              ]  720.9kB/1.791MB
+61ca4f733c80 Extracting [==================================================>]  1.791MB/1.791MB
+61ca4f733c80 Extracting [==================================================>]  1.791MB/1.791MB
+61ca4f733c80 Pull complete 
+b464cfdf2a63 Extracting [==================================================>]     629B/629B
+b464cfdf2a63 Extracting [==================================================>]     629B/629B
+b464cfdf2a63 Pull complete 
+d7e507024086 Extracting [==================================================>]     955B/955B
+d7e507024086 Extracting [==================================================>]     955B/955B
+d7e507024086 Pull complete 
+81bd8ed7ec67 Extracting [==================================================>]     402B/402B
+81bd8ed7ec67 Extracting [==================================================>]     402B/402B
+81bd8ed7ec67 Pull complete 
+197eb75867ef Extracting [==================================================>]  1.209kB/1.209kB
+197eb75867ef Extracting [==================================================>]  1.209kB/1.209kB
+197eb75867ef Pull complete 
+34a64644b756 Extracting [==================================================>]  1.397kB/1.397kB
+34a64644b756 Extracting [==================================================>]  1.397kB/1.397kB
+34a64644b756 Pull complete 
+39c2ddfd6010 Extracting [>                                                  ]  163.8kB/15.52MB
+39c2ddfd6010 Extracting [=======>                                           ]  2.458MB/15.52MB
+39c2ddfd6010 Extracting [==================>                                ]  5.734MB/15.52MB
+39c2ddfd6010 Extracting [=============================>                     ]  9.175MB/15.52MB
+39c2ddfd6010 Extracting [=======================================>           ]  12.29MB/15.52MB
+39c2ddfd6010 Extracting [=================================================> ]  15.24MB/15.52MB
+39c2ddfd6010 Extracting [==================================================>]  15.52MB/15.52MB
+39c2ddfd6010 Pull complete 
+server Pulled 
+Network restricted-smoke_default  Creating
+Network restricted-smoke_default  Created
+Container restricted-smoke-client-1  Creating
+Container restricted-smoke-server-1  Creating
+Container restricted-smoke-client-1  Created
+Container restricted-smoke-server-1  Created
+Container restricted-smoke-client-1  Starting
+Container restricted-smoke-server-1  Starting
+Container restricted-smoke-client-1  Started
+Container restricted-smoke-server-1  Started
++ grep -q 'Welcome to nginx'
++ docker compose -p restricted-smoke -f /tmp/compose-smoke.yaml exec -T client wget -qO- http://server
+restricted-compose-service-dns-ok
++ echo restricted-compose-service-dns-ok
++ docker compose -p restricted-smoke -f /tmp/compose-smoke.yaml exec -T client wget -qO- http://example.com
++ grep -qi 'Example Domain'
+restricted-compose-outbound-ok
++ echo restricted-compose-outbound-ok
++ docker run --rm --network host alpine:3.21 wget -qO- http://127.0.0.1:18080
++ grep -q 'Welcome to nginx'
+Unable to find image 'alpine:3.21' locally
+3.21: Pulling from library/alpine
+Digest: sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+Status: Downloaded newer image for alpine:3.21
++ echo restricted-compose-published-port-ok
++ docker compose -p restricted-smoke -f /tmp/compose-smoke.yaml down
+restricted-compose-published-port-ok
+Container restricted-smoke-client-1  Stopping
+Container restricted-smoke-client-1  Stopping
+Container restricted-smoke-server-1  Stopping
+Container restricted-smoke-server-1  Stopping
+Container restricted-smoke-server-1  Stopped
+Container restricted-smoke-server-1  Removing
+Container restricted-smoke-server-1  Removed
+Container restricted-smoke-client-1  Stopped
+Container restricted-smoke-client-1  Removing
+Container restricted-smoke-client-1  Removed
+Network restricted-smoke_default  Removing
+Network restricted-smoke_default  Removed

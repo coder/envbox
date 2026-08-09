@@ -1,0 +1,2 @@
+[pod/node-userns-prep-572qq/prep] node=i-0c1011a1ef58147da /host-sysctl/max_user_namespaces before=31073 target=31073
+[pod/node-userns-prep-572qq/prep] verified /host-sysctl/max_user_namespaces=31073; labeled node ready and removed experiment.coder.com/userns-prep

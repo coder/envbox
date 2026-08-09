@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cgroup-probe-prepped-userns-privileged
+  namespace: userns-rootful-dind-auto
+spec:
+  hostUsers: false
+  restartPolicy: Never
+  nodeSelector:
+    experiment.coder.com/userns-dind-auto-prepped: "true"
+  tolerations:
+    - key: experiment.coder.com/userns-dind-auto
+      value: "true"
+      effect: NoSchedule
+  containers:
+    - name: probe
+      image: public.ecr.aws/docker/library/alpine:3.21
+      securityContext:
+        privileged: true
+        allowPrivilegeEscalation: true
+        procMount: Unmasked
+        seccompProfile:
+          type: Unconfined
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -ux
+          echo '--- identity and user namespace ---'
+          id
+          cat /proc/self/uid_map
+          cat /proc/self/gid_map
+          grep '^Cap' /proc/self/status
+          cat /proc/self/attr/current 2>&1 || true
+          echo '--- initial cgroup state ---'
+          cat /proc/self/cgroup
+          mount | grep -E 'cgroup|/sys/fs/cgroup' || true
+          ls -ldn /sys/fs/cgroup
+          cat /sys/fs/cgroup/cgroup.type 2>&1 || true
+          cat /sys/fs/cgroup/cgroup.controllers 2>&1 || true
+          cat /sys/fs/cgroup/cgroup.subtree_control 2>&1 || true
+          echo '--- initial child-cgroup creation ---'
+          if mkdir /sys/fs/cgroup/userns-dind-write-probe; then
+            echo cgroup-writable-initially=yes
+            rmdir /sys/fs/cgroup/userns-dind-write-probe
+          else
+            echo cgroup-writable-initially=no
+          fi
+          echo '--- remount attempt ---'
+          mount -o remount,rw /sys/fs/cgroup 2>&1 || true
+          mount | grep -E 'cgroup|/sys/fs/cgroup' || true
+          echo '--- child-cgroup creation after remount ---'
+          if mkdir /sys/fs/cgroup/userns-dind-write-probe; then
+            ls -ldn /sys/fs/cgroup/userns-dind-write-probe
+            rmdir /sys/fs/cgroup/userns-dind-write-probe
+            echo cgroup-writable-after-remount=yes
+          else
+            echo cgroup-writable-after-remount=no
+          fi
+          sleep 600

@@ -1,0 +1,18 @@
++ image=alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
++ docker pull alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+docker.io/library/alpine@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d: Pulling from library/alpine
+897d797d2723: Pulling fs layer
+897d797d2723: Verifying Checksum
+897d797d2723: Download complete
+897d797d2723: Pull complete
+Digest: sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+Status: Downloaded newer image for alpine@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+docker.io/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
++ docker run --rm alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d id
+uid=0(root) gid=0(root) groups=0(root),1(bin),2(daemon),3(sys),4(adm),6(disk),10(wheel),11(floppy),20(dialout),26(tape),27(video)
+++ docker create alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d sleep 60
++ child=aac3175eb47727a928962d4b3b65a3af6a69c9e63aeaefc9160894ce53338979
++ docker inspect aac3175eb47727a928962d4b3b65a3af6a69c9e63aeaefc9160894ce53338979 --format 'privileged={{.HostConfig.Privileged}} pid={{.HostConfig.PidMode}} network={{.HostConfig.NetworkMode}}'
+privileged=false pid= network=default
++ docker rm aac3175eb47727a928962d4b3b65a3af6a69c9e63aeaefc9160894ce53338979
+aac3175eb47727a928962d4b3b65a3af6a69c9e63aeaefc9160894ce53338979

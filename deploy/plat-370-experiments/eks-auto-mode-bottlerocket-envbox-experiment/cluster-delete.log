@@ -1,0 +1,12 @@
+2026-08-08 23:09:45 [ℹ]  deleting EKS cluster "envbox-auto-bottlerocket-136"
+2026-08-08 23:09:45 [ℹ]  deleted 0 Fargate profile(s)
+2026-08-08 23:09:46 [✔]  kubeconfig has been updated
+2026-08-08 23:09:47 [ℹ]  cleaning up AWS load balancers created by Kubernetes objects of Kind Service, Ingress, or Gateway
+2026-08-08 23:09:48 [ℹ]  1 task: { delete cluster control plane "envbox-auto-bottlerocket-136" }
+2026-08-08 23:09:48 [ℹ]  will delete stack "eksctl-envbox-auto-bottlerocket-136-cluster"
+2026-08-08 23:09:48 [ℹ]  waiting for stack "eksctl-envbox-auto-bottlerocket-136-cluster" to get deleted
+2026-08-08 23:09:48 [ℹ]  waiting for CloudFormation stack "eksctl-envbox-auto-bottlerocket-136-cluster"
+2026-08-08 23:10:19 [ℹ]  waiting for CloudFormation stack "eksctl-envbox-auto-bottlerocket-136-cluster"
+2026-08-08 23:11:08 [ℹ]  waiting for CloudFormation stack "eksctl-envbox-auto-bottlerocket-136-cluster"
+2026-08-08 23:12:10 [ℹ]  waiting for CloudFormation stack "eksctl-envbox-auto-bottlerocket-136-cluster"
+2026-08-08 23:12:10 [✔]  all cluster resources were deleted

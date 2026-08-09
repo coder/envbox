@@ -1,0 +1,41 @@
+node=i-02e14b4f48a55aba5 path=/host-sysctl/max_user_namespaces before=0 target=65535
+verified path=/host-sysctl/max_user_namespaces value=65535
+node=i-02e14b4f48a55aba5 path=/host-sysctl/max_pid_namespaces before=31073 target=20000
+verified path=/host-sysctl/max_pid_namespaces value=20000
+node=i-02e14b4f48a55aba5 path=/host-sysctl/max_mnt_namespaces before=31073 target=20000
+verified path=/host-sysctl/max_mnt_namespaces value=20000
+node=i-02e14b4f48a55aba5 path=/host-sysctl/max_user_watches before=524288 target=1048576
+verified path=/host-sysctl/max_user_watches value=1048576
+node=i-02e14b4f48a55aba5 path=/host-sysctl/max_user_instances before=8192 target=8192
+verified path=/host-sysctl/max_user_instances value=8192
+negative control active: verified all sysctls but intentionally retaining experiment.coder.com/envbox-prep
+verified path=/host-sysctl/max_user_namespaces value=65535
+verified path=/host-sysctl/max_pid_namespaces value=20000
+verified path=/host-sysctl/max_mnt_namespaces value=20000
+verified path=/host-sysctl/max_user_watches value=1048576
+verified path=/host-sysctl/max_user_instances value=8192
+verified path=/host-sysctl/max_user_namespaces value=65535
+verified path=/host-sysctl/max_pid_namespaces value=20000
+verified path=/host-sysctl/max_mnt_namespaces value=20000
+verified path=/host-sysctl/max_user_watches value=1048576
+verified path=/host-sysctl/max_user_instances value=8192
+verified path=/host-sysctl/max_user_namespaces value=65535
+verified path=/host-sysctl/max_pid_namespaces value=20000
+verified path=/host-sysctl/max_mnt_namespaces value=20000
+verified path=/host-sysctl/max_user_watches value=1048576
+verified path=/host-sysctl/max_user_instances value=8192
+verified path=/host-sysctl/max_user_namespaces value=65535
+verified path=/host-sysctl/max_pid_namespaces value=20000
+verified path=/host-sysctl/max_mnt_namespaces value=20000
+verified path=/host-sysctl/max_user_watches value=1048576
+verified path=/host-sysctl/max_user_instances value=8192
+verified path=/host-sysctl/max_user_namespaces value=65535
+verified path=/host-sysctl/max_pid_namespaces value=20000
+verified path=/host-sysctl/max_mnt_namespaces value=20000
+verified path=/host-sysctl/max_user_watches value=1048576
+verified path=/host-sysctl/max_user_instances value=8192
+verified path=/host-sysctl/max_user_namespaces value=65535
+verified path=/host-sysctl/max_pid_namespaces value=20000
+verified path=/host-sysctl/max_mnt_namespaces value=20000
+verified path=/host-sysctl/max_user_watches value=1048576
+verified path=/host-sysctl/max_user_instances value=8192

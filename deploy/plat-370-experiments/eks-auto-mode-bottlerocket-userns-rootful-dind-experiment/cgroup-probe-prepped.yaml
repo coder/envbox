@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cgroup-probe-prepped
+  namespace: userns-rootful-dind-auto
+spec:
+  hostUsers: false
+  restartPolicy: Never
+  nodeSelector:
+    experiment.coder.com/userns-dind-auto-prepped: "true"
+  tolerations:
+    - key: experiment.coder.com/userns-dind-auto
+      value: "true"
+      effect: NoSchedule
+  containers:
+    - name: probe
+      image: public.ecr.aws/docker/library/alpine:3.21
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: true
+        procMount: Unmasked
+        capabilities:
+          add: ["ALL"]
+        seccompProfile:
+          type: Unconfined
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -ux
+          echo '--- identity and user namespace ---'
+          id
+          cat /proc/self/uid_map
+          cat /proc/self/gid_map
+          echo '--- cgroup membership and mount ---'
+          cat /proc/self/cgroup
+          mount | grep -E 'cgroup|/sys/fs/cgroup' || true
+          echo '--- cgroup metadata ---'
+          ls -ldn /sys/fs/cgroup
+          cat /sys/fs/cgroup/cgroup.type 2>&1 || true
+          cat /sys/fs/cgroup/cgroup.controllers 2>&1 || true
+          cat /sys/fs/cgroup/cgroup.subtree_control 2>&1 || true
+          echo '--- child-cgroup creation ---'
+          if mkdir /sys/fs/cgroup/userns-dind-write-probe; then
+            ls -ldn /sys/fs/cgroup/userns-dind-write-probe
+            rmdir /sys/fs/cgroup/userns-dind-write-probe
+            echo cgroup-writable=yes
+          else
+            echo cgroup-writable=no
+          fi
+          sleep 600

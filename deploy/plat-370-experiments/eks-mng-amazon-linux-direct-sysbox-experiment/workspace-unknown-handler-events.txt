@@ -1,0 +1,8 @@
+LAST SEEN   TYPE      REASON                   OBJECT                                   MESSAGE
+7m45s       Normal    WaitForFirstConsumer     persistentvolumeclaim/workspace-docker   waiting for first consumer to be created before binding
+7m33s       Normal    ExternalProvisioning     persistentvolumeclaim/workspace-docker   Waiting for a volume to be created either by the external provisioner 'ebs.csi.aws.com' or manually by the system administrator. If volume creation is delayed, please verify that the provisioner is running and correctly registered.
+7m33s       Normal    Provisioning             persistentvolumeclaim/workspace-docker   External provisioner is provisioning volume for claim "direct-sysbox/workspace-docker"
+7m31s       Normal    ProvisioningSucceeded    persistentvolumeclaim/workspace-docker   Successfully provisioned volume pvc-01ff2354-6203-4e2e-97e2-5c98382b1892
+7m30s       Normal    Scheduled                pod/direct-sysbox-workspace              Successfully assigned direct-sysbox/direct-sysbox-workspace to ip-192-168-87-106.us-east-2.compute.internal
+7m28s       Normal    SuccessfulAttachVolume   pod/direct-sysbox-workspace              AttachVolume.Attach succeeded for volume "pvc-01ff2354-6203-4e2e-97e2-5c98382b1892"
+115s        Warning   FailedCreatePodSandBox   pod/direct-sysbox-workspace              Failed to create pod sandbox: can't set `spec.hostUsers: false`, RuntimeClass handler "sysbox-runc" does not support user namespaces: the handler "sysbox-runc" is not known

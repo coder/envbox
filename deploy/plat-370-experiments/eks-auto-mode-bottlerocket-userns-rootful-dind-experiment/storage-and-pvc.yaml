@@ -1,0 +1,32 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: auto-gp3
+provisioner: ebs.csi.eks.amazonaws.com
+parameters:
+  type: gp3
+  csi.storage.k8s.io/fstype: ext4
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: userns-rootful-dind-auto
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workspace-data
+  namespace: userns-rootful-dind-auto
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: auto-gp3
+  resources:
+    requests:
+      storage: 30Gi

@@ -1,0 +1,21 @@
+=== before unshare ===
+cgroup namespace: cgroup:[4026531835]
+cgroup membership:
+0::/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod6be91984_ff60_49c4_bc22_944cc4aaee92.slice/cri-containerd-e4d5868f6c955986124998558fc4cc0b62ee80f9e26d7c5092e88714bf7c9431.scope
+mountinfo entries at /sys/fs/cgroup:
+1106 1104 0:27 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime - cgroup2 cgroup rw,seclabel,nsdelegate,memory_recursiveprot
+current wrapper selection:
+id=1106 root=/
+findmnt:
+TARGET         SOURCE FSTYPE  OPTIONS
+/sys/fs/cgroup cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate,memory_recursiveprot
+=== after unshare --cgroup ===
+cgroup namespace: cgroup:[4026532317]
+cgroup membership:
+0::/
+mountinfo entries at /sys/fs/cgroup:
+1106 1104 0:27 /../../../.. /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime - cgroup2 cgroup rw,seclabel,nsdelegate,memory_recursiveprot
+findmnt:
+TARGET         SOURCE               FSTYPE  OPTIONS
+/sys/fs/cgroup cgroup[/../../../..] cgroup2 rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate,memory_recursiveprot
+unshare status: 0
