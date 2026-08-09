@@ -1,5 +1,7 @@
 # EKS Amazon Linux managed-node-group user-namespace rootful-DinD runbook
 
+Date prepared: 2026-08-05
+
 ## Purpose
 
 Determine whether a Coder workspace can run a **rootful** Docker daemon and

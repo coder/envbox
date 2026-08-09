@@ -2,7 +2,7 @@
 
 Experiment run: 2026-08-06
 
-Record last updated: 2026-08-07
+Record last updated: 2026-08-08
 
 ## Question tested
 
@@ -21,9 +21,13 @@ EKS AL2023 node
                  └─ ordinary Docker containers / BuildKit workers
 ```
 
-The Pod used `capabilities.add: ["ALL"]`, `procMount: Unmasked`, an unconfined
-seccomp profile, and `allowPrivilegeEscalation: true`. Those powers were inside
-the Pod's user namespace: container UID 0 mapped to a nonzero host UID range.
+The original fully successful Pod used `capabilities.add: ["ALL"]`,
+`procMount: Unmasked`, an unconfined seccomp profile, and
+`allowPrivilegeEscalation: true`. The capability-minimization follow-up below
+shows that the runtime's default capability set is insufficient, while adding
+only `SYS_ADMIN` and `NET_ADMIN` produces a full workload pass. `ALL` is
+therefore not required. Those powers were inside the Pod's user namespace:
+container UID 0 mapped to a nonzero host UID range.
 The resulting workspace was effectively privileged over resources owned by
 that user namespace, but it was neither a Kubernetes `privileged: true`
 container nor privileged in the host's initial user namespace. Consequently,
@@ -162,6 +166,130 @@ resource-limited container launch: pass
 
 Image pull, ordinary nested execution, BuildKit, bridge networking, and a
 nested container configured with memory and PID limits all completed.
+
+### Capability-minimization follow-up: two added capabilities pass
+
+On 2026-08-08, the cluster and cgroup-writable MNG were recreated and the
+writable-cgroup control probe passed again. The final DinD manifest was then
+rerun unchanged except that `capabilities.add: ["ALL"]` was removed. This
+left the container with the runtime's default capability set:
+
+```text
+CapPrm: 00000000a80425fb
+CapEff: 00000000a80425fb
+CapBnd: 00000000a80425fb
+```
+
+Dockerd did not become ready. Its log identified two capability-sensitive
+failures:
+
+```text
+failed to mount overlay: operation not permitted
+failed to create NAT chain DOCKER: iptables ... Permission denied
+```
+
+The earlier root-propagation setup also reported `operation not permitted`.
+These results show that the default capability set is insufficient for this
+rootful-DinD configuration. They point to `CAP_SYS_ADMIN` for mount and
+overlay operations and `CAP_NET_ADMIN` for iptables/NAT setup. They do **not**
+show that every capability in `ALL` is necessary.
+
+A second variant retained the runtime's default capability set and added only
+`SYS_ADMIN` and `NET_ADMIN`:
+
+```yaml
+capabilities:
+  add: ["SYS_ADMIN", "NET_ADMIN"]
+```
+
+Its effective capability mask was:
+
+```text
+CapPrm: 00000000a82435fb
+CapEff: 00000000a82435fb
+CapBnd: 00000000a82435fb
+```
+
+The complete embedded suite passed: dockerd became ready with `overlay2`, an
+ordinary child container ran, BuildKit completed a build, bridge networking
+and HTTP worked, memory and PID limits were accepted, Compose service DNS and
+HTTP worked, outbound networking worked, and the published port was reachable
+through the workspace loopback address.
+
+The companion peer test was then scheduled on the original MNG node, distinct
+from the workspace's cgroup-writable MNG node. It reached the Compose-published
+server through both the Kubernetes ClusterIP Service and the workspace Pod IP:
+
+```text
+cross-node-clusterip-service-ok
+cross-node-direct-pod-ip-ok
+compose-cross-node-network-tests-ok
+```
+
+This disproves `ALL` as a requirement. `SYS_ADMIN` plus `NET_ADMIN` is the
+smallest **tested** successful addition set. The experiment has not yet rerun
+the suite with either capability individually removed, so it does not by
+itself formally prove that both are independently necessary. The observed
+mount/overlay and iptables failures strongly explain why each is present.
+
+The workspace container also explicitly sets
+`allowPrivilegeEscalation: true`. This is not currently an independent setting
+that can simply be tightened while retaining the tested capability set:
+Kubernetes treats privilege escalation as enabled whenever a container has
+`CAP_SYS_ADMIN`. In this design that authority remains scoped by
+`hostUsers: false` to the Pod's user namespace, but it still removes the
+`no_new_privs` defense-in-depth boundary inside the workspace.
+
+### `/proc`-masking follow-up: Kubernetes default fails
+
+A third variant retained the successful `SYS_ADMIN` and `NET_ADMIN` additions,
+unconfined seccomp, and writable cgroups, but removed
+`procMount: Unmasked`. Kubernetes consequently restored its default protected
+`/proc` submounts, including a read-only `/proc/sys` and masked sensitive files
+such as `/proc/kcore` and `/proc/keys`.
+
+Dockerd itself started, initialized `overlay2`, and answered `docker info`.
+The first fresh nested `docker run`, however, failed while Docker configured
+the container's veth interface:
+
+```text
+failed to add interface ... to sandbox:
+failed to configure ipv6: failed to disable IPv6 on container's interface
+eth0: unknown
+```
+
+For the tested Docker 27.5.1 bridge-network configuration, default `/proc`
+masking is therefore insufficient: Docker needs a writable namespaced
+`/proc/sys` path during nested-container network setup. This result does not
+prove that exposing every path covered by `procMount: Unmasked` is inherently
+necessary. A differently configured Docker network or a future mechanism for
+narrower `/proc` exposure may reduce this requirement.
+
+### Seccomp follow-up: `RuntimeDefault` fails
+
+A fourth variant restored `procMount: Unmasked` and retained the successful
+`SYS_ADMIN` and `NET_ADMIN` additions and writable cgroups, but replaced the
+outer workspace container's `Unconfined` seccomp profile with
+`RuntimeDefault`. `/proc/self/status` confirmed one active seccomp filter:
+
+```text
+Seccomp: 2
+Seccomp_filters: 1
+```
+
+Dockerd started, initialized `overlay2`, and answered `docker info`. The first
+fresh nested `docker run` failed during nested runc initialization:
+
+```text
+unable to join session keyring:
+unable to create session key: operation not permitted
+```
+
+The tested runtime-default profile is therefore insufficient for this nested
+runc path. This does not prove that the outer workspace must be fully
+unconfined. A tailored seccomp profile that permits the required keyring
+syscalls, or a validated configuration that tells nested runc not to create a
+new session keyring, may retain most default filtering while allowing DinD.
 
 This topology is not unique to the native MNG experiment. Current Envbox and
 Sysbox solve the same cgroup-v2 no-internal-process constraint at two levels:
@@ -327,11 +455,12 @@ Kubernetes also assigned a distinct high host-UID range to each tested Pod,
 rather than using Envbox's fixed `100000` user-namespace offset. These may be
 security advantages.
 
-Conversely, the successful native Pod required `ALL` capabilities inside its
-user namespace, an unmasked `/proc`, an unconfined seccomp profile, and a
-writable delegated cgroup hierarchy. It also lacks Sysbox-specific
-virtualization and mediation of system-container behavior. Those differences
-must be evaluated rather than assumed equivalent.
+Conversely, the successful native Pod needs broad authority inside its user
+namespace: the runtime's default capabilities plus the tested additions
+`CAP_SYS_ADMIN` and `CAP_NET_ADMIN`, an unmasked `/proc`, an unconfined seccomp
+profile, and a writable delegated cgroup hierarchy. The native approach also
+lacks Sysbox-specific virtualization and mediation of system-container
+behavior. Those differences must be evaluated rather than assumed equivalent.
 
 More precisely, the successful workspace was effectively privileged inside
 its own sandbox. It could administer the Pod's mounts, network namespace,
@@ -357,9 +486,10 @@ and
 
 The remaining risk is still material because all containers share the node's
 kernel. An unconfined seccomp profile permits the full syscall surface,
-unmasked `/proc` exposes interfaces normally hidden by the runtime, and `ALL`
-capabilities plus `allowPrivilegeEscalation: true` remove most defense in depth
-inside the namespace. A kernel or user-namespace vulnerability could cross the
+unmasked `/proc` exposes interfaces normally hidden by the runtime, and
+namespaced `CAP_SYS_ADMIN` and `CAP_NET_ADMIN` plus
+`allowPrivilegeEscalation: true` remove substantial defense in depth inside
+the namespace. A kernel or user-namespace vulnerability could cross the
 intended boundary. This design therefore relies heavily on the Linux user
 namespace as its primary host-security boundary: it is meaningfully safer than
 host-privileged DinD, but it is not equivalent to a conventional restricted
@@ -400,10 +530,19 @@ Before recommending it, test at least:
    cleanup behavior;
 5. admission-policy requirements and whether dedicating/gating the custom
    RuntimeClass is operationally acceptable;
-6. a focused security review of `ALL` capabilities, unmasked `/proc`,
-   unconfined seccomp, writable cgroups, nested networking, and exposed
-   devices, even though these are bounded by the Pod user namespace;
-7. monitor for a future supported EKS Auto Mode/Bottlerocket integration. A
+6. perform a focused security review of the smallest tested working profile:
+   the runtime-default capabilities plus namespaced `SYS_ADMIN` and
+   `NET_ADMIN`, effective `allowPrivilegeEscalation: true`, unmasked `/proc`,
+   unconfined seccomp, writable cgroups, and nested networking. The Pod user
+   namespace limits the authority of this profile but does not eliminate its
+   shared-kernel attack surface;
+7. if a customer policy requires further minimization, test `SYS_ADMIN` and
+   `NET_ADMIN` individually and investigate whether a different Docker network
+   configuration or runtime mechanism can avoid fully unmasking `/proc`.
+   Also test whether a tailored seccomp profile or a no-new-keyring runtime
+   configuration can replace `Unconfined`. These are hardening opportunities,
+   not unresolved functional pass criteria;
+8. monitor for a future supported EKS Auto Mode/Bottlerocket integration. A
    privileged preparation DaemonSet overcame the tested node's initial
    `user.max_user_namespaces = 0`, but writable cgroup delegation remained
    unavailable and Auto Mode exposed no supported equivalent of the MNG's
