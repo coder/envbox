@@ -1,6 +1,6 @@
 # EKS Docker-in-Docker workspace solutions matrix
 
-Last updated: 2026-08-09
+Last updated: 2026-08-11
 
 ## Goal
 
@@ -20,7 +20,8 @@ This document distinguishes completed experiments from proposed solutions.
 | Privileged workspace containers are prohibited, but a mutable AL2023 managed node group and trusted node runtime extension are acceptable | Direct Sysbox through `RuntimeClass`; the AL2023 POC passed PSS `restricted` enforcement |
 | Installing Sysbox node daemons is unacceptable, but a custom AL2023 MNG runtime handler and broader namespaced Pod permissions are acceptable | Native Kubernetes user namespaces with a dedicated `cgroup_writable` runtime |
 | EKS Auto Mode/Bottlerocket and no privileged Pods are both hard requirements | No validated rootful-DinD solution |
-| VM-grade isolation is required and a configurable MNG is acceptable | Continue the Firecracker/microVM path; it is not yet a complete Coder workspace solution |
+| VM-grade isolation is required, nested virtualization is unavailable, and a custom MNG AMI plus a commercial Edera license are acceptable | Evaluate Edera; an existing Coder POC demonstrates workspace provisioning, agent connectivity, rootful Docker, and persistent storage |
+| VM-grade isolation is required, KVM-capable configurable MNG nodes are acceptable, and an open-source/custom solution is preferred | Continue the Firecracker/microVM path; it is not yet a complete Coder workspace solution |
 
 ## Solution comparison
 
@@ -31,6 +32,7 @@ This document distinguishes completed experiments from proposed solutions.
 | Native user namespace on Auto Mode/Bottlerocket | AWS-managed Auto Mode node | Intended non-privileged user-namespaced workspace | Would avoid both Envbox and host-installed Sysbox | Initial user namespaces required privileged sysctl preparation; after preparation, Auto Mode still exposed no writable cgroup delegation equivalent to the MNG runtime handler | **Failed** for rootful DinD on the tested Auto Mode/Bottlerocket runtime |
 | Direct node-installed Sysbox | Dedicated mutable EKS MNG; tested on EKS 1.35, AWS-managed AL2023, kernel 6.12, and containerd 2.2.5; requires the experimental AL2023 installer fork or an equivalent custom AMI | `runtimeClassName: sysbox-runc`, `hostUsers: false`, `privileged: false`; Pod spec passed PSS `restricted` with capability drop `ALL`, runtime-default seccomp, and no privilege escalation; Sysbox supplies system-container capabilities inside the private user namespace and a writable managed cgroup view | No privileged workspace Pod; systemd, Docker, BuildKit, Compose, persistence, concurrency, isolation, cross-node access, and new-node installation passed; node runtime/cache is shared; fewer per-workspace daemons and less nesting than Envbox | Privileged node installer and host runtime restart unless baked into AMI; trusted node daemons; requires modern Pod-userns support; does not work on Auto Mode/Bottlerocket; AL2023 support is a downstream POC, not upstream support; security/lifecycle review remains | **Functional POC passed** on EKS 1.35 AL2023 MNG under actual PSS `restricted` enforcement |
 | Direct Sysbox on Auto Mode/Bottlerocket | Would require modifying the AWS-managed immutable node OS and container runtime | Workspace could be non-privileged if installation were possible | Same theoretical workspace benefits as direct Sysbox on an MNG | Conflicts with the Auto Mode managed-instance contract and the Sysbox installer model; AWS controls the AMI, OS, and runtime and says software cannot be installed directly | **Do not prioritize**; expected to be unsupported rather than a useful customer solution |
+| Edera | Dedicated EKS MNG with an Edera-enabled custom AMI and node runtime; Xen paravirtualization does not require nested virtualization | `runtimeClassName: edera`; containers run inside a VM-backed zone with a private kernel; the existing Coder DinD POC declares its workspace container privileged and root, so Kubernetes treats it as a privileged Pod despite the VM boundary | VM-grade isolation on ordinary virtual EC2 nodes; existing Coder POC demonstrates workspace provisioning, agent connectivity, rootful Docker, and persistent EBS-backed Docker storage; node-wide reuse of prepared SquashFS workspace images avoids Envbox's repeated per-workspace `docker load` and layer-unpack path, making faster warm-node startup plausible | Does not work on Auto Mode/Bottlerocket; commercial licensing and customer availability must be established; requires a vendor-specific custom AMI/runtime; the current privileged workspace specification conflicts with policies that prohibit privileged Pods; no agent-ready comparison has demonstrated a startup improvement; cold nodes still require image pull and SquashFS conversion, and the current POC adds about 16 seconds to provision and format a new workspace's Docker EBS volume; node replacement, upgrades, concurrency, failure recovery, and security-policy review remain incomplete | **Existing functional Coder POC**; not independently rerun as part of these experiments |
 | Firecracker microVM | EKS MNG with a launch template enabling EC2 nested virtualization, plus KVM/TUN device plugins | Non-privileged VMM Pod; Firecracker also ran as UID 1000 | Strongest isolation boundary among the tested directions; multiple concurrent microVMs booted | Requires custom EC2 launch settings, privileged node device plugins, guest image lifecycle, networking, Coder agent integration, and VM orchestration | **Core infrastructure passed** on MNG; complete networked Coder workspace remains untested. Auto Mode did not enable nested virtualization |
 
 ## Direct Sysbox's incremental customer coverage
@@ -171,3 +173,6 @@ change upstream Sysbox's support statement.
 - [Sysbox project and support posture](https://github.com/nestybox/sysbox)
 - [Sysbox Kubernetes installation, host, version, and containerd requirements](https://github.com/nestybox/sysbox/blob/master/docs/user-guide/install-k8s.md)
 - [Sysbox Kubernetes installer manifest](https://github.com/nestybox/sysbox/blob/master/sysbox-k8s-manifests/sysbox-install.yaml)
+- [Coder Edera POC](https://github.com/coder/coder-edera)
+- [Edera EKS installation](https://docs.edera.dev/guides/install/eks/)
+- [Edera software license agreement](https://edera.dev/software-license-agreement)
