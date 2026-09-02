@@ -1,0 +1,70 @@
+# Lever 1: node-local pull-through registry mirror.
+#
+# Gives new workspace pods first-boot warmth: the first pod on a node to pull
+# an image populates this mirror; every new pod after that pulls from the node
+# (loopback/LAN) instead of the remote registry. Guest dockerds are pointed
+# here via CODER_REGISTRY_MIRROR. See NOTES.md "Cache design".
+#
+# Storage is node-local hostPath -> the cache is per-node and shared across all
+# pods on that node. This is NOT for restart persistence; it is a shared cache.
+#
+# Pre-seed with a pre-pull Job/DaemonSet if the very first pod on a cold node
+# must also be warm.
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kube-registry-mirror
+  namespace: kube-system
+  labels:
+    app: kube-registry-mirror
+spec:
+  selector:
+    matchLabels:
+      app: kube-registry-mirror
+  template:
+    metadata:
+      labels:
+        app: kube-registry-mirror
+    spec:
+      # Only run where workspaces run.
+      nodeSelector:
+        coder.com/kvm: "true"
+      tolerations:
+        - key: coder.com/workspace-kvm
+          operator: Exists
+          effect: NoSchedule
+      hostNetwork: true # serve on a stable node-local address
+      containers:
+        - name: registry
+          image: registry:2
+          env:
+            - name: REGISTRY_PROXY_REMOTEURL
+              value: https://registry-1.docker.io
+            - name: REGISTRY_HTTP_ADDR
+              value: 0.0.0.0:5000
+          ports:
+            - containerPort: 5000
+              hostPort: 5000
+          volumeMounts:
+            - name: cache
+              mountPath: /var/lib/registry
+      volumes:
+        - name: cache
+          hostPath:
+            path: /var/cache/coder-registry-mirror
+            type: DirectoryOrCreate
+---
+# Stable in-cluster name for CODER_REGISTRY_MIRROR. With hostNetwork the mirror
+# also answers on <nodeIP>:5000; a per-node address avoids cross-node hops.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-registry-mirror
+  namespace: kube-system
+spec:
+  selector:
+    app: kube-registry-mirror
+  ports:
+    - port: 5000
+      targetPort: 5000
