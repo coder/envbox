@@ -1,0 +1,38 @@
+=== before unshare ===
+cgroup namespace: cgroup:[4026531835]
+cgroup membership:
+0::/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod29826fac_1858_4f27_abc9_fe48b9d3065c.slice/cri-containerd-8242e5450fc4b19bc03fe88c8dfa45a03a233fa2d2c0a915c2c3183078efe2e1.scope
+mountinfo entries at /sys/fs/cgroup:
+1106 1104 0:27 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime - cgroup2 cgroup rw,seclabel,nsdelegate,memory_recursiveprot
+current wrapper selection:
+id=1106 root=/
+findmnt:
+TARGET         SOURCE FSTYPE  OPTIONS
+/sys/fs/cgroup cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate,memory_recursiveprot
+=== after unshare --cgroup ===
+cgroup namespace: cgroup:[4026532317]
+cgroup membership:
+0::/
+mountinfo entries at /sys/fs/cgroup:
+1106 1104 0:27 /../../../.. /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime - cgroup2 cgroup rw,seclabel,nsdelegate,memory_recursiveprot
+findmnt:
+TARGET         SOURCE               FSTYPE  OPTIONS
+/sys/fs/cgroup cgroup[/../../../..] cgroup2 rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate,memory_recursiveprot
+mounting namespace-rooted cgroup2 over existing mount:
+mount: /sys/fs/cgroup: cgroup already mounted on /sys/fs/cgroup.
+mount status: 32
+mountinfo entries after mount:
+1106 1104 0:27 /../../../.. /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime - cgroup2 cgroup rw,seclabel,nsdelegate,memory_recursiveprot
+findmnt after mount:
+TARGET         SOURCE               FSTYPE  OPTIONS
+/sys/fs/cgroup cgroup[/../../../..] cgroup2 rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate,memory_recursiveprot
+lazy-detaching existing mount:
+lazy umount status: 0
+mounting namespace-rooted cgroup2 after lazy detach:
+replacement mount status: 0
+mountinfo after replacement:
+1003 1104 0:27 / /sys/fs/cgroup rw,relatime - cgroup2 cgroup rw,seclabel,nsdelegate,memory_recursiveprot
+findmnt after replacement:
+TARGET         SOURCE FSTYPE  OPTIONS
+/sys/fs/cgroup cgroup cgroup2 rw,relatime,seclabel,nsdelegate,memory_recursiveprot
+unshare status: 0

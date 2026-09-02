@@ -1,0 +1,9 @@
+50:        sysbox-install: "yes"
+54:          sysbox-install: "yes"
+58:        sysbox-install: "yes"
+60:      - key: "sysbox-runtime"
+66:        image: 849808308023.dkr.ecr.us-east-2.amazonaws.com/envbox-eks-cache-experiment@sha256:4d920272d315eeb776124b64703a58d7304008bbddcd864ab7acdb19994eafb7
+85:          privileged: true
+174:kind: RuntimeClass
+177:handler: sysbox-runc
+180:    sysbox-runtime: running

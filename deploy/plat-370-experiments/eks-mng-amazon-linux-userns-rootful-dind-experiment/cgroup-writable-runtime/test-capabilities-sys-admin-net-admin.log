@@ -1,0 +1,189 @@
+CapInh:	0000000000000000
+CapPrm:	00000000a82435fb
+CapEff:	00000000a82435fb
+CapBnd:	00000000a82435fb
+CapAmb:	0000000000000000
+Client:
+ Version:           27.5.1
+ API version:       1.47
+ Go version:        go1.22.11
+ Git commit:        9f9e405
+ Built:             Wed Jan 22 13:40:02 2025
+ OS/Arch:           linux/amd64
+ Context:           default
+
+Server: Docker Engine - Community
+ Engine:
+  Version:          27.5.1
+  API version:      1.47 (minimum version 1.24)
+  Go version:       go1.22.11
+  Git commit:       4c9b3b0
+  Built:            Wed Jan 22 13:41:24 2025
+  OS/Arch:          linux/amd64
+  Experimental:     false
+ containerd:
+  Version:          v1.7.25
+  GitCommit:        bcc810d6b9066471b0b6fa75f557a15a1cbf31bb
+ runc:
+  Version:          1.2.4
+  GitCommit:        v1.2.4-0-g6c52b3f
+ docker-init:
+  Version:          0.19.0
+  GitCommit:        de40ad0
+Client:
+ Version:    27.5.1
+ Context:    default
+ Debug Mode: false
+ Plugins:
+  buildx: Docker Buildx (Docker Inc.)
+    Version:  v0.20.1
+    Path:     /usr/local/libexec/docker/cli-plugins/docker-buildx
+  compose: Docker Compose (Docker Inc.)
+    Version:  v2.33.0
+    Path:     /usr/local/libexec/docker/cli-plugins/docker-compose
+
+Server:
+ Containers: 0
+  Running: 0
+  Paused: 0
+  Stopped: 0
+ Images: 0
+ Server Version: 27.5.1
+ Storage Driver: overlay2
+  Backing Filesystem: extfs
+  Supports d_type: true
+  Using metacopy: false
+  Native Overlay Diff: true
+  userxattr: true
+ Logging Driver: json-file
+ Cgroup Driver: cgroupfs
+ Cgroup Version: 2
+ Plugins:
+  Volume: local
+  Network: bridge host ipvlan macvlan null overlay
+  Log: awslogs fluentd gcplogs gelf journald json-file local splunk syslog
+ Swarm: inactive
+ Runtimes: io.containerd.runc.v2 runc
+ Default Runtime: runc
+ Init Binary: docker-init
+ containerd version: bcc810d6b9066471b0b6fa75f557a15a1cbf31bb
+ runc version: v1.2.4-0-g6c52b3f
+ init version: de40ad0
+ Security Options:
+  seccomp
+   Profile: builtin
+  cgroupns
+ Kernel Version: 6.18.38-76.139.amzn2023.x86_64
+ Operating System: Alpine Linux v3.21 (containerized)
+ OSType: linux
+ Architecture: x86_64
+ CPUs: 2
+ Total Memory: 7.597GiB
+ Name: rootful-dind-targeted-caps
+ ID: 48af6e61-b8e2-462c-9062-6b7c5cfbcfb9
+ Docker Root Dir: /workspace/docker-data
+ Debug Mode: false
+ Experimental: false
+ Insecure Registries:
+  127.0.0.0/8
+ Live Restore Enabled: false
+ Product License: Community Engine
+
+docker.io/library/alpine@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d: Pulling from library/alpine
+897d797d2723: Pulling fs layer
+897d797d2723: Verifying Checksum
+897d797d2723: Download complete
+897d797d2723: Pull complete
+Digest: sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+Status: Downloaded newer image for alpine@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+docker.io/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+uid=0(root) gid=0(root) groups=0(root),1(bin),2(daemon),3(sys),4(adm),6(disk),10(wheel),11(floppy),20(dialout),26(tape),27(video)
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 230B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+#4 DONE 0.0s
+
+#5 [2/2] RUN id
+#5 0.159 uid=0(root) gid=0(root) groups=0(root),1(bin),2(daemon),3(sys),4(adm),6(disk),10(wheel),11(floppy),20(dialout),26(tape),27(video)
+#5 DONE 0.2s
+
+#6 exporting to image
+#6 exporting layers 0.0s done
+#6 writing image sha256:32dc6c7151c4fe9f94f0db948b4b7d16ef456f5f570e534568ddb30a4fd1437d done
+#6 naming to docker.io/library/userns-dind-smoke:3 done
+#6 DONE 0.1s
+buildkit-ok
+Unable to find image 'nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10' locally
+docker.io/library/nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10: Pulling from library/nginx
+f18232174bc9: Pulling fs layer
+61ca4f733c80: Pulling fs layer
+b464cfdf2a63: Pulling fs layer
+d7e507024086: Pulling fs layer
+81bd8ed7ec67: Pulling fs layer
+197eb75867ef: Pulling fs layer
+34a64644b756: Pulling fs layer
+39c2ddfd6010: Pulling fs layer
+81bd8ed7ec67: Waiting
+197eb75867ef: Waiting
+34a64644b756: Waiting
+39c2ddfd6010: Waiting
+d7e507024086: Waiting
+b464cfdf2a63: Verifying Checksum
+b464cfdf2a63: Download complete
+61ca4f733c80: Verifying Checksum
+61ca4f733c80: Download complete
+f18232174bc9: Verifying Checksum
+f18232174bc9: Download complete
+d7e507024086: Verifying Checksum
+d7e507024086: Download complete
+81bd8ed7ec67: Verifying Checksum
+81bd8ed7ec67: Download complete
+197eb75867ef: Verifying Checksum
+197eb75867ef: Download complete
+34a64644b756: Verifying Checksum
+34a64644b756: Download complete
+f18232174bc9: Pull complete
+39c2ddfd6010: Verifying Checksum
+39c2ddfd6010: Download complete
+61ca4f733c80: Pull complete
+b464cfdf2a63: Pull complete
+d7e507024086: Pull complete
+81bd8ed7ec67: Pull complete
+197eb75867ef: Pull complete
+34a64644b756: Pull complete
+39c2ddfd6010: Pull complete
+Digest: sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+Status: Downloaded newer image for nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+2e208751865f5f9c6d7f9afc2c47ebeda375611b504bf79c68e15d80abc0e39d
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+html { color-scheme: light da
+httpd
+ Network coder-nettest_default  Creating
+ Network coder-nettest_default  Created
+ Container coder-nettest-server-1  Creating
+ Container coder-nettest-client-1  Creating
+ Container coder-nettest-client-1  Created
+ Container coder-nettest-server-1  Created
+ Container coder-nettest-server-1  Starting
+ Container coder-nettest-client-1  Starting
+ Container coder-nettest-client-1  Started
+ Container coder-nettest-server-1  Started
+compose-service-dns-and-http-ok
+compose-outbound-network-ok
+workspace-loopback-published-port-ok
+Domain-cgroup rootful DinD and Compose tests complete; keeping dockerd alive.

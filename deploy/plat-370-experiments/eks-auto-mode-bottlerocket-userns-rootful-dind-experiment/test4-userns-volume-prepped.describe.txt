@@ -1,0 +1,84 @@
+Name:             userns-volume-probe-prepped
+Namespace:        userns-rootful-dind-auto
+Priority:         0
+Service Account:  default
+Node:             i-0c1011a1ef58147da/192.168.131.224
+Start Time:       Thu, 06 Aug 2026 16:03:37 -0700
+Labels:           topology.kubernetes.io/region=us-east-2
+                  topology.kubernetes.io/zone=us-east-2c
+Annotations:      <none>
+Status:           Succeeded
+IP:               192.168.158.64
+IPs:
+  IP:  192.168.158.64
+Containers:
+  probe:
+    Container ID:  containerd://65a707c415f2d9cdb688017bd5d10bb31cc16ce6ea7b712552c28bcea23465be
+    Image:         public.ecr.aws/docker/library/alpine:3.21
+    Image ID:      public.ecr.aws/docker/library/alpine@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      /bin/sh
+      -c
+    Args:
+      set -eux
+      id
+      echo '--- uid/gid mapping ---'
+      cat /proc/self/uid_map
+      cat /proc/self/gid_map
+      echo '--- PVC write ---'
+      echo "$(date -u +%FT%TZ) auto-mode-prepped-userns-volume-probe" > /workspace/probe-prepped.txt
+      cat /workspace/probe-prepped.txt
+      sleep 600
+      
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Thu, 06 Aug 2026 16:03:43 -0700
+      Finished:     Thu, 06 Aug 2026 16:13:43 -0700
+    Ready:          False
+    Restart Count:  0
+    Requests:
+      cpu:        250m
+      memory:     256Mi
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-7x8tq (ro)
+      /workspace from workspace-data (rw)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   False 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  workspace-data:
+    Type:       PersistentVolumeClaim (a reference to a PersistentVolumeClaim in the same namespace)
+    ClaimName:  workspace-data
+    ReadOnly:   false
+  kube-api-access-7x8tq:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              experiment.coder.com/userns-dind-auto-prepped=true
+Tolerations:                 experiment.coder.com/userns-dind-auto=true:NoSchedule
+                             node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason                  Age                From                     Message
+  ----     ------                  ----               ----                     -------
+  Warning  FailedScheduling        32m                default-scheduler        0/2 nodes are available: 2 node(s) had untolerated taint(s). no new claims to deallocate, preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
+  Normal   Nominated               32m                eks-auto-mode/compute    Pod should schedule on: nodeclaim/userns-dind-auto-prepped-q52mv
+  Warning  FailedScheduling        17m (x3 over 27m)  default-scheduler        0/3 nodes are available: 3 node(s) had untolerated taint(s). no new claims to deallocate, preemption: 0/3 nodes are available: 3 Preemption is not helpful for scheduling.
+  Normal   Nominated               13m (x9 over 30m)  eks-auto-mode/compute    Pod should schedule on: nodeclaim/userns-dind-auto-prepped-q52mv, node/i-0c1011a1ef58147da
+  Normal   Scheduled               13m                default-scheduler        Successfully assigned userns-rootful-dind-auto/userns-volume-probe-prepped to i-0c1011a1ef58147da
+  Normal   SuccessfulAttachVolume  13m                attachdetach-controller  AttachVolume.Attach succeeded for volume "pvc-bb224fe9-905a-4d37-9275-0747adb81a34"
+  Normal   Pulling                 13m                kubelet                  spec.containers{probe}: Pulling image "public.ecr.aws/docker/library/alpine:3.21"
+  Normal   Pulled                  13m                kubelet                  spec.containers{probe}: Successfully pulled image "public.ecr.aws/docker/library/alpine:3.21" in 796ms (796ms including waiting). Image size: 3657726 bytes.
+  Normal   Created                 13m                kubelet                  spec.containers{probe}: Container created
+  Normal   Started                 13m                kubelet                  spec.containers{probe}: Container started

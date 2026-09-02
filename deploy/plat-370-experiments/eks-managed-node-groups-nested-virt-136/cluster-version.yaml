@@ -1,0 +1,4 @@
+name: nested-virt-mng-136
+platformVersion: eks.8
+status: ACTIVE
+version: '1.36'

@@ -1,0 +1,12 @@
+spec:
+  template:
+    metadata:
+      annotations:
+        experiment.coder.com/selinux-test: super-t-s0
+    spec:
+      containers:
+        - name: prep
+          securityContext:
+            seLinuxOptions:
+              type: super_t
+              level: s0

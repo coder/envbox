@@ -1,0 +1,8 @@
+CpuOptions:
+  CoreCount: 4
+  NestedVirtualization: enabled
+  ThreadsPerCore: 2
+ImageId: ami-0a3a6389d71f681a0
+InstanceId: i-0f5ed2c3b07660570
+InstanceType: c8i.2xlarge
+State: running

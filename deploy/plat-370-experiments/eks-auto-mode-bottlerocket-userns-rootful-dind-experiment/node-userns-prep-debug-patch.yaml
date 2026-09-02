@@ -1,0 +1,28 @@
+spec:
+  template:
+    metadata:
+      annotations:
+        experiment.coder.com/diagnostic: selinux-and-mount
+    spec:
+      containers:
+        - name: prep
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -x
+              id
+              echo '--- SELinux ---'
+              cat /proc/self/attr/current
+              echo '--- capabilities ---'
+              grep '^Cap' /proc/self/status
+              echo '--- sysctl file ---'
+              ls -ln /host-sysctl/max_user_namespaces
+              echo '--- mountinfo ---'
+              grep host-sysctl /proc/self/mountinfo || true
+              echo '--- write attempt ---'
+              printf '%s\n' "$(cat /proc/sys/user/max_mnt_namespaces)" \
+                > /host-sysctl/max_user_namespaces || true
+              echo '--- value after write attempt ---'
+              cat /host-sysctl/max_user_namespaces
+              sleep 3600
+          readinessProbe: null

@@ -1,0 +1,10 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: envbox-auto-bottlerocket-136
+  region: us-east-2
+  version: "1.36"
+
+autoModeConfig:
+  enabled: true

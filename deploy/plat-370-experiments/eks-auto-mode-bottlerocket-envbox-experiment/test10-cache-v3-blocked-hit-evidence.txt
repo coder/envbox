@@ -1,0 +1,9 @@
+Defaulted container "envbox" out of: envbox, initialize-workspace-volume (init)
+=== source registry is blocked ===
+127.0.0.1	us-docker.pkg.dev
+passed: source registry connection failed as intended
+=== image restored from cache ===
+id=sha256:f18945f7fc26b451c3cc8a997c1b1856bcff36f54361c8a61d0c2c37b412cb0e repo-tags=["envbox-cache.local/inner-image:sha256-770f0a4fc1f2f730ad3f9096a13e86e356e2d1f9c4c5081918d23623d578d72d"] repo-digests=[]
+=== workspace ===
+running=true image=sha256:f18945f7fc26b451c3cc8a997c1b1856bcff36f54361c8a61d0c2c37b412cb0e privileged=false
+inner-docker=23.0.1 storage=overlay2 cgroup=2

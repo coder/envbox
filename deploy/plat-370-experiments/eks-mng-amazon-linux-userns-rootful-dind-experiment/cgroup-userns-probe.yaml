@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cgroup-userns-probe
+  namespace: userns-rootful-dind
+spec:
+  hostUsers: false
+  restartPolicy: Never
+  nodeSelector:
+    experiment.coder.com/userns-dind: "true"
+  containers:
+    - name: probe
+      image: public.ecr.aws/docker/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+      securityContext:
+        privileged: true
+        procMount: Unmasked
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eux
+          echo '--- uid map ---'
+          cat /proc/self/uid_map
+          echo '--- cgroup membership ---'
+          cat /proc/self/cgroup
+          echo '--- cgroup mounts ---'
+          mount | grep -E 'cgroup|/sys/fs/cgroup' || true
+          echo '--- cgroup root metadata ---'
+          ls -ld /sys/fs/cgroup
+          echo '--- cgroup-root write probe ---'
+          test_dir=/sys/fs/cgroup/userns-dind-write-probe
+          if mkdir "$test_dir"; then
+            echo writable
+            rmdir "$test_dir"
+          else
+            echo not-writable
+          fi
+          sleep 600

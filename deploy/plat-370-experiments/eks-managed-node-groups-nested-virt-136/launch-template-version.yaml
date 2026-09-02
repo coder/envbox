@@ -1,0 +1,4 @@
+CpuOptions:
+  NestedVirtualization: enabled
+ImageId: null
+InstanceType: c8i.2xlarge

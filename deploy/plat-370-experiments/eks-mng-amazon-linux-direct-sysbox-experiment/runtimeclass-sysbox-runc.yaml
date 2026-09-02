@@ -1,0 +1,14 @@
+apiVersion: node.k8s.io/v1
+handler: sysbox-runc
+kind: RuntimeClass
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"node.k8s.io/v1","handler":"sysbox-runc","kind":"RuntimeClass","metadata":{"annotations":{},"name":"sysbox-runc"},"scheduling":{"nodeSelector":{"sysbox-runtime":"running"}}}
+  creationTimestamp: "2026-08-09T00:35:44Z"
+  name: sysbox-runc
+  resourceVersion: "2796"
+  uid: 09c2154d-6b4b-4437-b4a0-d5e0e7528f3d
+scheduling:
+  nodeSelector:
+    sysbox-runtime: running

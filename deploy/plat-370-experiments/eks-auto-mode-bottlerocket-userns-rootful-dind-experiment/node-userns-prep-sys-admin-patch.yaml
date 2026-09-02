@@ -1,0 +1,12 @@
+spec:
+  template:
+    metadata:
+      annotations:
+        experiment.coder.com/capability-test: sys-admin
+    spec:
+      containers:
+        - name: prep
+          securityContext:
+            capabilities:
+              drop: ["ALL"]
+              add: ["SYS_ADMIN"]

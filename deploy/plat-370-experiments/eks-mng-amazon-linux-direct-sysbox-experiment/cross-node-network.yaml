@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: direct-sysbox-target
+  namespace: direct-sysbox
+spec:
+  selector:
+    app.kubernetes.io/name: direct-sysbox-workspace
+  ports:
+    - name: http
+      port: 18080
+      targetPort: 18080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: direct-sysbox-target-headless
+  namespace: direct-sysbox
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: direct-sysbox-workspace
+  ports:
+    - name: http
+      port: 18080
+      targetPort: 18080
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: direct-sysbox-network-peer
+  namespace: direct-sysbox
+spec:
+  restartPolicy: Never
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: direct-sysbox-workspace
+          topologyKey: kubernetes.io/hostname
+  containers:
+    - name: probe
+      image: alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+      command:
+        - /bin/sh
+        - -ec
+        - |
+          set -x
+
+          fetch() {
+            url="$1"
+            output="$2"
+            attempts=0
+            until wget -T 5 -t 1 -qO "$output" "$url"; do
+              attempts=$((attempts + 1))
+              [ "$attempts" -lt 60 ]
+              sleep 1
+            done
+            grep -q "Welcome to nginx" "$output"
+          }
+
+          service_url="http://direct-sysbox-target.direct-sysbox.svc.cluster.local:18080/"
+          fetch "$service_url" /tmp/service-body
+          echo "cross-node-clusterip-service-ok url=$service_url"
+
+          headless_host="direct-sysbox-target-headless.direct-sysbox.svc.cluster.local"
+          attempts=0
+          pod_ip=""
+          until pod_ip="$(getent hosts "$headless_host" | awk 'NR == 1 { print $1 }')" && [ -n "$pod_ip" ]; do
+            attempts=$((attempts + 1))
+            [ "$attempts" -lt 60 ]
+            sleep 1
+          done
+
+          pod_url="http://${pod_ip}:18080/"
+          fetch "$pod_url" /tmp/pod-ip-body
+          echo "cross-node-direct-pod-ip-ok url=$pod_url"
+          echo direct-sysbox-cross-node-network-tests-ok

@@ -1,0 +1,40 @@
+Defaulted container "envbox" out of: envbox, initialize-workspace-volume (init)
+=== failed systemd units ===
+  UNIT                      LOAD   ACTIVE SUB    DESCRIPTION                                              
+● sys-kernel-debug.mount    loaded failed failed Kernel Debug File System                                 
+● sys-kernel-tracing.mount  loaded failed failed Kernel Trace File System                                 
+● kmod-static-nodes.service loaded failed failed Create list of static device nodes for the current kernel
+● systemd-sysctl.service    loaded failed failed Apply Kernel Variables                                   
+
+LOAD   = Reflects whether the unit definition was properly loaded.
+ACTIVE = The high-level unit activation state, i.e. generalization of SUB.
+SUB    = The low-level unit activation state, values depend on unit type.
+
+4 loaded units listed.
+=== persistent mounts ===
+--- /home/coder
+TARGET      SOURCE              FSTYPE OPTIONS
+/home/coder /dev/nvme2n1[/home] ext4   rw,relatime,seclabel
+Filesystem     Type 1K-blocks    Used Available Use% Mounted on
+/dev/nvme2n1   ext4  30787492 1167160  29603948   4% /home/coder
+--- /var/lib/docker
+TARGET          SOURCE                      FSTYPE OPTIONS
+/var/lib/docker /dev/nvme2n1[/cache/docker] ext4   rw,relatime,idmapped,seclabel
+Filesystem     Type 1K-blocks    Used Available Use% Mounted on
+/dev/nvme2n1   ext4  30787492 1167160  29603948   4% /var/lib/docker
+--- /var/lib/containers
+TARGET              SOURCE                          FSTYPE OPTIONS
+/var/lib/containers /dev/nvme2n1[/cache/containers] ext4   rw,relatime,idmapped,seclabel
+Filesystem     Type 1K-blocks    Used Available Use% Mounted on
+/dev/nvme2n1   ext4  30787492 1167160  29603948   4% /var/lib/containers
+=== workspace cgroup limits ===
+--- memory.max
+4294967296
+--- cpu.max
+100000 100000
+--- pids.max
+max
+--- cgroup.controllers
+cpuset cpu io memory hugetlb pids misc
+--- cgroup.subtree_control
+cpuset cpu io memory hugetlb pids misc

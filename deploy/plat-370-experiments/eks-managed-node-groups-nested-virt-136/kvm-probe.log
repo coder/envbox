@@ -1,0 +1,6 @@
++ ls -l /dev/kvm
+crw-rw-rw-. 1 root 36 10, 232 Jul 29 05:52 /dev/kvm
++ exec
++ echo 'opened /dev/kvm read/write'
+opened /dev/kvm read/write
++ exec

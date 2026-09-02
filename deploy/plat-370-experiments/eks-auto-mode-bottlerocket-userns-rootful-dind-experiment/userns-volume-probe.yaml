@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: userns-volume-probe
+  namespace: userns-rootful-dind-auto
+spec:
+  hostUsers: false
+  restartPolicy: Never
+  nodeSelector:
+    experiment.coder.com/userns-dind-auto: "true"
+  tolerations:
+    - key: experiment.coder.com/userns-dind-auto
+      value: "true"
+      effect: NoSchedule
+  containers:
+    - name: probe
+      image: public.ecr.aws/docker/library/alpine:3.21
+      resources:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eux
+          id
+          echo '--- uid/gid mapping ---'
+          cat /proc/self/uid_map
+          cat /proc/self/gid_map
+          echo '--- PVC write ---'
+          echo "$(date -u +%FT%TZ) auto-mode-userns-volume-probe" > /workspace/probe.txt
+          cat /workspace/probe.txt
+          sleep 600
+      volumeMounts:
+        - name: workspace-data
+          mountPath: /workspace
+  volumes:
+    - name: workspace-data
+      persistentVolumeClaim:
+        claimName: workspace-data

@@ -1,0 +1,68 @@
+2026-08-08 17:17:00 [ℹ]  eksctl version 0.229.0
+2026-08-08 17:17:00 [ℹ]  using region us-east-2
+2026-08-08 17:17:01 [ℹ]  setting availability zones to [us-east-2a us-east-2c us-east-2b]
+2026-08-08 17:17:01 [ℹ]  subnets for us-east-2a - public:192.168.0.0/19 private:192.168.96.0/19
+2026-08-08 17:17:01 [ℹ]  subnets for us-east-2c - public:192.168.32.0/19 private:192.168.128.0/19
+2026-08-08 17:17:01 [ℹ]  subnets for us-east-2b - public:192.168.64.0/19 private:192.168.160.0/19
+2026-08-08 17:17:01 [ℹ]  nodegroup "direct-sysbox" will use "" [AmazonLinux2023/1.35]
+2026-08-08 17:17:01 [ℹ]  using Kubernetes version 1.35
+2026-08-08 17:17:01 [ℹ]  creating EKS cluster "direct-sysbox-al2023-mng-135" in "us-east-2" region with managed nodes
+2026-08-08 17:17:01 [ℹ]  1 nodegroup (direct-sysbox) was included (based on the include/exclude rules)
+2026-08-08 17:17:01 [ℹ]  will create a CloudFormation stack for cluster itself and 1 managed nodegroup stack(s)
+2026-08-08 17:17:01 [ℹ]  if you encounter any issues, check CloudFormation console or try 'eksctl utils describe-stacks --region=us-east-2 --cluster=direct-sysbox-al2023-mng-135'
+2026-08-08 17:17:01 [ℹ]  Kubernetes API endpoint access will use default of {publicAccess=true, privateAccess=false} for cluster "direct-sysbox-al2023-mng-135" in "us-east-2"
+2026-08-08 17:17:01 [ℹ]  CloudWatch logging will not be enabled for cluster "direct-sysbox-al2023-mng-135" in "us-east-2"
+2026-08-08 17:17:01 [ℹ]  you can enable it with 'eksctl utils update-cluster-logging --enable-types={SPECIFY-YOUR-LOG-TYPES-HERE (e.g. all)} --region=us-east-2 --cluster=direct-sysbox-al2023-mng-135'
+2026-08-08 17:17:01 [ℹ]  default addons coredns, metrics-server, vpc-cni, kube-proxy were not specified, will install them as EKS addons
+2026-08-08 17:17:01 [ℹ]  
+2 sequential tasks: { create cluster control plane "direct-sysbox-al2023-mng-135", 
+    2 sequential sub-tasks: { 
+        2 sequential sub-tasks: { 
+            1 task: { create addons },
+            wait for control plane to become ready,
+        },
+        create managed nodegroup "direct-sysbox",
+    } 
+}
+2026-08-08 17:17:01 [ℹ]  building cluster stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 17:17:01 [ℹ]  deploying stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 17:17:31 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 17:18:01 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 17:19:02 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 17:20:02 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 17:21:02 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 17:22:02 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 17:23:03 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 17:24:03 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 17:25:03 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 17:26:03 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 17:26:05 [ℹ]  creating addon: coredns
+2026-08-08 17:26:05 [ℹ]  successfully created addon: coredns
+2026-08-08 17:26:06 [!]  recommended policies were found for "vpc-cni" addon, but since OIDC is disabled on the cluster, eksctl cannot configure the requested permissions; the recommended way to provide IAM permissions for "vpc-cni" addon is via pod identity associations; after addon creation is completed, add all recommended policies to the config file, under `addon.PodIdentityAssociations`, and run `eksctl update addon`
+2026-08-08 17:26:06 [ℹ]  creating addon: vpc-cni
+2026-08-08 17:26:06 [ℹ]  successfully created addon: vpc-cni
+2026-08-08 17:26:07 [ℹ]  creating addon: kube-proxy
+2026-08-08 17:26:07 [ℹ]  successfully created addon: kube-proxy
+2026-08-08 17:28:08 [ℹ]  building managed nodegroup stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 17:28:09 [ℹ]  deploying stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 17:28:09 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 17:28:39 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 17:29:24 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 17:30:56 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 17:30:56 [ℹ]  waiting for the control plane to become ready
+2026-08-08 17:30:56 [✔]  saved kubeconfig as "/home/geo/.kube/config"
+2026-08-08 17:30:56 [ℹ]  no tasks
+2026-08-08 17:30:56 [✔]  all EKS cluster resources for "direct-sysbox-al2023-mng-135" have been created
+2026-08-08 17:30:57 [ℹ]  nodegroup "direct-sysbox" has 1 node(s)
+2026-08-08 17:30:57 [ℹ]  node "ip-192-168-87-106.us-east-2.compute.internal" is ready
+2026-08-08 17:30:57 [ℹ]  waiting for at least 1 node(s) to become ready in "direct-sysbox"
+2026-08-08 17:30:57 [ℹ]  nodegroup "direct-sysbox" has 1 node(s)
+2026-08-08 17:30:57 [ℹ]  node "ip-192-168-87-106.us-east-2.compute.internal" is ready
+2026-08-08 17:30:57 [✔]  created 1 managed nodegroup(s) in cluster "direct-sysbox-al2023-mng-135"
+2026-08-08 17:30:57 [!]  recommended policies were found for "aws-ebs-csi-driver" addon, but since OIDC is disabled on the cluster, eksctl cannot configure the requested permissions; the recommended way to provide IAM permissions for "aws-ebs-csi-driver" addon is via pod identity associations; after addon creation is completed, add all recommended policies to the config file, under `addon.PodIdentityAssociations`, and run `eksctl update addon`
+2026-08-08 17:30:57 [ℹ]  creating addon: aws-ebs-csi-driver
+2026-08-08 17:31:42 [ℹ]  addon "aws-ebs-csi-driver" active
+2026-08-08 17:31:43 [ℹ]  creating addon: metrics-server
+2026-08-08 17:32:42 [ℹ]  addon "metrics-server" active
+2026-08-08 17:32:43 [ℹ]  kubectl command should work with "/home/geo/.kube/config", try 'kubectl get nodes'
+2026-08-08 17:32:43 [✔]  EKS cluster "direct-sysbox-al2023-mng-135" in "us-east-2" region is ready

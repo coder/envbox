@@ -1,0 +1,37 @@
+++ mktemp -d
++ tmpdir=/tmp/tmp.lC7P8rl7vw
++ printf '%s\n' 'FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d' 'RUN id && echo buildkit-ok >/result'
++ DOCKER_BUILDKIT=1
++ docker build -t direct-sysbox-buildkit:1 /tmp/tmp.lC7P8rl7vw
+#1 [internal] load build definition from Dockerfile
+#1 sha256:0f0cf6f3fb25c02386d78be4990f15be6bd448390daa60ebea88d99de455b643
+#1 transferring dockerfile: 215B done
+#1 DONE 0.1s
+
+#2 [internal] load .dockerignore
+#2 sha256:cefd15e2fbc5ba40333502c5985e4b2398511c4c60e0ad8789edef9ea9ceccb9
+#2 transferring context: 2B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+#3 sha256:bf4c0da9a5b4a37953145ceea47b78145db8eed0514f82de11acd1e4ac3b4225
+#3 DONE 0.0s
+
+#5 [1/2] FROM docker.io/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+#5 sha256:8c489457673183b916c6823f641692034da3f64690342419b6ddd666a494ab4f
+#5 DONE 0.0s
+
+#4 [2/2] RUN id && echo buildkit-ok >/result
+#4 sha256:838913481cda837fe4bf20ae856c3cb8704ed4216d39ce94c5b0b3b123617fbe
+#4 0.325 uid=0(root) gid=0(root)
+#4 DONE 0.3s
+
+#6 exporting to image
+#6 sha256:e8c613e07b0b7ff33893b694f7759a10d42e180f2b4dc349fb57dc6b71dcab00
+#6 exporting layers
+#6 exporting layers 0.4s done
+#6 writing image sha256:dedf5e3cfde010b748890ef04fb9c4ce82f7f356ca75e85550057163445059bc done
+#6 naming to docker.io/library/direct-sysbox-buildkit:1 done
+#6 DONE 0.5s
++ docker run --rm direct-sysbox-buildkit:1 cat /result
+buildkit-ok

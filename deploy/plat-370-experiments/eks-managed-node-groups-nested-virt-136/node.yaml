@@ -1,0 +1,141 @@
+apiVersion: v1
+kind: Node
+metadata:
+  annotations:
+    alpha.kubernetes.io/provided-node-ip: 192.168.78.100
+    node.alpha.kubernetes.io/ttl: "0"
+    volumes.kubernetes.io/controller-managed-attach-detach: "true"
+  creationTimestamp: "2026-07-29T05:52:11Z"
+  labels:
+    alpha.eksctl.io/cluster-name: nested-virt-mng-136
+    alpha.eksctl.io/nodegroup-name: nested-virt-mng
+    beta.kubernetes.io/arch: amd64
+    beta.kubernetes.io/instance-type: c8i.2xlarge
+    beta.kubernetes.io/os: linux
+    eks.amazonaws.com/capacityType: ON_DEMAND
+    eks.amazonaws.com/nodegroup: nested-virt-mng
+    eks.amazonaws.com/nodegroup-image: ami-0338d8d85fc086817
+    eks.amazonaws.com/sourceLaunchTemplateId: lt-08dd5f903d01c4c00
+    eks.amazonaws.com/sourceLaunchTemplateVersion: "1"
+    failure-domain.beta.kubernetes.io/region: us-east-2
+    failure-domain.beta.kubernetes.io/zone: us-east-2a
+    k8s.io/cloud-provider-aws: 3999266ddf3913e127496b92aef5afc7
+    kubernetes.io/arch: amd64
+    kubernetes.io/hostname: ip-192-168-78-100.us-east-2.compute.internal
+    kubernetes.io/os: linux
+    node.kubernetes.io/instance-type: c8i.2xlarge
+    topology.k8s.aws/zone-id: use2-az1
+    topology.kubernetes.io/region: us-east-2
+    topology.kubernetes.io/zone: us-east-2a
+    workload: nested-virt
+  name: ip-192-168-78-100.us-east-2.compute.internal
+  resourceVersion: "4818"
+  uid: 5cfa1221-2f29-4992-98b5-ee838520feb4
+spec:
+  providerID: aws:///us-east-2a/i-0908a312152eeb816
+  taints:
+  - effect: NoSchedule
+    key: workload
+    value: nested-virt
+status:
+  addresses:
+  - address: 192.168.78.100
+    type: InternalIP
+  - address: 16.58.214.115
+    type: ExternalIP
+  - address: ip-192-168-78-100.us-east-2.compute.internal
+    type: InternalDNS
+  - address: ip-192-168-78-100.us-east-2.compute.internal
+    type: Hostname
+  - address: ec2-16-58-214-115.us-east-2.compute.amazonaws.com
+    type: ExternalDNS
+  allocatable:
+    cpu: 7910m
+    ephemeral-storage: "18181869946"
+    hugepages-1Gi: "0"
+    hugepages-2Mi: "0"
+    memory: 14388416Ki
+    pods: "110"
+  capacity:
+    cpu: "8"
+    ephemeral-storage: 20893676Ki
+    hugepages-1Gi: "0"
+    hugepages-2Mi: "0"
+    memory: 16081088Ki
+    pods: "110"
+  conditions:
+  - lastHeartbeatTime: "2026-07-29T05:59:51Z"
+    lastTransitionTime: "2026-07-29T05:52:09Z"
+    message: kubelet has sufficient memory available
+    reason: KubeletHasSufficientMemory
+    status: "False"
+    type: MemoryPressure
+  - lastHeartbeatTime: "2026-07-29T05:59:51Z"
+    lastTransitionTime: "2026-07-29T05:52:09Z"
+    message: kubelet has no disk pressure
+    reason: KubeletHasNoDiskPressure
+    status: "False"
+    type: DiskPressure
+  - lastHeartbeatTime: "2026-07-29T05:59:51Z"
+    lastTransitionTime: "2026-07-29T05:52:09Z"
+    message: kubelet has sufficient PID available
+    reason: KubeletHasSufficientPID
+    status: "False"
+    type: PIDPressure
+  - lastHeartbeatTime: "2026-07-29T05:59:51Z"
+    lastTransitionTime: "2026-07-29T05:52:20Z"
+    message: kubelet is posting ready status
+    reason: KubeletReady
+    status: "True"
+    type: Ready
+  daemonEndpoints:
+    kubeletEndpoint:
+      Port: 10250
+  declaredFeatures:
+  - ExtendWebSocketsToKubelet
+  - InPlacePodLevelResourcesVerticalScaling
+  - InPlacePodVerticalScalingInitContainers
+  - RestartAllContainersOnContainerExits
+  features:
+    supplementalGroupsPolicy: true
+  images:
+  - names:
+    - 602401143452.dkr.ecr.us-east-2.amazonaws.com/amazon-k8s-cni-init@sha256:ba53dd7834c5e7974a29af7d0b886846cca34c49dbe001464e93587de742971f
+    - 602401143452.dkr.ecr.us-east-2.amazonaws.com/amazon-k8s-cni-init:v1.22.3-eksbuild.1
+    sizeBytes: 69565360
+  - names:
+    - 602401143452.dkr.ecr.us-east-2.amazonaws.com/amazon-k8s-cni@sha256:ddcb245348d146dd6e0f18dfec141ecdb1c178683c82b7c137f8de39d165a5aa
+    - 602401143452.dkr.ecr.us-east-2.amazonaws.com/amazon-k8s-cni:v1.22.3-eksbuild.1
+    sizeBytes: 57600902
+  - names:
+    - 602401143452.dkr.ecr.us-east-2.amazonaws.com/eks/kube-proxy@sha256:c19fecfa8ddaa14de43300d8eed8e60152feb0fb73c0be7fba0894194efec641
+    - 602401143452.dkr.ecr.us-east-2.amazonaws.com/eks/kube-proxy:v1.36.0-eksbuild.13
+    sizeBytes: 34905713
+  - names:
+    - 602401143452.dkr.ecr.us-east-2.amazonaws.com/amazon/aws-network-policy-agent@sha256:4d81568bb2b5d3464ee611d2f221f05dfd297b8948d309bb2b0a343f7b3701d7
+    - 602401143452.dkr.ecr.us-east-2.amazonaws.com/amazon/aws-network-policy-agent:v1.3.7-eksbuild.1
+    sizeBytes: 33949731
+  - names:
+    - 602401143452.dkr.ecr.us-west-2.amazonaws.com/eks/pause:3.10
+    - localhost/kubernetes/pause:latest
+    sizeBytes: 318731
+  nodeInfo:
+    architecture: amd64
+    bootID: 1133c743-25de-462e-b3b9-fecd9cf1f2e2
+    containerRuntimeVersion: containerd://2.2.4+unknown
+    kernelVersion: 6.18.38-73.137.amzn2023.x86_64
+    kubeProxyVersion: ""
+    kubeletVersion: v1.36.2-eks-bca9cf6
+    machineID: ec295fc50ea3f35988a845372e87e78b
+    operatingSystem: linux
+    osImage: Amazon Linux 2023.12.20260720
+    systemUUID: ec295fc5-0ea3-f359-88a8-45372e87e78b
+  runtimeHandlers:
+  - features:
+      recursiveReadOnlyMounts: true
+      userNamespaces: true
+    name: ""
+  - features:
+      recursiveReadOnlyMounts: true
+      userNamespaces: true
+    name: runc
