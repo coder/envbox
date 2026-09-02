@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: compose-network-target
+  namespace: userns-rootful-dind
+spec:
+  selector:
+    experiment.coder.com/compose-network-target: "true"
+  ports:
+    - name: http
+      port: 18080
+      targetPort: 18080
+---
+# This headless Service provides a stable discovery mechanism for the
+# workspace Pod IP. The peer resolves it, extracts the Pod IP, and then sends
+# HTTP directly to that IP rather than through the ClusterIP Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: compose-network-target-headless
+  namespace: userns-rootful-dind
+spec:
+  clusterIP: None
+  selector:
+    experiment.coder.com/compose-network-target: "true"
+  ports:
+    - name: http
+      port: 18080
+      targetPort: 18080
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: compose-network-peer-probe
+  namespace: userns-rootful-dind
+spec:
+  # The successful workspace is forced onto the cgroup-writable MNG by its
+  # RuntimeClass. Pinning this peer to the original MNG makes the two HTTP
+  # checks cross-node rather than merely same-node checks.
+  nodeSelector:
+    experiment.coder.com/userns-dind: "true"
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  containers:
+    - name: probe
+      image: public.ecr.aws/docker/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      env:
+        - name: PEER_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eux
+
+          fetch_and_verify() {
+            url="$1"
+            output="$2"
+            attempts=0
+            until wget -T 5 -t 1 -qO "$output" "$url"; do
+              attempts=$((attempts + 1))
+              [ "$attempts" -lt 120 ] || return 1
+              sleep 2
+            done
+            grep -q 'Welcome to nginx' "$output"
+          }
+
+          service_url='http://compose-network-target.userns-rootful-dind.svc.cluster.local:18080/'
+          fetch_and_verify "$service_url" /tmp/service-body
+          echo "cross-node-clusterip-service-ok node=$PEER_NODE_NAME url=$service_url"
+
+          headless_host='compose-network-target-headless.userns-rootful-dind.svc.cluster.local'
+          attempts=0
+          pod_ip=''
+          until pod_ip="$(getent hosts "$headless_host" | awk 'NR == 1 { print $1 }')" &&
+              [ -n "$pod_ip" ]; do
+            attempts=$((attempts + 1))
+            [ "$attempts" -lt 120 ] || exit 1
+            sleep 2
+          done
+
+          pod_url="http://${pod_ip}:18080/"
+          fetch_and_verify "$pod_url" /tmp/pod-ip-body
+          echo "cross-node-direct-pod-ip-ok node=$PEER_NODE_NAME url=$pod_url"
+          echo compose-cross-node-network-tests-ok

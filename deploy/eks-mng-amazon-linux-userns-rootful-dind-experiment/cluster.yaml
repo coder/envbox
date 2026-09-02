@@ -1,0 +1,34 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: userns-rootful-dind-mng-136
+  region: us-east-2
+  version: "1.36"
+
+# Keep this baseline on a conventional managed node group even if a future
+# eksctl release changes its default behavior.
+autoModeConfig:
+  enabled: false
+
+# This is intentionally a conventional Amazon Linux managed node group, not
+# an Auto Mode NodePool or Bottlerocket node. It is the debugging-friendly
+# baseline for the native-Kubernetes-user-namespace experiment.
+managedNodeGroups:
+  - name: userns-dind
+    amiFamily: AmazonLinux2023
+    instanceType: m6i.large
+    minSize: 1
+    desiredCapacity: 1
+    maxSize: 2
+    labels:
+      experiment.coder.com/userns-dind: "true"
+    # The experiment needs an EBS-backed PVC. This attaches the EBS CSI
+    # permissions to the test node role; the EKS addon below supplies the
+    # controller and node components.
+    iam:
+      withAddonPolicies:
+        ebs: true
+
+addons:
+  - name: aws-ebs-csi-driver

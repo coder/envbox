@@ -1,0 +1,202 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rootful-dind-default-caps
+  namespace: userns-rootful-dind
+  labels:
+    experiment.coder.com/compose-network-target: "true"
+spec:
+  runtimeClassName: runc-cgroup-writable
+  hostUsers: false
+  restartPolicy: Never
+  containers:
+    - name: workspace
+      # The original docker:27-dind tag resolved to Docker Engine 27.5.1.
+      # Pin the patch release so a replay does not silently change engines.
+      image: docker:27.5.1-dind
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: true
+        procMount: Unmasked
+        seccompProfile:
+          type: Unconfined
+      env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+        - name: DOCKER_HOST
+          value: unix:///run/docker.sock
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eu
+          grep "^Cap" /proc/self/status
+          mkdir -p /run /workspace/docker-data /workspace/docker-artifacts-default-caps
+          artifacts=/workspace/docker-artifacts-default-caps
+          rm -f "$artifacts/test-complete"
+          alpine_image='alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d'
+          nginx_image='nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10'
+
+          # Keep the delegated cgroup root free of processes so that domain
+          # controllers such as memory and io can be enabled for Docker's
+          # child-container hierarchy. All workspace processes, including
+          # this PID 1 shell and the dockerd it starts, live in a sibling
+          # cgroup instead.
+          mkdir /sys/fs/cgroup/workspace-processes
+          while read -r pid < /sys/fs/cgroup/cgroup.procs; do
+            [ -n "$pid" ] || break
+            echo "$pid" > /sys/fs/cgroup/workspace-processes/cgroup.procs
+          done
+
+          for controller in cpu cpuset io memory pids; do
+            if grep -qw "$controller" /sys/fs/cgroup/cgroup.controllers; then
+              echo "+$controller" > /sys/fs/cgroup/cgroup.subtree_control
+            fi
+          done
+
+          cat /sys/fs/cgroup/cgroup.type > "$artifacts/root-cgroup-type.txt"
+          cat /sys/fs/cgroup/cgroup.controllers > "$artifacts/root-cgroup-controllers.txt"
+          cat /sys/fs/cgroup/cgroup.subtree_control > "$artifacts/root-cgroup-subtree-control.txt"
+          cat /sys/fs/cgroup/cgroup.procs > "$artifacts/root-cgroup-procs.txt"
+          cat /sys/fs/cgroup/workspace-processes/cgroup.type > "$artifacts/workspace-cgroup-type.txt"
+
+          id > "$artifacts/id.txt"
+          cat /proc/self/uid_map > "$artifacts/uid-map.txt"
+          cat /proc/self/gid_map > "$artifacts/gid-map.txt"
+          cat /proc/self/cgroup > "$artifacts/cgroup.txt"
+          mount | grep -E 'cgroup|/sys/fs/cgroup' > "$artifacts/cgroup-mount.txt"
+          mkdir /sys/fs/cgroup/dind-preflight
+          rmdir /sys/fs/cgroup/dind-preflight
+
+          dockerd \
+            --host=unix:///run/docker.sock \
+            --data-root=/workspace/docker-data \
+            --pidfile=/run/dockerd.pid \
+            --exec-opt=native.cgroupdriver=cgroupfs \
+            --cgroup-parent=docker \
+            > "$artifacts/dockerd.log" 2>&1 &
+          dockerd_pid=$!
+          trap 'kill "$dockerd_pid" 2>/dev/null || true; wait "$dockerd_pid" 2>/dev/null || true' EXIT
+
+          i=0
+          until docker info > "$artifacts/docker-info.txt" 2>&1; do
+            i=$((i + 1))
+            if [ "$i" -ge 90 ]; then
+              echo 'dockerd did not become ready' >&2
+              cat "$artifacts/dockerd.log" >&2 || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+          docker version
+          docker info
+          docker info --format '{{.Driver}}' > "$artifacts/storage-driver.txt"
+
+          docker pull "$alpine_image"
+          docker run --rm "$alpine_image" id > "$artifacts/child-id.txt"
+          cat "$artifacts/child-id.txt"
+
+          mkdir -p /tmp/build-context
+          printf '%s\n' \
+            "FROM $alpine_image" \
+            'RUN id' \
+            'CMD ["/bin/sh", "-c", "echo buildkit-ok"]' \
+            > /tmp/build-context/Dockerfile
+          DOCKER_BUILDKIT=1 docker build -t userns-dind-smoke:3 /tmp/build-context \
+            > "$artifacts/build.log" 2>&1
+          cat "$artifacts/build.log"
+          docker run --rm userns-dind-smoke:3 > "$artifacts/build-result.txt"
+          cat "$artifacts/build-result.txt"
+
+          docker rm -f httpd >/dev/null 2>&1 || true
+          docker run -d --name httpd "$nginx_image"
+          httpd_ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' httpd)"
+          docker run --rm "$alpine_image" wget -qO- "http://${httpd_ip}" \
+            > "$artifacts/network-result.txt"
+          head -c 100 "$artifacts/network-result.txt"
+          echo
+          docker rm -f httpd
+
+          if docker run --rm --memory=64m --pids-limit=64 "$alpine_image" true \
+              > "$artifacts/resource-limit-result.txt" 2>&1; then
+            echo pass > "$artifacts/resource-limit-status.txt"
+          else
+            echo fail > "$artifacts/resource-limit-status.txt"
+            cat "$artifacts/resource-limit-result.txt" >&2
+            exit 1
+          fi
+
+          # Reproduce the Docker Compose networking checks that were
+          # originally run interactively against this workspace.
+          compose_dir=/tmp/compose-network-test
+          compose_file="$compose_dir/compose.yaml"
+          mkdir -p "$compose_dir"
+          printf '%s\n' \
+            'services:' \
+            '  server:' \
+            "    image: $nginx_image" \
+            '    ports:' \
+            '      - "18080:80"' \
+            '  client:' \
+            "    image: $alpine_image" \
+            '    command: ["sh", "-c", "sleep 3600"]' \
+            > "$compose_file"
+
+          docker compose \
+            -p coder-nettest \
+            -f "$compose_file" \
+            up -d --remove-orphans
+          docker compose \
+            -p coder-nettest \
+            -f "$compose_file" \
+            ps > "$artifacts/compose-ps.txt"
+          docker network inspect coder-nettest_default \
+            > "$artifacts/compose-network-inspect.json"
+
+          docker compose \
+            -p coder-nettest \
+            -f "$compose_file" \
+            exec -T client sh -ec '
+              attempts=0
+              until getent hosts server >/tmp/server-hosts &&
+                    wget -qO /tmp/internal.html http://server/; do
+                attempts=$((attempts + 1))
+                [ "$attempts" -lt 60 ] || exit 1
+                sleep 1
+              done
+              grep -q "Welcome to nginx" /tmp/internal.html
+              echo compose-service-dns-and-http-ok
+
+              attempts=0
+              until wget -qO /tmp/outbound.html http://example.com/; do
+                attempts=$((attempts + 1))
+                [ "$attempts" -lt 60 ] || exit 1
+                sleep 1
+              done
+              grep -qi "Example Domain" /tmp/outbound.html
+              echo compose-outbound-network-ok
+            ' > "$artifacts/compose-inner-network-result.txt"
+          cat "$artifacts/compose-inner-network-result.txt"
+
+          attempts=0
+          until wget -qO "$artifacts/compose-published.html" \
+              http://127.0.0.1:18080/; do
+            attempts=$((attempts + 1))
+            [ "$attempts" -lt 60 ] || exit 1
+            sleep 1
+          done
+          grep -q 'Welcome to nginx' "$artifacts/compose-published.html"
+          echo workspace-loopback-published-port-ok \
+            > "$artifacts/compose-published-port-status.txt"
+          cat "$artifacts/compose-published-port-status.txt"
+
+          touch "$artifacts/test-complete" /tmp/rootful-dind-test-complete
+          echo 'Domain-cgroup rootful DinD and Compose tests complete; keeping dockerd alive.'
+          wait "$dockerd_pid"
+      volumeMounts:
+        - name: workspace-data
+          mountPath: /workspace
+  volumes:
+    - name: workspace-data
+      persistentVolumeClaim:
+        claimName: workspace-data-cgroup-writable
