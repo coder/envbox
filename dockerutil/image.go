@@ -307,7 +307,7 @@ func DefaultLogImagePullFn(log buildlog.Logger) func(ImagePullEvent) error {
 	)
 	return func(e ImagePullEvent) error {
 		if e.Error != "" {
-			log.Errorf(e.Error)
+			log.Error(e.Error)
 			return xerrors.Errorf("pull image: %s", e.Error)
 		}
 
