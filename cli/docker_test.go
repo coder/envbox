@@ -197,16 +197,38 @@ if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
 	# When mounts are stacked at /sys/fs/cgroup, the visible mount is the
 	# one whose ID is not another same-location mount's parent (see
 	# proc_pid_mountinfo(5)).
-	cgroup_mount_root=$(awk '
-		$5 == "/sys/fs/cgroup" { root[$1] = $4; isparent[$2] = 1 }
-		END { for (id in root) if (!(id in isparent)) print root[id] }
-	' /proc/self/mountinfo)
+	get_cgroup_mount_root() {
+		awk '
+			$5 == "/sys/fs/cgroup" { root[$1] = $4; isparent[$2] = 1 }
+			END { for (id in root) if (!(id in isparent)) print root[id] }
+		' /proc/self/mountinfo
+	}
+	cgroup_mount_root=$(get_cgroup_mount_root)
 	if [ "$cgroup_mount_root" != "/" ]; then
 		# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes the
 		# fs root; inner container cgroups end up under the envbox container's
 		# cgroup on the host.
-		umount /sys/fs/cgroup || { echo "envbox: failed to umount /sys/fs/cgroup" >&2; exit 1; }
-		mount -t cgroup2 cgroup /sys/fs/cgroup || { echo "envbox: failed to mount cgroup2 on /sys/fs/cgroup" >&2; exit 1; }
+		# A regular unmount can fail with EBUSY on runtimes that retain references
+		# to the inherited mount. A lazy detach keeps retained references valid
+		# while freeing the mount point for a correctly rooted replacement.
+		cgroup_unmounted=false
+		if ! umount /sys/fs/cgroup; then
+			echo "envbox: normal umount of /sys/fs/cgroup failed; trying lazy detach" >&2
+			if umount -l /sys/fs/cgroup; then
+				cgroup_unmounted=true
+			else
+				echo "envbox: failed to detach /sys/fs/cgroup; continuing with inherited mount (inner container cgroup attribution may be incorrect)" >&2
+			fi
+		else
+			cgroup_unmounted=true
+		fi
+		if [ "$cgroup_unmounted" = true ]; then
+			mount -t cgroup2 cgroup /sys/fs/cgroup || { echo "envbox: failed to mount cgroup2 on /sys/fs/cgroup" >&2; exit 1; }
+			cgroup_mount_root=$(get_cgroup_mount_root)
+			if [ "$cgroup_mount_root" != "/" ]; then
+				echo "envbox: cgroup2 mount root is '$cgroup_mount_root' after remount; inner container cgroup attribution may be incorrect" >&2
+			fi
+		fi
 	fi
 
 	# move the processes from the root group to the /init group,
@@ -836,11 +858,15 @@ func TestWrapDockerdCmd(t *testing.T) {
 	script := args[3]
 	require.Contains(t, script, fmt.Sprintf("envbox_max_attempts=%d", cli.DockerdSubtreeControlMaxAttempts))
 	require.Contains(t, script, "[ -f /sys/fs/cgroup/cgroup.controllers ]")
+	require.Contains(t, script, `get_cgroup_mount_root() {`)
 	require.Contains(t, script, `$5 == "/sys/fs/cgroup" { root[$1] = $4; isparent[$2] = 1 }`)
 	require.Contains(t, script, `END { for (id in root) if (!(id in isparent)) print root[id] }`)
 	require.Contains(t, script, `if [ "$cgroup_mount_root" != "/" ]; then`)
-	require.Contains(t, script, "umount /sys/fs/cgroup")
+	require.Contains(t, script, "if ! umount /sys/fs/cgroup")
+	require.Contains(t, script, "umount -l /sys/fs/cgroup")
+	require.Contains(t, script, "continuing with inherited mount")
 	require.Contains(t, script, "mount -t cgroup2 cgroup /sys/fs/cgroup")
+	require.Contains(t, script, "inner container cgroup attribution may be incorrect")
 	require.Contains(t, script, "mkdir -p /sys/fs/cgroup/init")
 	require.Contains(t, script, "/sys/fs/cgroup/cgroup.subtree_control")
 	require.Contains(t, script, `ge "$envbox_max_attempts" ]`)
