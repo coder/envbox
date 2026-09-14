@@ -17,32 +17,36 @@ if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
 			END { for (id in root) if (!(id in isparent)) print root[id] }
 		' /proc/self/mountinfo
 	}
-	cgroup_mount_root=$(get_cgroup_mount_root)
-	if [ "$cgroup_mount_root" != "/" ]; then
+	configure_cgroup_nesting=true
+	if [ "$(get_cgroup_mount_root)" != "/" ]; then
 		# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes the
 		# fs root; inner container cgroups end up under the envbox container's
-		# cgroup on the host.
+		# cgroup on the host. Starting dockerd with potentially incorrect cgroup
+		# attribution is preferable to failing the workspace if neither unmount
+		# method can detach the inherited mount.
 		# A regular unmount can fail with EBUSY on runtimes that retain references
 		# to the inherited mount. A lazy detach keeps retained references valid
 		# while freeing the mount point for a correctly rooted replacement.
-		cgroup_unmounted=false
 		if ! umount /sys/fs/cgroup; then
 			echo "envbox: normal umount of /sys/fs/cgroup failed; trying lazy detach" >&2
-			if umount -l /sys/fs/cgroup; then
-				cgroup_unmounted=true
-			else
-				echo "envbox: failed to detach /sys/fs/cgroup; continuing with inherited mount (inner container cgroup attribution may be incorrect)" >&2
+			if ! umount -l /sys/fs/cgroup; then
+				configure_cgroup_nesting=false
+				echo "envbox: failed to detach /sys/fs/cgroup; skipping cgroup nesting setup (inner container cgroup attribution may be incorrect)" >&2
 			fi
-		else
-			cgroup_unmounted=true
 		fi
-		if [ "$cgroup_unmounted" = true ]; then
+		if [ "$configure_cgroup_nesting" = true ]; then
 			mount -t cgroup2 cgroup /sys/fs/cgroup || { echo "envbox: failed to mount cgroup2 on /sys/fs/cgroup" >&2; exit 1; }
 			cgroup_mount_root=$(get_cgroup_mount_root)
 			if [ "$cgroup_mount_root" != "/" ]; then
-				echo "envbox: cgroup2 mount root is '$cgroup_mount_root' after remount; inner container cgroup attribution may be incorrect" >&2
+				configure_cgroup_nesting=false
+				echo "envbox: cgroup2 mount root is '$cgroup_mount_root' after remount; skipping cgroup nesting setup (inner container cgroup attribution may be incorrect)" >&2
 			fi
 		fi
+	fi
+
+	if [ "$configure_cgroup_nesting" = false ]; then
+		# exec replaces this shell, so the nesting setup below is not run.
+		exec "$0" "$@"
 	fi
 
 	# move the processes from the root group to the /init group,
