@@ -1,0 +1,2 @@
+NAME                                           STATUS   ROLES    AGE     VERSION               NODEGROUP       SYSBOX-INSTALL   SYSBOX-RUNTIME
+ip-192-168-87-106.us-east-2.compute.internal   Ready    <none>   5m25s   v1.35.6-eks-254016e   direct-sysbox   yes              

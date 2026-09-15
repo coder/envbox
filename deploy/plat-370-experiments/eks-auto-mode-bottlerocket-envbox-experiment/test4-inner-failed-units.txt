@@ -1,0 +1,60 @@
+Defaulted container "envbox" out of: envbox, initialize-workspace-volume (init)
+===== sys-kernel-debug.mount =====
+● sys-kernel-debug.mount - Kernel Debug File System
+     Loaded: loaded (/lib/systemd/system/sys-kernel-debug.mount; static; vendor preset: enabled)
+     Active: failed (Result: exit-code) since Sat 2026-08-08 18:54:58 UTC; 9min ago
+      Where: /sys/kernel/debug
+       What: debugfs
+       Docs: https://www.kernel.org/doc/Documentation/filesystems/debugfs.txt
+             https://www.freedesktop.org/wiki/Software/systemd/APIFileSystems
+        CPU: 2ms
+
+Aug 08 18:54:58 envbox-smoke mount[168]: mount: /sys/kernel/debug: permission denied.
+Aug 08 18:54:58 envbox-smoke systemd[1]: sys-kernel-debug.mount: Mount process exited, code=exited, status=32/n/a
+Aug 08 18:54:58 envbox-smoke systemd[1]: sys-kernel-debug.mount: Failed with result 'exit-code'.
+Aug 08 18:54:58 envbox-smoke systemd[1]: Failed to mount Kernel Debug File System.
+Warning: journal has been rotated since unit was started, output may be incomplete.
+===== sys-kernel-tracing.mount =====
+● sys-kernel-tracing.mount - Kernel Trace File System
+     Loaded: loaded (/lib/systemd/system/sys-kernel-tracing.mount; static; vendor preset: enabled)
+     Active: failed (Result: exit-code) since Sat 2026-08-08 18:54:58 UTC; 9min ago
+      Where: /sys/kernel/tracing
+       What: tracefs
+       Docs: https://www.kernel.org/doc/Documentation/trace/ftrace.txt
+             https://www.freedesktop.org/wiki/Software/systemd/APIFileSystems
+        CPU: 1ms
+
+Aug 08 18:54:58 envbox-smoke mount[179]: mount: /sys/kernel/tracing: permission denied.
+Aug 08 18:54:58 envbox-smoke systemd[1]: sys-kernel-tracing.mount: Mount process exited, code=exited, status=32/n/a
+Aug 08 18:54:58 envbox-smoke systemd[1]: sys-kernel-tracing.mount: Failed with result 'exit-code'.
+Aug 08 18:54:58 envbox-smoke systemd[1]: Failed to mount Kernel Trace File System.
+Warning: journal has been rotated since unit was started, output may be incomplete.
+===== kmod-static-nodes.service =====
+● kmod-static-nodes.service - Create list of static device nodes for the current kernel
+     Loaded: loaded (/lib/systemd/system/kmod-static-nodes.service; static; vendor preset: enabled)
+     Active: failed (Result: exit-code) since Sat 2026-08-08 18:54:58 UTC; 9min ago
+    Process: 191 ExecStart=/bin/kmod static-nodes --format=tmpfiles --output=/run/tmpfiles.d/static-nodes.conf (code=exited, status=203/EXEC)
+   Main PID: 191 (code=exited, status=203/EXEC)
+        CPU: 506us
+
+Aug 08 18:54:58 envbox-smoke systemd[191]: kmod-static-nodes.service: Failed at step EXEC spawning /bin/kmod: No such file or directory
+Aug 08 18:54:58 envbox-smoke systemd[1]: kmod-static-nodes.service: Main process exited, code=exited, status=203/EXEC
+Aug 08 18:54:58 envbox-smoke systemd[1]: kmod-static-nodes.service: Failed with result 'exit-code'.
+Aug 08 18:54:58 envbox-smoke systemd[1]: Failed to start Create list of static device nodes for the current kernel.
+Warning: journal has been rotated since unit was started, output may be incomplete.
+===== systemd-sysctl.service =====
+● systemd-sysctl.service - Apply Kernel Variables
+     Loaded: loaded (/lib/systemd/system/systemd-sysctl.service; static; vendor preset: enabled)
+     Active: failed (Result: exit-code) since Sat 2026-08-08 18:54:58 UTC; 9min ago
+       Docs: man:systemd-sysctl.service(8)
+             man:sysctl.d(5)
+    Process: 252 ExecStart=/lib/systemd/systemd-sysctl (code=exited, status=1/FAILURE)
+   Main PID: 252 (code=exited, status=1/FAILURE)
+        CPU: 6ms
+
+Aug 08 18:54:58 envbox-smoke systemd-sysctl[252]: Not setting net/ipv4/conf/all/promote_secondaries (explicit setting exists).
+Aug 08 18:54:58 envbox-smoke systemd-sysctl[252]: Not setting net/ipv4/conf/default/promote_secondaries (explicit setting exists).
+Aug 08 18:54:58 envbox-smoke systemd-sysctl[252]: Couldn't write 'fq_codel' to 'net/core/default_qdisc': Input/output error
+Aug 08 18:54:58 envbox-smoke systemd[1]: systemd-sysctl.service: Main process exited, code=exited, status=1/FAILURE
+Aug 08 18:54:58 envbox-smoke systemd[1]: systemd-sysctl.service: Failed with result 'exit-code'.
+Aug 08 18:54:58 envbox-smoke systemd[1]: Failed to start Apply Kernel Variables.

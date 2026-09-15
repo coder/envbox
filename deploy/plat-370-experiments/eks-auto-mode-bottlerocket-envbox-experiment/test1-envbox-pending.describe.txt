@@ -1,0 +1,106 @@
+Name:             envbox-smoke
+Namespace:        envbox-auto
+Priority:         0
+Service Account:  default
+Node:             <none>
+Labels:           app.kubernetes.io/name=envbox-smoke
+                  experiment.coder.com/role=workspace
+Annotations:      <none>
+Status:           Pending
+IP:               
+IPs:              <none>
+Init Containers:
+  initialize-workspace-volume:
+    Image:           public.ecr.aws/docker/library/alpine:3.21
+    Port:            <none>
+    Host Port:       <none>
+    SeccompProfile:  RuntimeDefault
+    Command:
+      /bin/sh
+      -ec
+      mkdir -p \
+        /workspace-volume/home \
+        /workspace-volume/cache/docker \
+        /workspace-volume/cache/containers \
+        /workspace-volume/envbox/containers \
+        /workspace-volume/envbox/docker
+      
+    Limits:
+      memory:  64Mi
+    Requests:
+      cpu:        10m
+      memory:     16Mi
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-2j9sp (ro)
+      /workspace-volume from workspace (rw)
+Containers:
+  envbox:
+    Image:           ghcr.io/coder/envbox:0.6.7
+    Port:            <none>
+    Host Port:       <none>
+    SeccompProfile:  Unconfined
+    Command:
+      /envbox
+      docker
+    Limits:
+      cpu:     2
+      memory:  7Gi
+    Requests:
+      cpu:     1
+      memory:  3Gi
+    Environment:
+      CODER_INNER_IMAGE:     us-docker.pkg.dev/coder-v2-images-public/public/envbox/enterprise-base:ubuntu
+      CODER_INNER_USERNAME:  coder
+      CODER_INNER_HOSTNAME:  envbox-smoke
+      CODER_MOUNTS:          /home/coder:/home/coder
+      CODER_CPUS:            1
+      CODER_MEMORY:          4294967296
+      CODER_DEBUG:           true
+    Mounts:
+      /home/coder from workspace (rw,path="home")
+      /lib/modules from lib-modules (ro)
+      /usr/src from usr-src (ro)
+      /var/lib/coder/containers from workspace (rw,path="cache/containers")
+      /var/lib/coder/docker from workspace (rw,path="cache/docker")
+      /var/lib/containers from workspace (rw,path="envbox/containers")
+      /var/lib/docker from workspace (rw,path="envbox/docker")
+      /var/lib/sysbox from sysbox (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-2j9sp (ro)
+Conditions:
+  Type           Status
+  PodScheduled   False 
+Volumes:
+  workspace:
+    Type:       PersistentVolumeClaim (a reference to a PersistentVolumeClaim in the same namespace)
+    ClaimName:  envbox-workspace
+    ReadOnly:   false
+  sysbox:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  usr-src:
+    Type:          HostPath (bare host directory volume)
+    Path:          /usr/src
+    HostPathType:  
+  lib-modules:
+    Type:          HostPath (bare host directory volume)
+    Path:          /lib/modules
+    HostPathType:  
+  kube-api-access-2j9sp:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              experiment.coder.com/envbox-auto=true
+Tolerations:                 experiment.coder.com/envbox-auto=true:NoSchedule
+                             node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason            Age   From                   Message
+  ----     ------            ----  ----                   -------
+  Warning  FailedScheduling  4m5s  default-scheduler      0/2 nodes are available: 2 node(s) had untolerated taint(s). no new claims to deallocate, preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
+  Normal   Nominated         4m4s  eks-auto-mode/compute  Pod should schedule on: nodeclaim/envbox-auto-r28qb
+  Normal   Nominated         114s  eks-auto-mode/compute  Pod should schedule on: nodeclaim/envbox-auto-r28qb, node/i-02e14b4f48a55aba5

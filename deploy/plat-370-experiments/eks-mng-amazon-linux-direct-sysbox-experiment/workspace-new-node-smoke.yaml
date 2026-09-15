@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: direct-sysbox-new-node-smoke
+  namespace: direct-sysbox
+spec:
+  runtimeClassName: sysbox-runc
+  hostUsers: false
+  restartPolicy: Never
+  nodeSelector:
+    kubernetes.io/hostname: ip-192-168-9-179.us-east-2.compute.internal
+  containers:
+    - name: workspace
+      image: registry.nestybox.com/nestybox/ubuntu-focal-systemd-docker@sha256:e451ce586ea5c0224c511d4c87b9aa215173db0d1eac6473d0e4b3b5abe41ba5
+      imagePullPolicy: IfNotPresent
+      command:
+        - /sbin/init
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests:
+          cpu: 100m
+          memory: 1Gi
+        limits:
+          cpu: "1"
+          memory: 3Gi

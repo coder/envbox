@@ -1,0 +1,12 @@
+Defaulted container "envbox" out of: envbox, initialize-workspace-volume (init)
+=== fresh outer Docker storage ===
+TARGET          SOURCE                                 FSTYPE OPTIONS
+/var/lib/docker /dev/nvme2n1[/envbox-cache-hit/docker] ext4   rw,relatime,seclabel
+TARGET              SOURCE                                     FSTYPE OPTIONS
+/var/lib/containers /dev/nvme2n1[/envbox-cache-hit/containers] ext4   rw,relatime,seclabel
+=== workspace mounts ===
+/var/lib/docker
+/var/lib/containers
+/home/coder
+
+passed: cache remains outer-only

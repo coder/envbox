@@ -1,0 +1,139 @@
+Name:             envbox-smoke
+Namespace:        envbox-auto
+Priority:         0
+Service Account:  default
+Node:             i-02e14b4f48a55aba5/192.168.185.0
+Start Time:       Sat, 08 Aug 2026 11:54:16 -0700
+Labels:           app.kubernetes.io/name=envbox-smoke
+                  experiment.coder.com/role=workspace
+                  topology.kubernetes.io/region=us-east-2
+                  topology.kubernetes.io/zone=us-east-2b
+Annotations:      <none>
+Status:           Running
+IP:               192.168.185.160
+IPs:
+  IP:  192.168.185.160
+Init Containers:
+  initialize-workspace-volume:
+    Container ID:    containerd://13ee73bb207f3407e0cd8035b4181f28aaa4b380bb50b3a7be6ec13fc041f391
+    Image:           public.ecr.aws/docker/library/alpine:3.21
+    Image ID:        public.ecr.aws/docker/library/alpine@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+    Port:            <none>
+    Host Port:       <none>
+    SeccompProfile:  RuntimeDefault
+    Command:
+      /bin/sh
+      -ec
+      mkdir -p \
+        /workspace-volume/home \
+        /workspace-volume/cache/docker \
+        /workspace-volume/cache/containers \
+        /workspace-volume/envbox/containers \
+        /workspace-volume/envbox/docker
+      
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Sat, 08 Aug 2026 11:54:26 -0700
+      Finished:     Sat, 08 Aug 2026 11:54:26 -0700
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      memory:  64Mi
+    Requests:
+      cpu:        10m
+      memory:     16Mi
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-2j9sp (ro)
+      /workspace-volume from workspace (rw)
+Containers:
+  envbox:
+    Container ID:    containerd://4ad7832ecef374d8e92c420adb070b6c8fec6ce51993886ed51af99b925c13e4
+    Image:           ghcr.io/coder/envbox:0.6.7
+    Image ID:        ghcr.io/coder/envbox@sha256:93b212e287abeef70a854574dbd0f08df3ad65224f0632d1d5a3f1c0dc87f897
+    Port:            <none>
+    Host Port:       <none>
+    SeccompProfile:  Unconfined
+    Command:
+      /envbox
+      docker
+    State:          Running
+      Started:      Sat, 08 Aug 2026 11:54:31 -0700
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     2
+      memory:  7Gi
+    Requests:
+      cpu:     1
+      memory:  3Gi
+    Environment:
+      CODER_INNER_IMAGE:     us-docker.pkg.dev/coder-v2-images-public/public/envbox/enterprise-base:ubuntu
+      CODER_INNER_USERNAME:  coder
+      CODER_INNER_HOSTNAME:  envbox-smoke
+      CODER_MOUNTS:          /home/coder:/home/coder
+      CODER_CPUS:            1
+      CODER_MEMORY:          4294967296
+      CODER_DEBUG:           true
+    Mounts:
+      /home/coder from workspace (rw,path="home")
+      /lib/modules from lib-modules (ro)
+      /usr/src from usr-src (ro)
+      /var/lib/coder/containers from workspace (rw,path="cache/containers")
+      /var/lib/coder/docker from workspace (rw,path="cache/docker")
+      /var/lib/containers from workspace (rw,path="envbox/containers")
+      /var/lib/docker from workspace (rw,path="envbox/docker")
+      /var/lib/sysbox from sysbox (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-2j9sp (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  workspace:
+    Type:       PersistentVolumeClaim (a reference to a PersistentVolumeClaim in the same namespace)
+    ClaimName:  envbox-workspace
+    ReadOnly:   false
+  sysbox:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  usr-src:
+    Type:          HostPath (bare host directory volume)
+    Path:          /usr/src
+    HostPathType:  
+  lib-modules:
+    Type:          HostPath (bare host directory volume)
+    Path:          /lib/modules
+    HostPathType:  
+  kube-api-access-2j9sp:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              experiment.coder.com/envbox-auto=true
+Tolerations:                 experiment.coder.com/envbox-auto=true:NoSchedule
+                             node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason                  Age                    From                     Message
+  ----     ------                  ----                   ----                     -------
+  Warning  FailedScheduling        6m52s                  default-scheduler        0/2 nodes are available: 2 node(s) had untolerated taint(s). no new claims to deallocate, preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
+  Normal   Nominated               6m51s                  eks-auto-mode/compute    Pod should schedule on: nodeclaim/envbox-auto-r28qb
+  Normal   Nominated               2m41s (x2 over 4m41s)  eks-auto-mode/compute    Pod should schedule on: nodeclaim/envbox-auto-r28qb, node/i-02e14b4f48a55aba5
+  Normal   Scheduled               119s                   default-scheduler        Successfully assigned envbox-auto/envbox-smoke to i-02e14b4f48a55aba5
+  Normal   SuccessfulAttachVolume  117s                   attachdetach-controller  AttachVolume.Attach succeeded for volume "pvc-f8427c44-1a99-45af-aed2-5c1a515fe16a"
+  Normal   Pulling                 110s                   kubelet                  spec.initContainers{initialize-workspace-volume}: Pulling image "public.ecr.aws/docker/library/alpine:3.21"
+  Normal   Pulled                  109s                   kubelet                  spec.initContainers{initialize-workspace-volume}: Successfully pulled image "public.ecr.aws/docker/library/alpine:3.21" in 803ms (803ms including waiting). Image size: 3657726 bytes.
+  Normal   Created                 109s                   kubelet                  spec.initContainers{initialize-workspace-volume}: Container created
+  Normal   Started                 109s                   kubelet                  spec.initContainers{initialize-workspace-volume}: Container started
+  Normal   Pulling                 108s                   kubelet                  spec.containers{envbox}: Pulling image "ghcr.io/coder/envbox:0.6.7"
+  Normal   Pulled                  104s                   kubelet                  spec.containers{envbox}: Successfully pulled image "ghcr.io/coder/envbox:0.6.7" in 3.763s (3.763s including waiting). Image size: 206426841 bytes.
+  Normal   Created                 104s                   kubelet                  spec.containers{envbox}: Container created
+  Normal   Started                 104s                   kubelet                  spec.containers{envbox}: Container started

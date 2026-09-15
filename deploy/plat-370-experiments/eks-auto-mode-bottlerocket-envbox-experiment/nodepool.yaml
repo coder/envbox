@@ -1,0 +1,40 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: envbox-auto
+spec:
+  limits:
+    nodes: 1
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 30m
+  template:
+    metadata:
+      labels:
+        experiment.coder.com/envbox-auto: "true"
+    spec:
+      nodeClassRef:
+        group: eks.amazonaws.com
+        kind: NodeClass
+        name: default
+      taints:
+        - key: experiment.coder.com/envbox-auto
+          value: "true"
+          effect: NoSchedule
+      startupTaints:
+        - key: experiment.coder.com/envbox-prep
+          value: required
+          effect: NoSchedule
+      requirements:
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: [m6i.large]
+        - key: kubernetes.io/os
+          operator: In
+          values: [linux]
+        - key: kubernetes.io/arch
+          operator: In
+          values: [amd64]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [on-demand]

@@ -1,0 +1,39 @@
+2026-08-08 22:57:41 [ℹ]  deleting EKS cluster "userns-rootful-dind-mng-136"
+2026-08-08 22:57:41 [ℹ]  will drain 0 unmanaged nodegroup(s) in cluster "userns-rootful-dind-mng-136"
+2026-08-08 22:57:41 [ℹ]  starting parallel draining, max in-flight of 1
+2026-08-08 22:57:42 [ℹ]  deleted 0 Fargate profile(s)
+2026-08-08 22:57:43 [✔]  kubeconfig has been updated
+2026-08-08 22:57:43 [ℹ]  cleaning up AWS load balancers created by Kubernetes objects of Kind Service, Ingress, or Gateway
+2026-08-08 22:57:45 [ℹ]  
+2 sequential tasks: { 
+    2 parallel sub-tasks: { 
+        delete nodegroup "userns-dind-cgroup-writable",
+        delete nodegroup "userns-dind",
+    }, delete cluster control plane "userns-rootful-dind-mng-136" 
+}
+2026-08-08 22:57:45 [ℹ]  will delete stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind-cgroup-writable"
+2026-08-08 22:57:45 [ℹ]  waiting for stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind-cgroup-writable" to get deleted
+2026-08-08 22:57:45 [ℹ]  will delete stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind"
+2026-08-08 22:57:45 [ℹ]  waiting for stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind" to get deleted
+2026-08-08 22:57:45 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind-cgroup-writable"
+2026-08-08 22:57:45 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind"
+2026-08-08 22:58:15 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind-cgroup-writable"
+2026-08-08 22:58:16 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind"
+2026-08-08 22:58:47 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind"
+2026-08-08 22:59:07 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind-cgroup-writable"
+2026-08-08 22:59:39 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind"
+2026-08-08 23:00:28 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind-cgroup-writable"
+2026-08-08 23:01:02 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind"
+2026-08-08 23:01:07 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind-cgroup-writable"
+2026-08-08 23:02:41 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind-cgroup-writable"
+2026-08-08 23:02:51 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind"
+2026-08-08 23:04:03 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind"
+2026-08-08 23:04:34 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind"
+2026-08-08 23:06:21 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind"
+2026-08-08 23:07:09 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-nodegroup-userns-dind"
+2026-08-08 23:07:09 [ℹ]  will delete stack "eksctl-userns-rootful-dind-mng-136-cluster"
+2026-08-08 23:07:09 [ℹ]  waiting for stack "eksctl-userns-rootful-dind-mng-136-cluster" to get deleted
+2026-08-08 23:07:10 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-cluster"
+2026-08-08 23:07:40 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-cluster"
+2026-08-08 23:08:34 [ℹ]  waiting for CloudFormation stack "eksctl-userns-rootful-dind-mng-136-cluster"
+2026-08-08 23:08:34 [✔]  all cluster resources were deleted

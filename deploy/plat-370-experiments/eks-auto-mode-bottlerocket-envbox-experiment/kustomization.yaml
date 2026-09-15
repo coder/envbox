@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - envbox-smoke-cache-prototype.yaml
+patches:
+  - target:
+      version: v1
+      kind: Pod
+      name: envbox-smoke
+    patch: |-
+      - op: add
+        path: /spec/hostAliases
+        value:
+          - ip: 127.0.0.1
+            hostnames:
+              - us-docker.pkg.dev
+      - op: replace
+        path: /spec/initContainers/0/command/2
+        value: |-
+          mkdir -p \
+            /workspace-volume/home \
+            /workspace-volume/cache/docker \
+            /workspace-volume/cache/containers \
+            /workspace-volume/envbox-cache-hit-2/containers \
+            /workspace-volume/envbox-cache-hit-2/docker
+      - op: replace
+        path: /spec/containers/0/volumeMounts/4/subPath
+        value: envbox-cache-hit-2/containers
+      - op: replace
+        path: /spec/containers/0/volumeMounts/5/subPath
+        value: envbox-cache-hit-2/docker

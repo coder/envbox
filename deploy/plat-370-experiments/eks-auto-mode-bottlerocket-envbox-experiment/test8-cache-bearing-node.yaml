@@ -1,0 +1,197 @@
+apiVersion: v1
+kind: Node
+metadata:
+  annotations:
+    alpha.kubernetes.io/provided-node-ip: 192.168.178.22
+    csi.volume.kubernetes.io/nodeid: '{"ebs.csi.eks.amazonaws.com":"i-05d37f1a80c65f2ec"}'
+    eks.amazonaws.com/ca-bundle-hash: "15519746975026040848"
+    eks.amazonaws.com/kubelet-version: "1.36"
+    eks.amazonaws.com/nodeclass-hash: "12967334377599694165"
+    eks.amazonaws.com/nodeclass-hash-version: v2
+    karpenter.sh/nodeclaim-min-values-relaxed: "false"
+    karpenter.sh/nodepool-hash: "13760854746316201980"
+    karpenter.sh/nodepool-hash-version: v3
+    node.alpha.kubernetes.io/ttl: "0"
+    volumes.kubernetes.io/controller-managed-attach-detach: "true"
+  creationTimestamp: "2026-08-08T19:33:52Z"
+  finalizers:
+  - karpenter.sh/termination
+  labels:
+    app.kubernetes.io/managed-by: eks
+    beta.kubernetes.io/arch: amd64
+    beta.kubernetes.io/instance-type: m6i.large
+    beta.kubernetes.io/os: linux
+    eks.amazonaws.com/compute-type: auto
+    eks.amazonaws.com/instance-capability-flex: "false"
+    eks.amazonaws.com/instance-category: m
+    eks.amazonaws.com/instance-cpu: "2"
+    eks.amazonaws.com/instance-cpu-manufacturer: intel
+    eks.amazonaws.com/instance-cpu-sustained-clock-speed-mhz: "3500"
+    eks.amazonaws.com/instance-ebs-bandwidth: "10000"
+    eks.amazonaws.com/instance-encryption-in-transit-supported: "true"
+    eks.amazonaws.com/instance-family: m6i
+    eks.amazonaws.com/instance-generation: "6"
+    eks.amazonaws.com/instance-hypervisor: nitro
+    eks.amazonaws.com/instance-memory: "8192"
+    eks.amazonaws.com/instance-network-bandwidth: "781"
+    eks.amazonaws.com/instance-size: large
+    eks.amazonaws.com/nitro-sandbox: "false"
+    eks.amazonaws.com/nodeclass: default
+    experiment.coder.com/envbox-auto: "true"
+    experiment.coder.com/envbox-ready: "true"
+    failure-domain.beta.kubernetes.io/region: us-east-2
+    failure-domain.beta.kubernetes.io/zone: us-east-2b
+    k8s.io/cloud-provider-aws: 8f873d52351b026e95857aca64af0940
+    karpenter.k8s.aws/instance-tenancy: default
+    karpenter.sh/capacity-type: on-demand
+    karpenter.sh/do-not-sync-taints: "true"
+    karpenter.sh/initialized: "true"
+    karpenter.sh/nodepool: envbox-auto
+    karpenter.sh/registered: "true"
+    kubernetes.io/arch: amd64
+    kubernetes.io/hostname: i-05d37f1a80c65f2ec
+    kubernetes.io/os: linux
+    node.kubernetes.io/instance-type: m6i.large
+    topology.ebs.csi.eks.amazonaws.com/zone: us-east-2b
+    topology.k8s.aws/zone-id: use2-az2
+    topology.kubernetes.io/region: us-east-2
+    topology.kubernetes.io/zone: us-east-2b
+  name: i-05d37f1a80c65f2ec
+  ownerReferences:
+  - apiVersion: karpenter.sh/v1
+    blockOwnerDeletion: true
+    kind: NodeClaim
+    name: envbox-auto-s54mw
+    uid: 059e1daa-2a23-4db6-ae02-95fecea8dacf
+  resourceVersion: "43955"
+  uid: fef6e380-0c96-40ed-ada7-ff7fe207d983
+spec:
+  providerID: aws:///us-east-2b/i-05d37f1a80c65f2ec
+  taints:
+  - effect: NoSchedule
+    key: experiment.coder.com/envbox-auto
+    value: "true"
+status:
+  addresses:
+  - address: 192.168.178.22
+    type: InternalIP
+  - address: ip-192-168-178-22.us-east-2.compute.internal
+    type: InternalDNS
+  - address: ip-192-168-178-22.us-east-2.compute.internal
+    type: Hostname
+  allocatable:
+    cpu: 1780m
+    ephemeral-storage: "76173383962"
+    hugepages-1Gi: "0"
+    hugepages-2Mi: "0"
+    memory: 7219620Ki
+    pods: "27"
+  capacity:
+    cpu: "2"
+    ephemeral-storage: 81854Mi
+    hugepages-1Gi: "0"
+    hugepages-2Mi: "0"
+    memory: 7964068Ki
+    pods: "27"
+  conditions:
+  - lastHeartbeatTime: "2026-08-08T19:54:04Z"
+    lastTransitionTime: "2026-08-08T19:33:52Z"
+    message: kubelet has sufficient memory available
+    reason: KubeletHasSufficientMemory
+    status: "False"
+    type: MemoryPressure
+  - lastHeartbeatTime: "2026-08-08T19:54:04Z"
+    lastTransitionTime: "2026-08-08T19:33:52Z"
+    message: kubelet has no disk pressure
+    reason: KubeletHasNoDiskPressure
+    status: "False"
+    type: DiskPressure
+  - lastHeartbeatTime: "2026-08-08T19:54:04Z"
+    lastTransitionTime: "2026-08-08T19:33:52Z"
+    message: kubelet has sufficient PID available
+    reason: KubeletHasSufficientPID
+    status: "False"
+    type: PIDPressure
+  - lastHeartbeatTime: "2026-08-08T19:54:04Z"
+    lastTransitionTime: "2026-08-08T19:33:54Z"
+    message: kubelet is posting ready status
+    reason: KubeletReady
+    status: "True"
+    type: Ready
+  - lastHeartbeatTime: "2026-08-08T19:53:53Z"
+    lastTransitionTime: "2026-08-08T19:33:53Z"
+    message: Monitoring for the Kernel system is active
+    reason: KernelIsReady
+    status: "True"
+    type: KernelReady
+  - lastHeartbeatTime: "2026-08-08T19:53:53Z"
+    lastTransitionTime: "2026-08-08T19:33:53Z"
+    message: Monitoring for the Disk system is active
+    reason: DiskIsReady
+    status: "True"
+    type: StorageReady
+  - lastHeartbeatTime: "2026-08-08T19:53:53Z"
+    lastTransitionTime: "2026-08-08T19:33:53Z"
+    message: Monitoring for the ContainerRuntime system is active
+    reason: ContainerRuntimeIsReady
+    status: "True"
+    type: ContainerRuntimeReady
+  - lastHeartbeatTime: "2026-08-08T19:53:53Z"
+    lastTransitionTime: "2026-08-08T19:33:53Z"
+    message: Monitoring for the Networking system is active
+    reason: NetworkingIsReady
+    status: "True"
+    type: NetworkingReady
+  daemonEndpoints:
+    kubeletEndpoint:
+      Port: 10250
+  declaredFeatures:
+  - ExtendWebSocketsToKubelet
+  - InPlacePodLevelResourcesVerticalScaling
+  - InPlacePodVerticalScalingInitContainers
+  - RestartAllContainersOnContainerExits
+  features:
+    supplementalGroupsPolicy: true
+  images:
+  - names:
+    - ghcr.io/coder/envbox@sha256:93b212e287abeef70a854574dbd0f08df3ad65224f0632d1d5a3f1c0dc87f897
+    - ghcr.io/coder/envbox:0.6.7
+    sizeBytes: 206426841
+  - names:
+    - public.ecr.aws/docker/library/golang@sha256:8bee1901f1e530bfb4a7850aa7a479d17ae3a18beb6e09064ed54cfd245b7191
+    - public.ecr.aws/docker/library/golang:1.24-alpine
+    sizeBytes: 83301112
+  - names:
+    - public.ecr.aws/docker/library/alpine@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+    - public.ecr.aws/docker/library/alpine:3.21
+    sizeBytes: 3657726
+  - names:
+    - localhost/kubernetes/pause:0.1.0
+    sizeBytes: 92951
+  nodeInfo:
+    architecture: amd64
+    bootID: 5a4e8c6e-0a74-45b2-94c7-d996573decbf
+    containerRuntimeVersion: containerd://2.2.5+bottlerocket
+    kernelVersion: 6.18.38
+    kubeProxyVersion: ""
+    kubeletVersion: v1.36.1-eks-a3a0722
+    machineID: ec241f109071c7d68d2914c821d804a8
+    operatingSystem: linux
+    osImage: Bottlerocket (EKS Auto, Standard) 2026.8.3 (aws-k8s-1.36-standard)
+    swap:
+      capacity: 1073737728
+    systemUUID: ec241f10-9071-c7d6-8d29-14c821d804a8
+  runtimeHandlers:
+  - features:
+      recursiveReadOnlyMounts: true
+      userNamespaces: true
+    name: ""
+  - features:
+      recursiveReadOnlyMounts: true
+      userNamespaces: true
+    name: runc
+  volumesAttached:
+  - devicePath: ""
+    name: kubernetes.io/csi/ebs.csi.eks.amazonaws.com^vol-0059d15849a820d06
+  volumesInUse:
+  - kubernetes.io/csi/ebs.csi.eks.amazonaws.com^vol-0059d15849a820d06

@@ -1,0 +1,37 @@
+++ mktemp -d
++ tmpdir=/tmp/tmp.gow6GPMyMM
++ printf '%s\n' 'FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d' 'RUN id && echo restricted-buildkit-ok >/result'
++ DOCKER_BUILDKIT=1
++ docker build -t restricted-buildkit:1 /tmp/tmp.gow6GPMyMM
+#1 [internal] load build definition from Dockerfile
+#1 sha256:298e59d781d3f7bc1bb10c1ea360ac224d1f47279803b33e63fced69531181aa
+#1 transferring dockerfile: 228B done
+#1 DONE 0.0s
+
+#2 [internal] load .dockerignore
+#2 sha256:977371bce5c673ca79eb47e44cb7e4952ef2a1599669b66089cdb73d289c9aa1
+#2 transferring context: 2B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+#3 sha256:bf4c0da9a5b4a37953145ceea47b78145db8eed0514f82de11acd1e4ac3b4225
+#3 DONE 0.0s
+
+#5 [1/2] FROM docker.io/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+#5 sha256:8c489457673183b916c6823f641692034da3f64690342419b6ddd666a494ab4f
+#5 DONE 0.0s
+
+#4 [2/2] RUN id && echo restricted-buildkit-ok >/result
+#4 sha256:412347587a3f39781d2d52f91fc327011047d15dea7e6affd697b700a3e8c9c8
+#4 0.267 uid=0(root) gid=0(root)
+#4 DONE 0.3s
+
+#6 exporting to image
+#6 sha256:e8c613e07b0b7ff33893b694f7759a10d42e180f2b4dc349fb57dc6b71dcab00
+#6 exporting layers
+#6 exporting layers 1.0s done
+#6 writing image sha256:ca39d6e49924aa9e5fed799ecbf2c66a68ee1711d9a9d7402985997c8c01a3a6 done
+#6 naming to docker.io/library/restricted-buildkit:1 done
+#6 DONE 1.0s
++ docker run --rm restricted-buildkit:1 cat /result
+restricted-buildkit-ok

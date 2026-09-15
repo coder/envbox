@@ -1,0 +1,31 @@
++ echo '--- identity and user namespace ---'
+--- identity and user namespace ---
++ id
+uid=0(root) gid=0(root) groups=0(root),1(bin),2(daemon),3(sys),4(adm),6(disk),10(wheel),11(floppy),20(dialout),26(tape),27(video)
++ cat /proc/self/uid_map
+         0 2573860864      65536
++ cat /proc/self/gid_map
+         0 2573860864      65536
++ echo '--- cgroup membership and mount ---'
++ cat /proc/self/cgroup
+--- cgroup membership and mount ---
+0::/
++ mount
++ grep -E 'cgroup|/sys/fs/cgroup'
+cgroup on /sys/fs/cgroup type cgroup2 (ro,seclabel,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot)
+--- cgroup metadata ---
++ echo '--- cgroup metadata ---'
++ ls -ldn /sys/fs/cgroup
+drwxr-xr-x    2 65534    65534            0 Aug  6 23:11 /sys/fs/cgroup
++ cat /sys/fs/cgroup/cgroup.type
+domain
++ cat /sys/fs/cgroup/cgroup.controllers
++ cat /sys/fs/cgroup/cgroup.subtree_control
+cpuset cpu io memory hugetlb pids misc
+--- child-cgroup creation ---
++ echo '--- child-cgroup creation ---'
++ mkdir /sys/fs/cgroup/userns-dind-write-probe
+mkdir: can't create directory '/sys/fs/cgroup/userns-dind-write-probe': Read-only file system
++ echo 'cgroup-writable=no'
+cgroup-writable=no
++ sleep 600

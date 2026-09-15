@@ -1,0 +1,12 @@
+2026-08-08T21:01:51.142825837Z === before unshare ===
+2026-08-08T21:01:51.143541984Z cgroup namespace: cgroup:[4026531835]
+2026-08-08T21:01:51.143599474Z cgroup membership:
+2026-08-08T21:01:51.144080434Z 0::/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod847a0b8b_85bc_467b_a932_13bfc1a28c38.slice/cri-containerd-08d6fb5c460d7c432c0ce5ee148e7ea7ad5455f72319dfde98c8658d711a868d.scope
+2026-08-08T21:01:51.144178318Z mountinfo entries at /sys/fs/cgroup:
+2026-08-08T21:01:51.144787566Z 1106 1104 0:27 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime - cgroup2 cgroup rw,seclabel,nsdelegate,memory_recursiveprot
+2026-08-08T21:01:51.144998333Z current wrapper selection:
+2026-08-08T21:01:51.145949781Z id=1106 root=/
+2026-08-08T21:01:51.146020293Z findmnt:
+2026-08-08T21:01:51.147633575Z TARGET         SOURCE FSTYPE  OPTIONS
+2026-08-08T21:01:51.147642969Z /sys/fs/cgroup cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate,memory_recursiveprot
+2026-08-08T21:01:51.147996216Z === after unshare --cgroup ===

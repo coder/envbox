@@ -1,0 +1,21 @@
+[pod/envbox-node-prep-9gxrq/prep] node=i-05d37f1a80c65f2ec path=/host-sysctl/max_user_namespaces before=65535 target=65535
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_user_namespaces value=65535
+[pod/envbox-node-prep-9gxrq/prep] node=i-05d37f1a80c65f2ec path=/host-sysctl/max_pid_namespaces before=20000 target=20000
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_pid_namespaces value=20000
+[pod/envbox-node-prep-9gxrq/prep] node=i-05d37f1a80c65f2ec path=/host-sysctl/max_mnt_namespaces before=20000 target=20000
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_mnt_namespaces value=20000
+[pod/envbox-node-prep-9gxrq/prep] node=i-05d37f1a80c65f2ec path=/host-sysctl/max_user_watches before=1048576 target=1048576
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_user_watches value=1048576
+[pod/envbox-node-prep-9gxrq/prep] node=i-05d37f1a80c65f2ec path=/host-sysctl/max_user_instances before=8192 target=8192
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_user_instances value=8192
+[pod/envbox-node-prep-9gxrq/prep] verified all sysctls; labeled node ready and removed experiment.coder.com/envbox-prep
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_user_namespaces value=65535
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_pid_namespaces value=20000
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_mnt_namespaces value=20000
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_user_watches value=1048576
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_user_instances value=8192
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_user_namespaces value=65535
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_pid_namespaces value=20000
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_mnt_namespaces value=20000
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_user_watches value=1048576
+[pod/envbox-node-prep-9gxrq/prep] verified path=/host-sysctl/max_user_instances value=8192

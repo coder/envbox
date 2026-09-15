@@ -1,0 +1,302 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: envbox-node-prep
+  namespace: envbox-auto
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: envbox-node-prep-experiment
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: envbox-node-prep-experiment
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: envbox-node-prep-experiment
+subjects:
+  - kind: ServiceAccount
+    name: envbox-node-prep
+    namespace: envbox-auto
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envbox-node-prep-source
+  namespace: envbox-auto
+data:
+  main.go: |
+    package main
+
+    import (
+      "bytes"
+      "crypto/tls"
+      "crypto/x509"
+      "encoding/json"
+      "fmt"
+      "io"
+      "net/http"
+      "os"
+      "strings"
+      "time"
+    )
+
+    const startupTaintKey = "experiment.coder.com/envbox-prep"
+
+    type setting struct {
+      path string
+      want string
+    }
+
+    var settings = []setting{
+      {"/host-sysctl/max_user_namespaces", "65535"},
+      {"/host-sysctl/max_pid_namespaces", "20000"},
+      {"/host-sysctl/max_mnt_namespaces", "20000"},
+      {"/host-sysctl/max_user_watches", "1048576"},
+      {"/host-sysctl/max_user_instances", "8192"},
+    }
+
+    type taint struct {
+      Key       string  `json:"key"`
+      Value     string  `json:"value,omitempty"`
+      Effect    string  `json:"effect"`
+      TimeAdded *string `json:"timeAdded,omitempty"`
+    }
+
+    type node struct {
+      Spec struct {
+        Taints []taint `json:"taints,omitempty"`
+      } `json:"spec"`
+    }
+
+    func main() {
+      nodeName := mustEnv("NODE_NAME")
+
+      for _, item := range settings {
+        before := strings.TrimSpace(readFile(item.path))
+        fmt.Printf("node=%s path=%s before=%s target=%s\n", nodeName, item.path, before, item.want)
+        must(os.WriteFile(item.path, []byte(item.want+"\n"), 0o644))
+        verify(item)
+      }
+
+      if os.Getenv("EXPERIMENT_FAIL_BEFORE_UNTAINT") == "true" {
+        fmt.Printf("negative control active: verified all sysctls but intentionally retaining %s\n", startupTaintKey)
+        monitor()
+      }
+
+      client := kubernetesClient()
+      current := getNode(client, nodeName)
+      filtered := make([]taint, 0, len(current.Spec.Taints))
+      found := false
+      for _, item := range current.Spec.Taints {
+        if item.Key == startupTaintKey {
+          found = true
+          continue
+        }
+        filtered = append(filtered, item)
+      }
+      if !found {
+        panic("startup taint was not present; refusing to publish readiness")
+      }
+
+      patch := []map[string]any{
+        {"op": "test", "path": "/spec/taints", "value": current.Spec.Taints},
+        {"op": "replace", "path": "/spec/taints", "value": filtered},
+        {"op": "add", "path": "/metadata/labels/experiment.coder.com~1envbox-ready", "value": "true"},
+      }
+      patchNode(client, nodeName, patch)
+      fmt.Printf("verified all sysctls; labeled node ready and removed %s\n", startupTaintKey)
+      must(os.WriteFile("/tmp/envbox-prep-ready", []byte("ready\n"), 0o644))
+      monitor()
+    }
+
+    func verify(item setting) {
+      got := strings.TrimSpace(readFile(item.path))
+      if got != item.want {
+        panic(fmt.Sprintf("sysctl verification failed for %s: got %q, want %q", item.path, got, item.want))
+      }
+      fmt.Printf("verified path=%s value=%s\n", item.path, got)
+    }
+
+    func monitor() {
+      for {
+        time.Sleep(30 * time.Second)
+        for _, item := range settings {
+          verify(item)
+        }
+      }
+    }
+
+    func kubernetesClient() *http.Client {
+      ca, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+      must(err)
+      pool, err := x509.SystemCertPool()
+      if err != nil || pool == nil {
+        pool = x509.NewCertPool()
+      }
+      if !pool.AppendCertsFromPEM(ca) {
+        panic("append Kubernetes CA certificate")
+      }
+      return &http.Client{
+        Timeout: 30 * time.Second,
+        Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}},
+      }
+    }
+
+    func getNode(client *http.Client, name string) node {
+      var result node
+      request(client, http.MethodGet, "/api/v1/nodes/"+name, nil, "", &result)
+      return result
+    }
+
+    func patchNode(client *http.Client, name string, patch any) {
+      body, err := json.Marshal(patch)
+      must(err)
+      request(client, http.MethodPatch, "/api/v1/nodes/"+name, body, "application/json-patch+json", nil)
+    }
+
+    func request(client *http.Client, method, path string, body []byte, contentType string, out any) {
+      host := mustEnv("KUBERNETES_SERVICE_HOST")
+      port := mustEnv("KUBERNETES_SERVICE_PORT_HTTPS")
+      token := strings.TrimSpace(readFile("/var/run/secrets/kubernetes.io/serviceaccount/token"))
+      req, err := http.NewRequest(method, "https://"+host+":"+port+path, bytes.NewReader(body))
+      must(err)
+      req.Header.Set("Authorization", "Bearer "+token)
+      if contentType != "" {
+        req.Header.Set("Content-Type", contentType)
+      }
+      response, err := client.Do(req)
+      must(err)
+      defer response.Body.Close()
+      responseBody, err := io.ReadAll(response.Body)
+      must(err)
+      if response.StatusCode < 200 || response.StatusCode >= 300 {
+        panic(fmt.Sprintf("Kubernetes API %s %s: %s: %s", method, path, response.Status, responseBody))
+      }
+      if out != nil {
+        must(json.Unmarshal(responseBody, out))
+      }
+    }
+
+    func mustEnv(name string) string {
+      value := os.Getenv(name)
+      if value == "" {
+        panic("missing environment variable " + name)
+      }
+      return value
+    }
+
+    func readFile(path string) string {
+      value, err := os.ReadFile(path)
+      must(err)
+      return string(value)
+    }
+
+    func must(err error) {
+      if err != nil {
+        panic(err)
+      }
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: envbox-node-prep
+  namespace: envbox-auto
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: envbox-node-prep
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: envbox-node-prep
+    spec:
+      serviceAccountName: envbox-node-prep
+      hostUsers: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        experiment.coder.com/envbox-auto: "true"
+      tolerations:
+        - key: experiment.coder.com/envbox-auto
+          value: "true"
+          effect: NoSchedule
+        - key: experiment.coder.com/envbox-prep
+          value: required
+          effect: NoSchedule
+      containers:
+        - name: prep
+          image: public.ecr.aws/docker/library/golang:1.24-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["go", "run", "/source/main.go"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: EXPERIMENT_FAIL_BEFORE_UNTAINT
+              value: "true"
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            privileged: true
+            allowPrivilegeEscalation: true
+            seccompProfile:
+              type: Unconfined
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["test", "-f", "/tmp/envbox-prep-ready"]
+            periodSeconds: 2
+            failureThreshold: 30
+          volumeMounts:
+            - name: source
+              mountPath: /source
+              readOnly: true
+            - name: max-user-namespaces
+              mountPath: /host-sysctl/max_user_namespaces
+            - name: max-pid-namespaces
+              mountPath: /host-sysctl/max_pid_namespaces
+            - name: max-mnt-namespaces
+              mountPath: /host-sysctl/max_mnt_namespaces
+            - name: max-user-watches
+              mountPath: /host-sysctl/max_user_watches
+            - name: max-user-instances
+              mountPath: /host-sysctl/max_user_instances
+      volumes:
+        - name: source
+          configMap:
+            name: envbox-node-prep-source
+        - name: max-user-namespaces
+          hostPath:
+            path: /proc/sys/user/max_user_namespaces
+            type: File
+        - name: max-pid-namespaces
+          hostPath:
+            path: /proc/sys/user/max_pid_namespaces
+            type: File
+        - name: max-mnt-namespaces
+          hostPath:
+            path: /proc/sys/user/max_mnt_namespaces
+            type: File
+        - name: max-user-watches
+          hostPath:
+            path: /proc/sys/fs/inotify/max_user_watches
+            type: File
+        - name: max-user-instances
+          hostPath:
+            path: /proc/sys/fs/inotify/max_user_instances
+            type: File
