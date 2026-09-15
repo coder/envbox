@@ -544,8 +544,8 @@ github.com/illarion/gonotify v1.0.1 h1:F1d+0Fgbq/sDWjj/r66ekjDG+IDeecQKUFH4wNwso
 github.com/illarion/gonotify v1.0.1/go.mod h1:zt5pmDofZpU1f8aqlK0+95eQhoEAn/d4G4B/FjVW4jE=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
-github.com/insomniacslk/dhcp v0.0.0-20231206064809-8c70d406f6d2 h1:9K06NfxkBh25x56yVhWWlKFE8YpicaSfHwoV8SFbueA=
-github.com/insomniacslk/dhcp v0.0.0-20231206064809-8c70d406f6d2/go.mod h1:3A9PQ1cunSDF/1rbTq99Ts4pVnycWg+vlPkfeD2NLFI=
+github.com/insomniacslk/dhcp v0.0.0-20260719225207-c76316d4aa82 h1:y5aU8Uvl7eyM5WNgdQvRxbMJb+zo7pD+S72/Yo4pvnQ=
+github.com/insomniacslk/dhcp v0.0.0-20260719225207-c76316d4aa82/go.mod h1:qfvBmyDNp+/liLEYWRvqny/PEz9hGe2Dz833eXILSmo=
 github.com/invopop/jsonschema v0.14.0 h1:MHQqLhvpNUZfw+hM3AZDYK7jxO8FZoQeQM77g8iyZjg=
 github.com/invopop/jsonschema v0.14.0/go.mod h1:ygm6C2EaVNMBDPpaPlnOA2pFAxBnxGjFlMZABxm9n2I=
 github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 h1:BQSFePA1RWJOlocH6Fxy8MmwDt+yVQYULKfN0RoTN8A=
