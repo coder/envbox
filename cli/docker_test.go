@@ -197,16 +197,41 @@ if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
 	# When mounts are stacked at /sys/fs/cgroup, the visible mount is the
 	# one whose ID is not another same-location mount's parent (see
 	# proc_pid_mountinfo(5)).
-	cgroup_mount_root=$(awk '
-		$5 == "/sys/fs/cgroup" { root[$1] = $4; isparent[$2] = 1 }
-		END { for (id in root) if (!(id in isparent)) print root[id] }
-	' /proc/self/mountinfo)
-	if [ "$cgroup_mount_root" != "/" ]; then
+	get_cgroup_mount_root() {
+		awk '
+			$5 == "/sys/fs/cgroup" { root[$1] = $4; isparent[$2] = 1 }
+			END { for (id in root) if (!(id in isparent)) print root[id] }
+		' /proc/self/mountinfo
+	}
+	if [ "$(get_cgroup_mount_root)" != "/" ]; then
 		# Remount /sys/fs/cgroup so the new cgroup namespace's view becomes the
 		# fs root; inner container cgroups end up under the envbox container's
-		# cgroup on the host.
-		umount /sys/fs/cgroup || { echo "envbox: failed to umount /sys/fs/cgroup" >&2; exit 1; }
+		# cgroup on the host. A regular unmount can fail with EBUSY on runtimes
+		# that retain references to the inherited mount. A lazy detach keeps
+		# retained references valid while freeing the mount point for a correctly
+		# rooted replacement.
+		# If neither unmount method can detach the inherited mount, re-enter the
+		# parent cgroup namespace before starting dockerd. This keeps the namespace
+		# and mount aligned, preserving workspace functionality at the cost of
+		# potentially incorrect inner container cgroup attribution.
+		if ! umount /sys/fs/cgroup; then
+			echo "envbox: normal umount of /sys/fs/cgroup failed; trying lazy detach" >&2
+			if ! umount -l /sys/fs/cgroup; then
+				echo "envbox: failed to detach /sys/fs/cgroup; falling back to the original cgroup namespace (inner container cgroup attribution may be incorrect)" >&2
+				# exec replaces this shell, so the remount and nesting setup below
+				# are not run.
+				exec nsenter --target "$PPID" --cgroup -- "$0" "$@"
+			fi
+		fi
 		mount -t cgroup2 cgroup /sys/fs/cgroup || { echo "envbox: failed to mount cgroup2 on /sys/fs/cgroup" >&2; exit 1; }
+		cgroup_mount_root=$(get_cgroup_mount_root)
+		if [ "$cgroup_mount_root" != "/" ]; then
+			# The inherited mount is already detached, so re-entering the parent
+			# cgroup namespace would not restore the original namespace/mount
+			# alignment.
+			echo "envbox: cgroup2 mount root is '$cgroup_mount_root' after remount" >&2
+			exit 1
+		fi
 	fi
 
 	# move the processes from the root group to the /init group,
@@ -830,17 +855,23 @@ func TestWrapDockerdCmd(t *testing.T) {
 	//    reference it as a variable)
 	//  - guard the v2-only block on cgroup.controllers existing
 	//  - only remount when /sys/fs/cgroup is still rooted at a nested path
-	//  - delegate via /init + subtree_control
+	//  - delegate via /init + subtree_control only after establishing the
+	//    correct cgroup mount root
 	//  - bound the retry loop against envbox_max_attempts
 	//  - exec into dockerd
 	script := args[3]
 	require.Contains(t, script, fmt.Sprintf("envbox_max_attempts=%d", cli.DockerdSubtreeControlMaxAttempts))
 	require.Contains(t, script, "[ -f /sys/fs/cgroup/cgroup.controllers ]")
+	require.Contains(t, script, `get_cgroup_mount_root() {`)
 	require.Contains(t, script, `$5 == "/sys/fs/cgroup" { root[$1] = $4; isparent[$2] = 1 }`)
 	require.Contains(t, script, `END { for (id in root) if (!(id in isparent)) print root[id] }`)
-	require.Contains(t, script, `if [ "$cgroup_mount_root" != "/" ]; then`)
-	require.Contains(t, script, "umount /sys/fs/cgroup")
+	require.Contains(t, script, `if [ "$(get_cgroup_mount_root)" != "/" ]; then`)
+	require.Contains(t, script, "if ! umount /sys/fs/cgroup")
+	require.Contains(t, script, "umount -l /sys/fs/cgroup")
+	require.Contains(t, script, "falling back to the original cgroup namespace")
+	require.Contains(t, script, `exec nsenter --target "$PPID" --cgroup -- "$0" "$@"`)
 	require.Contains(t, script, "mount -t cgroup2 cgroup /sys/fs/cgroup")
+	require.Contains(t, script, "inner container cgroup attribution may be incorrect")
 	require.Contains(t, script, "mkdir -p /sys/fs/cgroup/init")
 	require.Contains(t, script, "/sys/fs/cgroup/cgroup.subtree_control")
 	require.Contains(t, script, `ge "$envbox_max_attempts" ]`)
