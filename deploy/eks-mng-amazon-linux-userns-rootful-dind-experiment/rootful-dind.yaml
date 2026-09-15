@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rootful-dind
+  namespace: userns-rootful-dind
+spec:
+  hostUsers: false
+  restartPolicy: Never
+  nodeSelector:
+    experiment.coder.com/userns-dind: "true"
+  containers:
+    - name: workspace
+      # The original docker:27-dind tag resolved to Docker Engine 27.5.1.
+      image: docker:27.5.1-dind
+      securityContext:
+        privileged: true
+        procMount: Unmasked
+      env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+        - name: DOCKER_HOST
+          value: unix:///run/docker.sock
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eu
+          mkdir -p /run /workspace/docker-data /workspace/docker-artifacts
+          alpine_image='alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d'
+          nginx_image='nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10'
+          echo '--- outer user namespace mapping ---' | tee /workspace/docker-artifacts/uid-map.txt
+          cat /proc/self/uid_map | tee -a /workspace/docker-artifacts/uid-map.txt
+          cat /proc/self/gid_map | tee -a /workspace/docker-artifacts/uid-map.txt
+
+          dockerd \
+            --host=unix:///run/docker.sock \
+            --data-root=/workspace/docker-data \
+            --pidfile=/run/dockerd.pid \
+            > /workspace/docker-artifacts/dockerd.log 2>&1 &
+          dockerd_pid=$!
+          trap 'kill "$dockerd_pid" 2>/dev/null || true; wait "$dockerd_pid" 2>/dev/null || true' EXIT
+
+          i=0
+          until docker info >/workspace/docker-artifacts/docker-info.txt 2>&1; do
+            i=$((i + 1))
+            if [ "$i" -ge 90 ]; then
+              echo 'dockerd did not become ready' >&2
+              cat /workspace/docker-artifacts/dockerd.log >&2 || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+          docker version | tee /workspace/docker-artifacts/docker-version.txt
+          docker info | tee /workspace/docker-artifacts/docker-info-full.txt
+          docker info --format '{{.Driver}}' | tee /workspace/docker-artifacts/storage-driver.txt
+
+          time docker pull "$alpine_image"
+          docker run --rm "$alpine_image" id > /workspace/docker-artifacts/child-id.txt
+          cat /workspace/docker-artifacts/child-id.txt
+
+          mkdir -p /tmp/build-context
+          printf '%s\n' "FROM $alpine_image" 'RUN id' 'CMD ["/bin/sh", "-c", "echo buildkit-ok"]' > /tmp/build-context/Dockerfile
+          DOCKER_BUILDKIT=1 docker build -t userns-dind-smoke:1 /tmp/build-context \
+            > /workspace/docker-artifacts/build.log 2>&1
+          cat /workspace/docker-artifacts/build.log
+          docker run --rm userns-dind-smoke:1 > /workspace/docker-artifacts/build-result.txt
+          cat /workspace/docker-artifacts/build-result.txt
+
+          docker run -d --name httpd "$nginx_image"
+          httpd_ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' httpd)"
+          docker run --rm "$alpine_image" wget -qO- "http://${httpd_ip}" \
+            > /workspace/docker-artifacts/network-result.txt
+          head -c 100 /workspace/docker-artifacts/network-result.txt
+          docker rm -f httpd
+
+          if docker run --rm --memory=64m --pids-limit=64 "$alpine_image" true \
+              > /workspace/docker-artifacts/resource-limit-result.txt 2>&1; then
+            echo pass > /workspace/docker-artifacts/resource-limit-status.txt
+          else
+            echo fail > /workspace/docker-artifacts/resource-limit-status.txt
+          fi
+
+          docker run --rm --privileged "$alpine_image" sh -c '
+            mkdir /tmp/nested-private-mount &&
+            mount -t tmpfs tmpfs /tmp/nested-private-mount &&
+            umount /tmp/nested-private-mount &&
+            echo nested-namespaced-privilege-ok
+          ' > /workspace/docker-artifacts/nested-privileged-result.txt
+          cat /workspace/docker-artifacts/nested-privileged-result.txt
+
+          touch /workspace/docker-artifacts/test3-complete
+          echo 'Test 3 complete; keeping daemon alive for inspection.'
+          wait "$dockerd_pid"
+      volumeMounts:
+        - name: workspace-data
+          mountPath: /workspace
+  volumes:
+    - name: workspace-data
+      persistentVolumeClaim:
+        claimName: workspace-data

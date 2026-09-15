@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: userns-volume-probe
+  namespace: userns-rootful-dind
+spec:
+  # This is the feature under test. Do not change it to true or omit it.
+  hostUsers: false
+  restartPolicy: Never
+  nodeSelector:
+    experiment.coder.com/userns-dind: "true"
+  containers:
+    - name: probe
+      image: public.ecr.aws/docker/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eux
+          id
+          echo '--- uid/gid mapping ---'
+          cat /proc/self/uid_map
+          cat /proc/self/gid_map
+          echo '--- PVC write ---'
+          echo "$(date -u +%FT%TZ) userns-volume-probe" > /workspace/probe.txt
+          cat /workspace/probe.txt
+          sleep 600
+      volumeMounts:
+        - name: workspace-data
+          mountPath: /workspace
+  volumes:
+    - name: workspace-data
+      persistentVolumeClaim:
+        claimName: workspace-data
