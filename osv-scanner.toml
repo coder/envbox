@@ -1,0 +1,31 @@
+[[IgnoredVulns]]
+id = "GO-2026-4610"
+reason = "The vulnerable Docker CLI plugin search path is Windows-only. Envbox runs on Linux and only uses Docker CLI compose parsing through dockertest."
+
+[[IgnoredVulns]]
+id = "GO-2026-4883"
+reason = "The vulnerable legacy plugin privilege validation is Docker daemon code. Envbox imports only Docker API types and the client package."
+
+[[IgnoredVulns]]
+id = "GO-2026-4887"
+reason = "The vulnerable authorization plugin request handling is Docker daemon code. Envbox imports only Docker API types and the client package."
+
+[[IgnoredVulns]]
+id = "GO-2026-5617"
+reason = "The vulnerable docker cp implementation is Docker daemon code. Envbox imports only Docker API types and the client package."
+
+[[IgnoredVulns]]
+id = "GO-2026-5668"
+reason = "The vulnerable docker cp implementation is Docker daemon code. Envbox imports only Docker API types and the client package."
+
+[[IgnoredVulns]]
+id = "GO-2026-5746"
+reason = "The vulnerable archive extraction implementation is Docker daemon code. Envbox imports only Docker API types and the client package."
+
+[[IgnoredVulns]]
+id = "GO-2026-5761"
+reason = "The vulnerable runc device setup is not used. Envbox reaches runc only through dockertest's homedir package, which imports libcontainer/user."
+
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+reason = "Envbox uses maintained x/crypto packages such as bcrypt and does not import the vulnerable deprecated openpgp package."
