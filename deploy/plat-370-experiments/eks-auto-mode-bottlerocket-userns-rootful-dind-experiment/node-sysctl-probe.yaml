@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: node-sysctl-probe
+  namespace: userns-rootful-dind-auto
+spec:
+  hostUsers: true
+  hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+  restartPolicy: Never
+  nodeSelector:
+    experiment.coder.com/userns-dind-auto: "true"
+  tolerations:
+    - key: experiment.coder.com/userns-dind-auto
+      value: "true"
+      effect: NoSchedule
+  containers:
+    - name: probe
+      image: public.ecr.aws/docker/library/alpine:3.21
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eux
+          echo '--- identity and user namespace ---'
+          id
+          cat /proc/self/uid_map
+          echo '--- per-user namespace limits ---'
+          for path in /proc/sys/user/max_*_namespaces; do
+            printf '%s=' "$path"
+            cat "$path"
+          done
+          echo '--- process limits ---'
+          ulimit -a
+          echo '--- visible filesystem capacity ---'
+          df -h
+          df -i
+          sleep 600

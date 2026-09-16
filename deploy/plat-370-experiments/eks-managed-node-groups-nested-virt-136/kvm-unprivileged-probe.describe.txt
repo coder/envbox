@@ -1,0 +1,74 @@
+Name:             nested-virt-kvm-unprivileged-probe
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             ip-192-168-36-30.us-east-2.compute.internal/192.168.36.30
+Start Time:       Wed, 29 Jul 2026 22:52:57 -0700
+Labels:           topology.kubernetes.io/region=us-east-2
+                  topology.kubernetes.io/zone=us-east-2a
+Annotations:      <none>
+Status:           Succeeded
+IP:               192.168.47.233
+IPs:
+  IP:  192.168.47.233
+Containers:
+  probe:
+    Container ID:    containerd://0d90a4c4420d18107b446ad4da06fa4442cc815c8a0c37b55698f4cfd04761bb
+    Image:           public.ecr.aws/amazonlinux/amazonlinux:2023
+    Image ID:        public.ecr.aws/amazonlinux/amazonlinux@sha256:601289f29d1b67fc542a451beda8ac6ca542d40289c99f71faa3ba37fe0d133a
+    Port:            <none>
+    Host Port:       <none>
+    SeccompProfile:  RuntimeDefault
+    Command:
+      /bin/bash
+      -c
+    Args:
+      set -eux
+      id
+      echo '--- injected KVM device ---'
+      ls -l /dev/kvm
+      exec 3<> /dev/kvm
+      echo 'opened /dev/kvm read/write without privileged mode'
+      exec 3>&-
+      
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Wed, 29 Jul 2026 22:52:58 -0700
+      Finished:     Wed, 29 Jul 2026 22:52:58 -0700
+    Ready:          False
+    Restart Count:  0
+    Limits:
+      devices.coder.com/kvm:  1
+    Requests:
+      devices.coder.com/kvm:  1
+    Environment:              <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-g6mdx (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   False 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-g6mdx:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              coder.com/kvm=true
+Tolerations:                 devices.coder.com/kvm:NoSchedule op=Exists
+                             node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+                             workload=nested-virt:NoSchedule
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  20s   default-scheduler  Successfully assigned default/nested-virt-kvm-unprivileged-probe to ip-192-168-36-30.us-east-2.compute.internal
+  Normal  Pulled     19s   kubelet            spec.containers{probe}: Container image "public.ecr.aws/amazonlinux/amazonlinux:2023" already present on machine and can be accessed by the pod
+  Normal  Created    19s   kubelet            spec.containers{probe}: Container created
+  Normal  Started    19s   kubelet            spec.containers{probe}: Container started

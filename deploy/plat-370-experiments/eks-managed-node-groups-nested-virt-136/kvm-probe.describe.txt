@@ -1,0 +1,69 @@
+Name:             nested-virt-kvm-probe
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             ip-192-168-78-100.us-east-2.compute.internal/192.168.78.100
+Start Time:       Tue, 28 Jul 2026 23:03:53 -0700
+Labels:           topology.kubernetes.io/region=us-east-2
+                  topology.kubernetes.io/zone=us-east-2a
+Annotations:      <none>
+Status:           Succeeded
+IP:               192.168.76.171
+IPs:
+  IP:  192.168.76.171
+Containers:
+  probe:
+    Container ID:  containerd://e243fdde043853d8a6b070fae76d16e3a1728617bd5ae635314eeb310931e791
+    Image:         public.ecr.aws/amazonlinux/amazonlinux:2023
+    Image ID:      public.ecr.aws/amazonlinux/amazonlinux@sha256:601289f29d1b67fc542a451beda8ac6ca542d40289c99f71faa3ba37fe0d133a
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      /bin/bash
+      -c
+    Args:
+      set -eux
+      ls -l /dev/kvm
+      exec 3<> /dev/kvm
+      echo 'opened /dev/kvm read/write'
+      exec 3>&-
+      
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Tue, 28 Jul 2026 23:03:53 -0700
+      Finished:     Tue, 28 Jul 2026 23:03:53 -0700
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /dev/kvm from kvm (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-p6flp (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   False 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kvm:
+    Type:          HostPath (bare host directory volume)
+    Path:          /dev/kvm
+    HostPathType:  CharDevice
+  kube-api-access-p6flp:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason   Age   From     Message
+  ----    ------   ----  ----     -------
+  Normal  Pulled   6s    kubelet  spec.containers{probe}: Container image "public.ecr.aws/amazonlinux/amazonlinux:2023" already present on machine and can be accessed by the pod
+  Normal  Created  6s    kubelet  spec.containers{probe}: Container created
+  Normal  Started  6s    kubelet  spec.containers{probe}: Container started

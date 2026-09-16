@@ -1,0 +1,27 @@
+2026-08-08 22:43:25 [ℹ]  deleting EKS cluster "direct-sysbox-al2023-mng-135"
+2026-08-08 22:43:26 [ℹ]  will drain 0 unmanaged nodegroup(s) in cluster "direct-sysbox-al2023-mng-135"
+2026-08-08 22:43:26 [ℹ]  starting parallel draining, max in-flight of 1
+2026-08-08 22:43:27 [ℹ]  deleted 0 Fargate profile(s)
+2026-08-08 22:43:27 [✔]  kubeconfig has been updated
+2026-08-08 22:43:27 [ℹ]  cleaning up AWS load balancers created by Kubernetes objects of Kind Service, Ingress, or Gateway
+2026-08-08 22:43:29 [ℹ]  
+2 sequential tasks: { delete nodegroup "direct-sysbox", delete cluster control plane "direct-sysbox-al2023-mng-135" 
+}
+2026-08-08 22:43:29 [ℹ]  will delete stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 22:43:29 [ℹ]  waiting for stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox" to get deleted
+2026-08-08 22:43:30 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 22:44:00 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 22:44:33 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 22:45:18 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 22:46:08 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 22:47:47 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 22:49:33 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 22:51:05 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 22:53:00 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-nodegroup-direct-sysbox"
+2026-08-08 22:53:01 [ℹ]  will delete stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 22:53:01 [ℹ]  waiting for stack "eksctl-direct-sysbox-al2023-mng-135-cluster" to get deleted
+2026-08-08 22:53:01 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 22:53:31 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 22:54:03 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 22:55:25 [ℹ]  waiting for CloudFormation stack "eksctl-direct-sysbox-al2023-mng-135-cluster"
+2026-08-08 22:55:25 [✔]  all cluster resources were deleted

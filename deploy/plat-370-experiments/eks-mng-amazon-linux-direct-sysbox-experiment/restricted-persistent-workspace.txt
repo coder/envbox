@@ -1,0 +1,17 @@
++ grep -E '^Cap|^NoNewPrivs|^Seccomp' /proc/self/status
++ grep -Fx persistence-v1 /var/lib/docker/direct-sysbox-marker
+CapInh:	000001ffffffffff
+CapPrm:	000001ffffffffff
+CapEff:	000001ffffffffff
+CapBnd:	000001ffffffffff
+CapAmb:	000001ffffffffff
+NoNewPrivs:	1
+Seccomp:	2
+Seccomp_filters:	2
+persistence-v1
++ docker image inspect direct-sysbox-buildkit:1 --format 'id={{.Id}}'
+id=sha256:dedf5e3cfde010b748890ef04fb9c4ce82f7f356ca75e85550057163445059bc
++ systemctl is-active docker
+active
++ docker run --rm alpine:3.21 echo restricted-persistent-workspace-ok
+restricted-persistent-workspace-ok

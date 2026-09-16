@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: coder-kvm-device-plugin
+  namespace: kube-system
+  labels:
+    app: coder-kvm-device-plugin
+spec:
+  selector:
+    matchLabels:
+      app: coder-kvm-device-plugin
+  template:
+    metadata:
+      labels:
+        app: coder-kvm-device-plugin
+    spec:
+      nodeSelector:
+        coder.com/kvm: "true"
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: nested-virt
+          effect: NoSchedule
+      containers:
+        - name: kvm-device-plugin
+          image: REPLACE_WITH_ECR_IMAGE
+          env:
+            - name: DEVICE_PLUGIN_RESOURCE
+              value: "devices.coder.com/kvm"
+            - name: DEVICE_PLUGIN_ENDPOINT
+              value: "coder-kvm.sock"
+            - name: DEVICE_PLUGIN_DEVICE_PATH
+              value: "/dev/kvm"
+            - name: KVM_DEVICE_COUNT
+              value: "2"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+            - name: kvm
+              mountPath: /dev/kvm
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+            type: Directory
+        - name: kvm
+          hostPath:
+            path: /dev/kvm
+            type: CharDevice

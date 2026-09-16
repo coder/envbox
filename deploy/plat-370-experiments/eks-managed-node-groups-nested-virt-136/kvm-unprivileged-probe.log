@@ -1,0 +1,10 @@
++ id
+uid=0(root) gid=0(root) groups=0(root)
++ echo '--- injected KVM device ---'
++ ls -l /dev/kvm
+--- injected KVM device ---
+crw-rw-rw-. 1 root 36 10, 232 Jul 30 05:52 /dev/kvm
++ exec
+opened /dev/kvm read/write without privileged mode
++ echo 'opened /dev/kvm read/write without privileged mode'
++ exec

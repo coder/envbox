@@ -1,0 +1,10 @@
+2026-08-09T00:47:34.929262027Z Installing Sysbox on host ...
+2026-08-09T00:47:34.934180776Z Configuring host sysctls ...
+2026-08-09T00:47:34.935840660Z sysctl: cannot stat /proc/sys/kernel/unprivileged_userns_clone: No such file or directory
+2026-08-09T00:47:34.936074249Z fs.inotify.max_queued_events = 1048576
+2026-08-09T00:47:34.936079179Z fs.inotify.max_user_watches = 1048576
+2026-08-09T00:47:34.936080960Z fs.inotify.max_user_instances = 1048576
+2026-08-09T00:47:34.936082990Z kernel.keys.maxkeys = 20000
+2026-08-09T00:47:34.936084724Z kernel.keys.maxbytes = 1400000
+2026-08-09T00:47:34.936087512Z kernel.pid_max = 4194304
+2026-08-09T00:47:34.936089687Z vm.max_map_count = 262144

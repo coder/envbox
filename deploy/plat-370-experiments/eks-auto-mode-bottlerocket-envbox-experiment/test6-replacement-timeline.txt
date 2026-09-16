@@ -1,0 +1,3 @@
+2026-08-08T19:13:03Z new_node=i-03ee3275dadaa4788 pod_node=<none> taints=[{"effect":"NoSchedule","key":"experiment.coder.com/envbox-auto","value":"true"},{"effect":"NoSchedule","key":"experiment.coder.com/envbox-prep","value":"required"}]
+2026-08-08T19:13:07Z new_node=i-03ee3275dadaa4788 pod_node=<none> taints=[{"effect":"NoSchedule","key":"experiment.coder.com/envbox-auto","value":"true"}]
+2026-08-08T19:13:11Z new_node=i-03ee3275dadaa4788 pod_node=i-03ee3275dadaa4788 taints=[{"effect":"NoSchedule","key":"experiment.coder.com/envbox-auto","value":"true"}]

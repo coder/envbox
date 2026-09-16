@@ -1,0 +1,66 @@
+Name:                direct-sysbox-workspace
+Namespace:           direct-sysbox
+Priority:            0
+Runtime Class Name:  sysbox-runc
+Service Account:     default
+Node:                ip-192-168-87-106.us-east-2.compute.internal/192.168.87.106
+Start Time:          Sat, 08 Aug 2026 17:56:04 -0700
+Labels:              app.kubernetes.io/name=direct-sysbox-workspace
+                     topology.kubernetes.io/region=us-east-2
+                     topology.kubernetes.io/zone=us-east-2b
+Annotations:         <none>
+Status:              Pending
+IP:                  
+IPs:                 <none>
+Containers:
+  workspace:
+    Container ID:  
+    Image:         registry.nestybox.com/nestybox/ubuntu-noble-systemd-docker:latest
+    Image ID:      
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      /sbin/init
+    State:          Waiting
+      Reason:       ContainerCreating
+    Ready:          False
+    Restart Count:  0
+    Limits:
+      cpu:     2
+      memory:  6Gi
+    Requests:
+      cpu:        1
+      memory:     2Gi
+    Environment:  <none>
+    Mounts:
+      /var/lib/docker from docker-data (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-fwt7j (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   False 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  docker-data:
+    Type:       PersistentVolumeClaim (a reference to a PersistentVolumeClaim in the same namespace)
+    ClaimName:  workspace-docker
+    ReadOnly:   false
+  kube-api-access-fwt7j:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              experiment.coder.com/direct-sysbox=true
+                             sysbox-runtime=running
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason                  Age                    From                     Message
+  ----     ------                  ----                   ----                     -------
+  Normal   Scheduled               7m30s                  default-scheduler        Successfully assigned direct-sysbox/direct-sysbox-workspace to ip-192-168-87-106.us-east-2.compute.internal
+  Normal   SuccessfulAttachVolume  7m28s                  attachdetach-controller  AttachVolume.Attach succeeded for volume "pvc-01ff2354-6203-4e2e-97e2-5c98382b1892"
+  Warning  FailedCreatePodSandBox  115s (x26 over 7m27s)  kubelet                  Failed to create pod sandbox: can't set `spec.hostUsers: false`, RuntimeClass handler "sysbox-runc" does not support user namespaces: the handler "sysbox-runc" is not known

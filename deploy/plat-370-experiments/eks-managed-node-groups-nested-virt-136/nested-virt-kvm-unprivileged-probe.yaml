@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nested-virt-kvm-unprivileged-probe
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    coder.com/kvm: "true"
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: nested-virt
+      effect: NoSchedule
+  containers:
+    - name: probe
+      image: public.ecr.aws/amazonlinux/amazonlinux:2023
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          set -eux
+          id
+          echo '--- injected KVM device ---'
+          ls -l /dev/kvm
+          exec 3<> /dev/kvm
+          echo 'opened /dev/kvm read/write without privileged mode'
+          exec 3>&-
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests:
+          devices.coder.com/kvm: "1"
+        limits:
+          devices.coder.com/kvm: "1"

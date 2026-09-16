@@ -1,0 +1,17 @@
++ docker run --rm --network host alpine:3.21 wget -qO- http://127.0.0.1:18080
++ grep -q 'Welcome to nginx'
+workspace-loopback-published-port-ok
++ echo workspace-loopback-published-port-ok
++ docker compose -p direct-sysbox-smoke -f /tmp/compose-smoke.yaml down
+Container direct-sysbox-smoke-client-1  Stopping
+Container direct-sysbox-smoke-client-1  Stopping
+Container direct-sysbox-smoke-server-1  Stopping
+Container direct-sysbox-smoke-server-1  Stopping
+Container direct-sysbox-smoke-server-1  Stopped
+Container direct-sysbox-smoke-server-1  Removing
+Container direct-sysbox-smoke-server-1  Removed
+Container direct-sysbox-smoke-client-1  Stopped
+Container direct-sysbox-smoke-client-1  Removing
+Container direct-sysbox-smoke-client-1  Removed
+Network direct-sysbox-smoke_default  Removing
+Network direct-sysbox-smoke_default  Removed

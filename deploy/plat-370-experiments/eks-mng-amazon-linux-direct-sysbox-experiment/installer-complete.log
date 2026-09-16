@@ -1,0 +1,10 @@
+[pod/sysbox-deploy-k8s-vbwwb/sysbox-deploy-k8s] Installing Sysbox on host ...
+[pod/sysbox-deploy-k8s-vbwwb/sysbox-deploy-k8s] Configuring host sysctls ...
+[pod/sysbox-deploy-k8s-vbwwb/sysbox-deploy-k8s] sysctl: cannot stat /proc/sys/kernel/unprivileged_userns_clone: No such file or directory
+[pod/sysbox-deploy-k8s-vbwwb/sysbox-deploy-k8s] fs.inotify.max_queued_events = 1048576
+[pod/sysbox-deploy-k8s-vbwwb/sysbox-deploy-k8s] fs.inotify.max_user_watches = 1048576
+[pod/sysbox-deploy-k8s-vbwwb/sysbox-deploy-k8s] fs.inotify.max_user_instances = 1048576
+[pod/sysbox-deploy-k8s-vbwwb/sysbox-deploy-k8s] kernel.keys.maxkeys = 20000
+[pod/sysbox-deploy-k8s-vbwwb/sysbox-deploy-k8s] kernel.keys.maxbytes = 1400000
+[pod/sysbox-deploy-k8s-vbwwb/sysbox-deploy-k8s] kernel.pid_max = 4194304
+[pod/sysbox-deploy-k8s-vbwwb/sysbox-deploy-k8s] vm.max_map_count = 262144

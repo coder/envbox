@@ -1,0 +1,14 @@
+spec:
+  template:
+    metadata:
+      annotations:
+        experiment.coder.com/control-test: privileged
+    spec:
+      containers:
+        - name: prep
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+            capabilities: null
+            seccompProfile:
+              type: Unconfined

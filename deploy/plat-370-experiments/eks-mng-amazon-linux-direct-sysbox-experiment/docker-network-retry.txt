@@ -1,0 +1,55 @@
++ docker rm direct-sysbox-web
+direct-sysbox-web
++ docker run -d --name direct-sysbox-web --network direct-sysbox-net nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+Unable to find image 'nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10' locally
+docker.io/library/nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10: Pulling from library/nginx
+f18232174bc9: Pulling fs layer
+61ca4f733c80: Pulling fs layer
+b464cfdf2a63: Pulling fs layer
+d7e507024086: Pulling fs layer
+81bd8ed7ec67: Pulling fs layer
+197eb75867ef: Pulling fs layer
+34a64644b756: Pulling fs layer
+39c2ddfd6010: Pulling fs layer
+81bd8ed7ec67: Waiting
+197eb75867ef: Waiting
+34a64644b756: Waiting
+39c2ddfd6010: Waiting
+d7e507024086: Waiting
+b464cfdf2a63: Verifying Checksum
+b464cfdf2a63: Download complete
+61ca4f733c80: Verifying Checksum
+61ca4f733c80: Download complete
+f18232174bc9: Download complete
+81bd8ed7ec67: Verifying Checksum
+81bd8ed7ec67: Download complete
+d7e507024086: Verifying Checksum
+d7e507024086: Download complete
+197eb75867ef: Verifying Checksum
+197eb75867ef: Download complete
+34a64644b756: Verifying Checksum
+34a64644b756: Download complete
+f18232174bc9: Pull complete
+39c2ddfd6010: Verifying Checksum
+39c2ddfd6010: Download complete
+61ca4f733c80: Pull complete
+b464cfdf2a63: Pull complete
+d7e507024086: Pull complete
+81bd8ed7ec67: Pull complete
+197eb75867ef: Pull complete
+34a64644b756: Pull complete
+39c2ddfd6010: Pull complete
+Digest: sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+Status: Downloaded newer image for nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+a08a60d319513dc3bc919c3ffc0dfd67b37f66d2d535a3cce37ec4005d90e2b0
+++ seq 1 20
++ for attempt in $(seq 1 20)
++ docker run --rm --network direct-sysbox-net alpine:3.21 wget -qO- http://direct-sysbox-web
++ grep -q 'Welcome to nginx'
++ echo nested-network-ok
++ break
++ docker rm -f direct-sysbox-web
+nested-network-ok
+direct-sysbox-web
++ docker network rm direct-sysbox-net
+direct-sysbox-net

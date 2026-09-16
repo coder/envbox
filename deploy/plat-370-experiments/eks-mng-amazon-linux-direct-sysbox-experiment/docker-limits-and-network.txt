@@ -1,0 +1,11 @@
++ image=alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
++ docker run --rm --memory=128m --cpus=0.25 --pids-limit=64 alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d sh -ec 'cat /sys/fs/cgroup/memory.max; cat /sys/fs/cgroup/pids.max'
+134217728
+64
++ docker network create direct-sysbox-net
+2cacea4ca2532a0a5de541654f9170baf40d0d8319f38d6bceaeaa55e478d9e6
++ docker run -d --name direct-sysbox-web --network direct-sysbox-net alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d sh -ec 'mkdir -p /www; echo nested-network-ok >/www/index.html; httpd -f -p 8080 -h /www'
+da59fe433208e5f2ae136e381a289700680c18020bb0bf35ca07245bdd47053a
++ docker run --rm --network direct-sysbox-net alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d wget -qO- http://direct-sysbox-web:8080
+wget: bad address 'direct-sysbox-web:8080'
+command terminated with exit code 1

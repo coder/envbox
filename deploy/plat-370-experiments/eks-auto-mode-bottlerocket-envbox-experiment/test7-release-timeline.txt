@@ -1,0 +1,7 @@
+2026-08-08T19:35:46Z pod_node=<none> taints=[{"effect":"NoSchedule","key":"experiment.coder.com/envbox-auto","value":"true"},{"effect":"NoSchedule","key":"experiment.coder.com/envbox-prep","value":"required"}]
+2026-08-08T19:35:49Z pod_node=<none> taints=[{"effect":"NoSchedule","key":"experiment.coder.com/envbox-auto","value":"true"},{"effect":"NoSchedule","key":"experiment.coder.com/envbox-prep","value":"required"}]
+2026-08-08T19:35:53Z pod_node=<none> taints=[{"effect":"NoSchedule","key":"experiment.coder.com/envbox-auto","value":"true"},{"effect":"NoSchedule","key":"experiment.coder.com/envbox-prep","value":"required"}]
+2026-08-08T19:35:56Z pod_node=<none> taints=[{"effect":"NoSchedule","key":"experiment.coder.com/envbox-auto","value":"true"},{"effect":"NoSchedule","key":"experiment.coder.com/envbox-prep","value":"required"}]
+2026-08-08T19:35:59Z pod_node=<none> taints=[{"effect":"NoSchedule","key":"experiment.coder.com/envbox-auto","value":"true"},{"effect":"NoSchedule","key":"experiment.coder.com/envbox-prep","value":"required"}]
+2026-08-08T19:36:02Z pod_node=<none> taints=[{"effect":"NoSchedule","key":"experiment.coder.com/envbox-auto","value":"true"},{"effect":"NoSchedule","key":"experiment.coder.com/envbox-prep","value":"required"}]
+2026-08-08T19:36:06Z pod_node=i-05d37f1a80c65f2ec taints=[{"effect":"NoSchedule","key":"experiment.coder.com/envbox-auto","value":"true"}]

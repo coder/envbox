@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: envbox-cgroup-probe
+  namespace: envbox-auto
+  labels:
+    app.kubernetes.io/name: envbox-cgroup-probe
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    experiment.coder.com/envbox-auto: "true"
+  tolerations:
+    - key: experiment.coder.com/envbox-auto
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+  containers:
+    - name: probe
+      image: 849808308023.dkr.ecr.us-east-2.amazonaws.com/envbox-eks-cache-experiment@sha256:92f53d2cc637979dfac855ad7d413f44a9f799c1dfd1a3d4242ae5e046d4f861
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -ec
+        - |
+          inspect() {
+            echo "cgroup namespace: $(readlink /proc/self/ns/cgroup)"
+            echo "cgroup membership:"
+            cat /proc/self/cgroup
+            echo "mountinfo entries at /sys/fs/cgroup:"
+            awk '$5 == "/sys/fs/cgroup" { print }' /proc/self/mountinfo
+            echo "current wrapper selection:"
+            awk '
+              $5 == "/sys/fs/cgroup" { root[$1] = $4; isparent[$2] = 1 }
+              END { for (id in root) if (!(id in isparent)) print "id=" id, "root=" root[id] }
+            ' /proc/self/mountinfo
+            echo "findmnt:"
+            findmnt -R /sys/fs/cgroup || true
+          }
+
+          echo "=== before unshare ==="
+          inspect
+          echo "=== after unshare --cgroup ==="
+          set +e
+          unshare --cgroup /bin/sh -c '
+            echo "cgroup namespace: $(readlink /proc/self/ns/cgroup)"
+            echo "cgroup membership:"
+            cat /proc/self/cgroup
+            echo "mountinfo entries at /sys/fs/cgroup:"
+            grep " /sys/fs/cgroup " /proc/self/mountinfo || true
+            echo "findmnt:"
+            findmnt -R /sys/fs/cgroup || true
+            echo "mounting namespace-rooted cgroup2 over existing mount:"
+            mount -t cgroup2 cgroup /sys/fs/cgroup
+            mount_status=$?
+            echo "mount status: $mount_status"
+            echo "mountinfo entries after mount:"
+            grep " /sys/fs/cgroup " /proc/self/mountinfo || true
+            echo "findmnt after mount:"
+            findmnt -R /sys/fs/cgroup || true
+            echo "lazy-detaching existing mount:"
+            umount -l /sys/fs/cgroup
+            lazy_status=$?
+            echo "lazy umount status: $lazy_status"
+            if [ "$lazy_status" -eq 0 ]; then
+              echo "mounting namespace-rooted cgroup2 after lazy detach:"
+              mount -t cgroup2 cgroup /sys/fs/cgroup
+              replacement_status=$?
+              echo "replacement mount status: $replacement_status"
+              echo "mountinfo after replacement:"
+              grep " /sys/fs/cgroup " /proc/self/mountinfo || true
+              echo "findmnt after replacement:"
+              findmnt -R /sys/fs/cgroup || true
+            fi
+          '
+          unshare_status=$?
+          set -e
+          echo "unshare status: $unshare_status"
+      securityContext:
+        privileged: true
+        allowPrivilegeEscalation: true
+        seccompProfile:
+          type: Unconfined
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 64Mi

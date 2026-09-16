@@ -1,0 +1,27 @@
++ service_url=http://compose-network-target.userns-rootful-dind.svc.cluster.local:18080/
++ fetch_and_verify http://compose-network-target.userns-rootful-dind.svc.cluster.local:18080/ /tmp/service-body
++ url=http://compose-network-target.userns-rootful-dind.svc.cluster.local:18080/
++ output=/tmp/service-body
++ attempts=0
++ wget -T 5 -t 1 -qO /tmp/service-body http://compose-network-target.userns-rootful-dind.svc.cluster.local:18080/
++ grep -q 'Welcome to nginx' /tmp/service-body
++ echo 'cross-node-clusterip-service-ok node=ip-192-168-79-191.us-east-2.compute.internal url=http://compose-network-target.userns-rootful-dind.svc.cluster.local:18080/'
+cross-node-clusterip-service-ok node=ip-192-168-79-191.us-east-2.compute.internal url=http://compose-network-target.userns-rootful-dind.svc.cluster.local:18080/
++ headless_host=compose-network-target-headless.userns-rootful-dind.svc.cluster.local
++ attempts=0
++ pod_ip=
++ getent hosts compose-network-target-headless.userns-rootful-dind.svc.cluster.local
++ awk 'NR == 1 { print $1 }'
++ pod_ip=192.168.93.217
++ '[' -n 192.168.93.217 ]
++ pod_url=http://192.168.93.217:18080/
++ fetch_and_verify http://192.168.93.217:18080/ /tmp/pod-ip-body
++ url=http://192.168.93.217:18080/
++ output=/tmp/pod-ip-body
++ attempts=0
++ wget -T 5 -t 1 -qO /tmp/pod-ip-body http://192.168.93.217:18080/
++ grep -q 'Welcome to nginx' /tmp/pod-ip-body
+cross-node-direct-pod-ip-ok node=ip-192-168-79-191.us-east-2.compute.internal url=http://192.168.93.217:18080/
+compose-cross-node-network-tests-ok
++ echo 'cross-node-direct-pod-ip-ok node=ip-192-168-79-191.us-east-2.compute.internal url=http://192.168.93.217:18080/'
++ echo compose-cross-node-network-tests-ok

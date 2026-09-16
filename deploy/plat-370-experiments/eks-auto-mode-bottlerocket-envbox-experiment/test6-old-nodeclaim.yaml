@@ -1,0 +1,148 @@
+apiVersion: karpenter.sh/v1
+kind: NodeClaim
+metadata:
+  annotations:
+    eks.amazonaws.com/ca-bundle-hash: "15519746975026040848"
+    eks.amazonaws.com/kubelet-version: "1.36"
+    eks.amazonaws.com/nodeclass-hash: "12967334377599694165"
+    eks.amazonaws.com/nodeclass-hash-version: v2
+    karpenter.sh/nodeclaim-min-values-relaxed: "false"
+    karpenter.sh/nodepool-hash: "13760854746316201980"
+    karpenter.sh/nodepool-hash-version: v3
+  creationTimestamp: "2026-08-08T18:49:24Z"
+  finalizers:
+  - karpenter.sh/termination
+  generateName: envbox-auto-
+  generation: 1
+  labels:
+    app.kubernetes.io/managed-by: eks
+    eks.amazonaws.com/compute-type: auto
+    eks.amazonaws.com/instance-capability-flex: "false"
+    eks.amazonaws.com/instance-category: m
+    eks.amazonaws.com/instance-cpu: "2"
+    eks.amazonaws.com/instance-cpu-manufacturer: intel
+    eks.amazonaws.com/instance-cpu-sustained-clock-speed-mhz: "3500"
+    eks.amazonaws.com/instance-ebs-bandwidth: "10000"
+    eks.amazonaws.com/instance-encryption-in-transit-supported: "true"
+    eks.amazonaws.com/instance-family: m6i
+    eks.amazonaws.com/instance-generation: "6"
+    eks.amazonaws.com/instance-hypervisor: nitro
+    eks.amazonaws.com/instance-memory: "8192"
+    eks.amazonaws.com/instance-network-bandwidth: "781"
+    eks.amazonaws.com/instance-size: large
+    eks.amazonaws.com/nitro-sandbox: "false"
+    eks.amazonaws.com/nodeclass: default
+    experiment.coder.com/envbox-auto: "true"
+    karpenter.k8s.aws/instance-tenancy: default
+    karpenter.sh/capacity-type: on-demand
+    karpenter.sh/nodepool: envbox-auto
+    kubernetes.io/arch: amd64
+    kubernetes.io/os: linux
+    node.kubernetes.io/instance-type: m6i.large
+    topology.k8s.aws/zone-id: use2-az2
+    topology.kubernetes.io/region: us-east-2
+    topology.kubernetes.io/zone: us-east-2b
+  name: envbox-auto-r28qb
+  ownerReferences:
+  - apiVersion: karpenter.sh/v1
+    blockOwnerDeletion: true
+    kind: NodePool
+    name: envbox-auto
+    uid: ff4db5a3-6141-4134-a638-aa09f8941d31
+  resourceVersion: "27393"
+  uid: dc2a2853-0872-405f-b7b9-2f9a053ff61d
+spec:
+  expireAfter: 336h
+  nodeClassRef:
+    group: eks.amazonaws.com
+    kind: NodeClass
+    name: default
+  requirements:
+  - key: experiment.coder.com/envbox-auto
+    operator: In
+    values:
+    - "true"
+  - key: eks.amazonaws.com/nodeclass
+    operator: In
+    values:
+    - default
+  - key: karpenter.sh/capacity-type
+    operator: In
+    values:
+    - on-demand
+  - key: karpenter.sh/nodepool
+    operator: In
+    values:
+    - envbox-auto
+  - key: kubernetes.io/os
+    operator: In
+    values:
+    - linux
+  - key: kubernetes.io/arch
+    operator: In
+    values:
+    - amd64
+  - key: node.kubernetes.io/instance-type
+    operator: In
+    values:
+    - m6i.large
+  resources:
+    requests:
+      cpu: 1100m
+      memory: 3200Mi
+      pods: "2"
+  startupTaints:
+  - effect: NoSchedule
+    key: experiment.coder.com/envbox-prep
+    value: required
+  taints:
+  - effect: NoSchedule
+    key: experiment.coder.com/envbox-auto
+    value: "true"
+  terminationGracePeriod: 24h0m0s
+status:
+  allocatable:
+    cpu: 1780m
+    ephemeral-storage: 71Gi
+    memory: 7218380Ki
+    pods: "27"
+  capacity:
+    cpu: "2"
+    ephemeral-storage: 80Gi
+    memory: 7962828Ki
+    pods: "27"
+  conditions:
+  - lastTransitionTime: "2026-08-08T18:49:26Z"
+    message: ""
+    observedGeneration: 1
+    reason: Launched
+    status: "True"
+    type: Launched
+  - lastTransitionTime: "2026-08-08T18:49:37Z"
+    message: ""
+    observedGeneration: 1
+    reason: Registered
+    status: "True"
+    type: Registered
+  - lastTransitionTime: "2026-08-08T18:54:13Z"
+    message: ""
+    observedGeneration: 1
+    reason: Initialized
+    status: "True"
+    type: Initialized
+  - lastTransitionTime: "2026-08-08T18:59:26Z"
+    message: ""
+    observedGeneration: 1
+    reason: ConsistentStateFound
+    status: "True"
+    type: ConsistentStateFound
+  - lastTransitionTime: "2026-08-08T18:54:13Z"
+    message: ""
+    observedGeneration: 1
+    reason: Ready
+    status: "True"
+    type: Ready
+  imageID: ami-02ff739a41c2517c0
+  lastPodEventTime: "2026-08-08T19:05:48Z"
+  nodeName: i-02e14b4f48a55aba5
+  providerID: aws:///us-east-2b/i-02e14b4f48a55aba5

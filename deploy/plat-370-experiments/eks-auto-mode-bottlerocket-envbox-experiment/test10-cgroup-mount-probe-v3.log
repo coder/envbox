@@ -1,0 +1,29 @@
+=== before unshare ===
+cgroup namespace: cgroup:[4026531835]
+cgroup membership:
+0::/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod558f9c0a_7a39_4245_9cab_6973a0d3a4d7.slice/cri-containerd-a6b3ba26061231cd1ec0ec89c95d9bae9cdd84a6c3b6812e6ef540eea00867c3.scope
+mountinfo entries at /sys/fs/cgroup:
+1106 1104 0:27 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime - cgroup2 cgroup rw,seclabel,nsdelegate,memory_recursiveprot
+current wrapper selection:
+id=1106 root=/
+findmnt:
+TARGET         SOURCE FSTYPE  OPTIONS
+/sys/fs/cgroup cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate,memory_recursiveprot
+=== after unshare --cgroup ===
+cgroup namespace: cgroup:[4026532317]
+cgroup membership:
+0::/
+mountinfo entries at /sys/fs/cgroup:
+1106 1104 0:27 /../../../.. /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime - cgroup2 cgroup rw,seclabel,nsdelegate,memory_recursiveprot
+findmnt:
+TARGET         SOURCE               FSTYPE  OPTIONS
+/sys/fs/cgroup cgroup[/../../../..] cgroup2 rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate,memory_recursiveprot
+mounting namespace-rooted cgroup2 over existing mount:
+mount: /sys/fs/cgroup: cgroup already mounted on /sys/fs/cgroup.
+mount status: 32
+mountinfo entries after mount:
+1106 1104 0:27 /../../../.. /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime - cgroup2 cgroup rw,seclabel,nsdelegate,memory_recursiveprot
+findmnt after mount:
+TARGET         SOURCE               FSTYPE  OPTIONS
+/sys/fs/cgroup cgroup[/../../../..] cgroup2 rw,nosuid,nodev,noexec,relatime,seclabel,nsdelegate,memory_recursiveprot
+unshare status: 0
