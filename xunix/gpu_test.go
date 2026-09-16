@@ -132,6 +132,72 @@ func TestGPUs(t *testing.T) {
 	})
 }
 
+func TestGPUs_UsrLib64Symlinks(t *testing.T) {
+	t.Parallel()
+
+	// This test simulates the scenario where the host has /usr/lib64 mounted
+	// into the outer container at /var/coder/usr/lib. On RHEL/Amazon Linux
+	// systems, symlinks inside /usr/lib64 may use absolute paths referencing
+	// /usr/lib64/... which don't match the mounted path. Previously,
+	// recursiveSymlinks would discard these files entirely.
+	var (
+		ctx     = context.Background()
+		afs     = xunix.GetFS(ctx)
+		mounter = &mount.FakeMounter{}
+		log     = slogtest.Make(t, nil)
+		tmpDir  = t.TempDir()
+	)
+
+	ctx = xunix.WithFS(ctx, afs)
+	ctx = xunix.WithMounter(ctx, mounter)
+
+	// Create the real library file.
+	realLib := filepath.Join(tmpDir, "libnvidia-ml.so.545.23.08")
+	_, err := os.Create(realLib)
+	require.NoError(t, err)
+
+	// Create a symlink with an absolute path pointing OUTSIDE the mountpoint.
+	// This simulates what happens when /usr/lib64 contains:
+	//   libnvidia-ml.so.1 -> /usr/lib64/libnvidia-ml.so.545.23.08
+	// but is mounted at /var/coder/usr/lib.
+	symlink := filepath.Join(tmpDir, "libnvidia-ml.so.1")
+	err = os.Symlink("/usr/lib64/libnvidia-ml.so.545.23.08", symlink)
+	require.NoError(t, err)
+
+	// Create another symlink in the chain.
+	symlink2 := filepath.Join(tmpDir, "libnvidia-ml.so")
+	err = os.Symlink("libnvidia-ml.so.1", symlink2)
+	require.NoError(t, err)
+
+	// Create a non-GPU library to verify it's excluded.
+	_, err = os.Create(filepath.Join(tmpDir, "libcurl.so"))
+	require.NoError(t, err)
+
+	devices, binds, err := xunix.GPUs(ctx, log, tmpDir)
+	require.NoError(t, err)
+	require.Empty(t, devices)
+
+	// All three nvidia library paths should be detected as bind mounts.
+	require.Contains(t, binds, mount.MountPoint{
+		Path: realLib,
+		Opts: []string{"ro"},
+	})
+	require.Contains(t, binds, mount.MountPoint{
+		Path: symlink,
+		Opts: []string{"ro"},
+	})
+	require.Contains(t, binds, mount.MountPoint{
+		Path: symlink2,
+		Opts: []string{"ro"},
+	})
+
+	// Non-GPU library should not be included.
+	require.NotContains(t, binds, mount.MountPoint{
+		Path: filepath.Join(tmpDir, "libcurl.so"),
+		Opts: []string{"ro"},
+	})
+}
+
 func Test_SameDirSymlinks(t *testing.T) {
 	t.Parallel()
 
