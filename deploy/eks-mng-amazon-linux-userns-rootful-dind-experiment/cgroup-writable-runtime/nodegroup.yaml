@@ -1,0 +1,35 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: userns-rootful-dind-mng-136
+  region: us-east-2
+  version: "1.36"
+
+managedNodeGroups:
+  - name: userns-dind-cgroup-writable
+    amiFamily: AmazonLinux2023
+    instanceType: m6i.large
+    minSize: 1
+    desiredCapacity: 1
+    maxSize: 1
+    labels:
+      experiment.coder.com/userns-dind-cgroup-writable: "true"
+    iam:
+      withAddonPolicies:
+        ebs: true
+    # eksctl prepends this partial NodeConfig to the EKS-generated NodeConfig;
+    # nodeadm merges it with the cluster connection details and normal AL2023
+    # defaults. Containerd 2.x uses the config-v3 CRI runtime plugin path.
+    overrideBootstrapCommand: |
+      apiVersion: node.eks.aws/v1alpha1
+      kind: NodeConfig
+      spec:
+        containerd:
+          config: |
+            [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc-cgroup-writable]
+              runtime_type = 'io.containerd.runc.v2'
+              cgroup_writable = true
+
+            [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc-cgroup-writable.options]
+              SystemdCgroup = true

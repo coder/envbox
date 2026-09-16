@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cgroup-writable-probe
+  namespace: userns-rootful-dind
+spec:
+  runtimeClassName: runc-cgroup-writable
+  hostUsers: false
+  restartPolicy: Never
+  containers:
+    - name: probe
+      image: public.ecr.aws/docker/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: true
+        procMount: Unmasked
+        capabilities:
+          add: ["ALL"]
+        seccompProfile:
+          type: Unconfined
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eux
+          echo '--- identity and user namespace ---'
+          id
+          cat /proc/self/uid_map
+          cat /proc/self/gid_map
+          echo '--- cgroup namespace and mount ---'
+          cat /proc/self/cgroup
+          mount | grep -E 'cgroup|/sys/fs/cgroup'
+          ls -ldn /sys/fs/cgroup
+          echo '--- available/delegated controllers ---'
+          cat /sys/fs/cgroup/cgroup.controllers
+          cat /sys/fs/cgroup/cgroup.subtree_control
+          echo '--- create child cgroup ---'
+          mkdir /sys/fs/cgroup/userns-dind-write-probe
+          ls -ldn /sys/fs/cgroup/userns-dind-write-probe
+          rmdir /sys/fs/cgroup/userns-dind-write-probe
+          echo cgroup-writable-probe-ok
+          sleep 600
