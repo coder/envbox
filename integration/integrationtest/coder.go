@@ -31,6 +31,14 @@ func (b *BuildLogRecorder) ContainsLog(l string) bool {
 	return false
 }
 
+// Logs returns a copy of the recorded build logs in the order they were
+// received.
+func (b *BuildLogRecorder) Logs() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]string(nil), b.logs...)
+}
+
 func (b *BuildLogRecorder) Len() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()

@@ -32,6 +32,48 @@ type Process struct {
 	userKilled *int64
 	waitCh     chan error
 	mu         sync.Mutex
+
+	onCriticalOutput func(line string)
+}
+
+const (
+	// maxCriticalLines caps how many critical lines a single run of a
+	// process forwards to its OnCriticalOutput handler.
+	maxCriticalLines = 10
+	// criticalFlushTimeout bounds how long reporting a process exit waits for
+	// the OnCriticalOutput handler to finish with already forwarded lines.
+	criticalFlushTimeout = 5 * time.Second
+)
+
+// criticalOutputPatterns are lowercase substrings of child output that point
+// at an actionable startup failure. Keep this list short: every match is
+// shown to the user in the workspace startup logs.
+var criticalOutputPatterns = []string{
+	// Disk exhaustion, from dockerd or sysbox.
+	"no space left on device",
+	// dockerd prints this to stderr before its logger is set up, so the
+	// line has no level= field.
+	"failed to start daemon",
+	// sysbox-mgr and sysbox-fs startup errors.
+	"failed to create sysbox-mgr",
+	"failed to start sysbox-mgr",
+	"failed to start sysbox-fs",
+	// logrus fatal level, used by dockerd, sysbox-mgr, and sysbox-fs right
+	// before they exit.
+	"level=fatal",
+}
+
+// IsCriticalOutput reports whether a line of child process output describes
+// a failure that should be shown to the user, rather than only written to the
+// envbox container's logs.
+func IsCriticalOutput(line string) bool {
+	line = strings.ToLower(line)
+	for _, pattern := range criticalOutputPatterns {
+		if strings.Contains(line, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 // New returns an instantiated daemon. binName is the expected
@@ -49,6 +91,21 @@ func New(ctx context.Context, log slog.Logger, binName, cmd string, args ...stri
 		userKilled: i64ptr(0),
 		binName:    binName,
 	}
+}
+
+// OnCriticalOutput registers fn to receive lines of the process's output for
+// which IsCriticalOutput is true. Each run of the process forwards a line at
+// most once and at most maxCriticalLines lines in total. fn runs on its own
+// goroutine so a slow fn never blocks the process. The channel returned by
+// Wait does not report an exit until fn has returned for every forwarded
+// line, or until criticalFlushTimeout passes. Call it before Start or Run;
+// the handler also applies after Restart.
+func (d *Process) OnCriticalOutput(fn func(line string)) *Process {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.onCriticalOutput = fn
+	return d
 }
 
 // Start starts the daemon. It functions akin to ox/exec.Command.Start().
@@ -126,7 +183,11 @@ func (d *Process) startProcess() error {
 	cmd.SetStdout(mw)
 	cmd.SetStderr(mw)
 
-	go scanIntoLog(d.ctx, d.log, bufio.NewScanner(pr), d.binName)
+	scanDone := make(chan struct{})
+	go func() {
+		defer close(scanDone)
+		scanIntoLog(d.ctx, d.log, bufio.NewScanner(pr), d.binName, d.onCriticalOutput)
+	}()
 
 	err := d.cmd.Start()
 	if err != nil {
@@ -141,6 +202,16 @@ func (d *Process) startProcess() error {
 
 		err := cmd.Wait()
 		_ = psw.Flush()
+
+		// Wait returns only after all output has been copied into the
+		// pipe. Closing it lets scanIntoLog finish, so critical lines
+		// reach the handler before the exit is reported to callers.
+		_ = pw.Close()
+		select {
+		case <-scanDone:
+		case <-time.After(criticalFlushTimeout):
+			d.log.Warn(d.ctx, "timed out forwarding critical output", slog.F("process", d.binName))
+		}
 
 		// If the user killed the application the actual error returned
 		// from wait doesn't really matter.
@@ -223,7 +294,10 @@ func isProcExited(fs afero.Fs, pid int, cmd string) (bool, error) {
 	return cmd != string(args[0]), nil
 }
 
-func scanIntoLog(ctx context.Context, log slog.Logger, scanner *bufio.Scanner, binaryName string) {
+func scanIntoLog(ctx context.Context, log slog.Logger, scanner *bufio.Scanner, binaryName string, onCritical func(line string)) {
+	fwd := newCriticalForwarder(onCritical)
+	defer fwd.close()
+
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
@@ -249,11 +323,67 @@ func scanIntoLog(ctx context.Context, log slog.Logger, scanner *bufio.Scanner, b
 			logFn = log.Error
 		}
 
+		if IsCriticalOutput(line) {
+			logFn = log.Error
+			fwd.forward(line)
+		}
+
 		logFn(ctx, "child log",
 			slog.F("process", binaryName),
 			slog.F("content", line),
 		)
 	}
+}
+
+// criticalForwarder delivers critical lines to a handler on a separate
+// goroutine. forward and close must be called from a single goroutine.
+type criticalForwarder struct {
+	lines chan string
+	seen  map[string]struct{}
+	done  chan struct{}
+}
+
+// newCriticalForwarder returns nil when fn is nil. The nil forwarder's
+// methods are no-ops.
+func newCriticalForwarder(fn func(line string)) *criticalForwarder {
+	if fn == nil {
+		return nil
+	}
+
+	f := &criticalForwarder{
+		lines: make(chan string, maxCriticalLines),
+		seen:  make(map[string]struct{}),
+		done:  make(chan struct{}),
+	}
+	go func() {
+		defer close(f.done)
+		for line := range f.lines {
+			fn(line)
+		}
+	}()
+	return f
+}
+
+func (f *criticalForwarder) forward(line string) {
+	if f == nil {
+		return
+	}
+	if _, ok := f.seen[line]; ok || len(f.seen) >= maxCriticalLines {
+		return
+	}
+	f.seen[line] = struct{}{}
+	// Never blocks: the buffer holds maxCriticalLines and no more than that
+	// are ever sent.
+	f.lines <- line
+}
+
+// close waits for the handler to finish with every forwarded line.
+func (f *criticalForwarder) close() {
+	if f == nil {
+		return
+	}
+	close(f.lines)
+	<-f.done
 }
 
 var ErrUserKilled = xerrors.Errorf("daemon killed by user")

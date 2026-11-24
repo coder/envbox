@@ -1,17 +1,20 @@
 package integration_test
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	dockertest "github.com/ory/dockertest/v3"
+	"github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/envbox/cli"
@@ -71,6 +74,62 @@ func TestDocker(t *testing.T) {
 		// Run envbox again to test that when we restart a workspace things still
 		// work correctly.
 		_ = runEnvbox()
+	})
+
+	// CriticalOutputInStartupLogs asserts that a dockerd startup failure that
+	// is only printed by dockerd itself reaches the workspace startup logs.
+	t.Run("CriticalOutputInStartupLogs", func(t *testing.T) {
+		t.Parallel()
+
+		pool, err := dockertest.NewPool("")
+		require.NoError(t, err)
+
+		coderListener, err := net.Listen("tcp", fmt.Sprintf("%s:0", integrationtest.DockerBridgeIP(t)))
+		require.NoError(t, err)
+		defer coderListener.Close()
+		coderAddr := tcpAddr(t, coderListener)
+		recorder := integrationtest.FakeBuildLogRecorder(t, coderListener, tls.Certificate{})
+
+		// Give dockerd a data root too small to start in.
+		var binds []docker.HostMount
+		for _, bind := range integrationtest.DefaultBinds(t, integrationtest.TmpDir(t)) {
+			if bind.Target != "/var/lib/docker" {
+				binds = append(binds, bind)
+			}
+		}
+		binds = append(binds, docker.HostMount{
+			Target:        "/var/lib/docker",
+			Type:          "tmpfs",
+			TempfsOptions: &docker.TempfsOptions{SizeBytes: 64 << 10},
+		})
+
+		_ = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
+			Image:    integrationtest.DockerdImage,
+			Username: "root",
+			Envs: []string{
+				integrationtest.EnvVar(cli.EnvAgentToken, "faketoken"),
+				integrationtest.EnvVar(cli.EnvAgentURL, fmt.Sprintf("http://host.docker.internal:%d", coderAddr.Port)),
+			},
+			OuterMounts:   binds,
+			ExpectFailure: true,
+		})
+
+		isCritical := func(log string) bool {
+			return strings.HasPrefix(log, "dockerd: ") && strings.Contains(log, "no space left on device")
+		}
+		require.Eventually(t, func() bool {
+			return slices.ContainsFunc(recorder.Logs(), isCritical)
+		}, 30*time.Second, 100*time.Millisecond, "startup logs: %q", recorder.Logs())
+
+		// The dockerd output must arrive before envbox reports the failure.
+		logs := recorder.Logs()
+		criticalIdx := slices.IndexFunc(logs, isCritical)
+		failedIdx := slices.IndexFunc(logs, func(log string) bool {
+			return strings.HasPrefix(log, "Failed to create Container-based Virtual Machine")
+		})
+		if failedIdx != -1 {
+			require.Less(t, criticalIdx, failedIdx, "startup logs: %q", logs)
+		}
 	})
 
 	// EnvboxArgs validates that arguments passed to envbox function correctly.
