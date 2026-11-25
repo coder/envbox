@@ -171,8 +171,6 @@ jobs:
       - name: Run integration tests
         id: test
         shell: bash
-        env:
-          CODER_TEST_INTEGRATION: "1"
         run: go test -tags=integration ./...
 
   build:
