@@ -90,18 +90,13 @@ func TestDocker(t *testing.T) {
 		coderAddr := tcpAddr(t, coderListener)
 		recorder := integrationtest.FakeBuildLogRecorder(t, coderListener, tls.Certificate{})
 
-		// Give dockerd a data root too small to start in.
+		// Replace dockerd's data root with a tmpfs too small to start in.
 		var binds []docker.HostMount
 		for _, bind := range integrationtest.DefaultBinds(t, integrationtest.TmpDir(t)) {
 			if bind.Target != "/var/lib/docker" {
 				binds = append(binds, bind)
 			}
 		}
-		binds = append(binds, docker.HostMount{
-			Target:        "/var/lib/docker",
-			Type:          "tmpfs",
-			TempfsOptions: &docker.TempfsOptions{SizeBytes: 64 << 10},
-		})
 
 		_ = integrationtest.RunEnvbox(t, pool, &integrationtest.CreateDockerCVMConfig{
 			Image:    integrationtest.DockerdImage,
@@ -111,6 +106,7 @@ func TestDocker(t *testing.T) {
 				integrationtest.EnvVar(cli.EnvAgentURL, fmt.Sprintf("http://host.docker.internal:%d", coderAddr.Port)),
 			},
 			OuterMounts:   binds,
+			OuterTmpfs:    map[string]string{"/var/lib/docker": "size=64k"},
 			ExpectFailure: true,
 		})
 
