@@ -272,8 +272,8 @@ jobs:
       - name: Install OSV Scanner
         run: |
           set -euxo pipefail
-          OSV_VERSION="v2.3.5"
-          OSV_SHA256="bb30c580afe5e757d3e959f4afd08a4795ea505ef84c46962b9a738aa573b41b"
+          OSV_VERSION="v2.7.1"
+          OSV_SHA256="fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8"
           curl -fsSL "https://github.com/google/osv-scanner/releases/download/${OSV_VERSION}/osv-scanner_linux_amd64" -o /usr/local/bin/osv-scanner
           echo "${OSV_SHA256}  /usr/local/bin/osv-scanner" | sha256sum -c -
           chmod +x /usr/local/bin/osv-scanner
