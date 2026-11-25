@@ -226,14 +226,18 @@ func dockerCmd() *cobra.Command {
 				select {
 				// Start sysbox-mgr and sysbox-fs in order to run
 				// sysbox containers.
-				case err := <-background.New(ctx, log, "sysbox-mgr", "sysbox-mgr", sysboxArgs...).Run():
+				case err := <-background.New(ctx, log, "sysbox-mgr", "sysbox-mgr", sysboxArgs...).
+					OnCriticalOutput(startupLogCriticalOutput(blog, "sysbox-mgr")).
+					Run():
 					if ctx.Err() == nil {
 						blog.Info(sysboxErrMsg)
 						//nolint
 						log.Critical(ctx, "sysbox-mgr exited", slog.Error(err))
 						panic(err)
 					}
-				case err := <-background.New(ctx, log, "sysbox-fs", "sysbox-fs").Run():
+				case err := <-background.New(ctx, log, "sysbox-fs", "sysbox-fs").
+					OnCriticalOutput(startupLogCriticalOutput(blog, "sysbox-fs")).
+					Run():
 					if ctx.Err() == nil {
 						blog.Info(sysboxErrMsg)
 						//nolint
@@ -258,7 +262,8 @@ func dockerCmd() *cobra.Command {
 
 			blog.Info("Waiting for sysbox processes to startup...")
 			wrapCmd, wrapArgs := wrapDockerdCmd(dargs)
-			dockerd := background.New(ctx, log, dockerdBinName, wrapCmd, wrapArgs...)
+			dockerd := background.New(ctx, log, dockerdBinName, wrapCmd, wrapArgs...).
+				OnCriticalOutput(startupLogCriticalOutput(blog, "dockerd"))
 			err = dockerd.Start()
 			if err != nil {
 				return xerrors.Errorf("start dockerd: %w", err)
@@ -454,6 +459,16 @@ func dockerCmd() *cobra.Command {
 	cliflag.StringVarP(cmd.Flags(), &flags.ethlink, "ethlink", "", "", defaultNetLink, "The ethernet link to query for the MTU that is passed to docerd. Used for tests.")
 
 	return cmd
+}
+
+// startupLogCriticalOutput returns a handler that writes critical output of a
+// background process to the workspace startup logs. Without it, failures such
+// as dockerd running out of disk are only visible in the envbox container's
+// logs.
+func startupLogCriticalOutput(blog buildlog.Logger, process string) func(line string) {
+	return func(line string) {
+		blog.Errorf("%s: %s", process, line)
+	}
 }
 
 func runDockerCVM(ctx context.Context, log slog.Logger, client dockerutil.Client, blog buildlog.Logger, flags flags) (string, error) {

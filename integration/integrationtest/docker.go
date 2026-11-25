@@ -62,7 +62,12 @@ type CreateDockerCVMConfig struct {
 	InnerEnvFilter  []string
 	Envs            []string
 
-	OuterMounts   []docker.HostMount
+	OuterMounts []docker.HostMount
+	// OuterTmpfs mounts tmpfs filesystems in the envbox container, keyed by
+	// path, with mount options such as "size=64k" as values. Use it instead
+	// of a tmpfs HostMount: docker.TempfsOptions has the wrong JSON key, so
+	// Docker ignores its size limit.
+	OuterTmpfs    map[string]string
 	AddFUSE       bool
 	AddTUN        bool
 	CPUs          int
@@ -104,6 +109,7 @@ func RunEnvbox(t *testing.T, pool *dockertest.Pool, conf *CreateDockerCVMConfig)
 		Env:        conf.Envs,
 	}, func(host *docker.HostConfig) {
 		host.Mounts = conf.OuterMounts
+		host.Tmpfs = conf.OuterTmpfs
 		host.Privileged = true
 		host.CPUPeriod = int64(dockerutil.DefaultCPUPeriod)
 		host.CPUQuota = int64(conf.CPUs) * int64(dockerutil.DefaultCPUPeriod)
